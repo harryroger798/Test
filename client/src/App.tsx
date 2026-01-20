@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { Layout } from '@/components/layout/Layout'
+import { ScrollToTop } from '@/components/ScrollToTop'
 import { LandingPage } from '@/pages/LandingPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -23,6 +24,9 @@ import { BookingPage } from '@/pages/public/BookingPage'
 import { PricingPage } from '@/pages/public/PricingPage'
 import { HelpCenterPage } from '@/pages/public/HelpCenterPage'
 import { TrackRepairPage } from '@/pages/public/TrackRepairPage'
+import { SitemapPage } from '@/pages/public/SitemapPage'
+import { AuthorPage } from '@/pages/public/AuthorPage'
+import { CategoryPage } from '@/pages/public/CategoryPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -38,6 +42,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="bytecare-ui-theme">
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/services" element={<PublicServicesPage />} />
@@ -45,11 +50,14 @@ function App() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/blog" element={<BlogPage />} />
         <Route path="/blog/:slug" element={<BlogPostPage />} />
+        <Route path="/blog/author/:slug" element={<AuthorPage />} />
+        <Route path="/blog/category/:slug" element={<CategoryPage />} />
                 <Route path="/booking" element={<BookingPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
                                 <Route path="/help" element={<HelpCenterPage />} />
-                                <Route path="/track" element={<TrackRepairPage />} />
-                                <Route path="/login" element={<LoginPage />} />
+                                                                <Route path="/track" element={<TrackRepairPage />} />
+                                                                <Route path="/sitemap.xml" element={<SitemapPage />} />
+                                                                <Route path="/login" element={<LoginPage />} />
         <Route
           path="/app"
           element={

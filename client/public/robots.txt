@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://bytecare.shop/sitemap.xml
+
+# Disallow admin areas
+Disallow: /app/
+Disallow: /login
+
+# Allow search engines to crawl all public pages
+Allow: /services
+Allow: /pricing
+Allow: /about
+Allow: /contact
+Allow: /blog
+Allow: /booking
+Allow: /help
+
+# Crawl delay for politeness
+Crawl-delay: 1

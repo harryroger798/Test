@@ -7,6 +7,7 @@ import { GradientOrbs, FloatingTechIcons, DotGridPattern, FloatingParticles, Ani
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getAllPostsIncludingDrafts, type SanityPost } from '@/lib/sanity'
+import { SEOHead, NewsletterSubscribe } from '@/components/seo'
 
 const fallbackBlogPosts = [
   {
@@ -84,9 +85,18 @@ export function BlogPage() {
 
   const hasSanityPosts = sanityPosts.length > 0
 
-  return (
-    <PublicLayout>
-      {/* Hero Section */}
+    return (
+      <PublicLayout>
+        {/* SEO Head */}
+        <SEOHead
+          title="Blog - Tech Tips & Repair Guides | ByteCare"
+          description="Read the latest tech tips, repair guides, and industry news from ByteCare. Expert advice on laptop repair, mobile repair, and device maintenance in Barrackpore."
+          url="https://bytecare.shop/blog"
+          type="website"
+          includeLocalBusiness={true}
+        />
+
+        {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-pink-600/20 animate-pulse" />
         <FloatingParticles count={30} color="white" />
@@ -280,27 +290,16 @@ export function BlogPage() {
             </div>
           )}
 
-          {/* Quirky CTA */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="mt-16 text-center"
-          >
-            <div className="backdrop-blur-lg bg-gradient-to-r from-purple-600/90 to-pink-600/90 border border-white/20 rounded-2xl shadow-xl p-8 max-w-2xl mx-auto">
-              <p className="text-white text-xl font-medium mb-2">
-                {i18n.language === 'hi' ? '"Aur bhi tips chahiye? Subscribe karein!"' :
-                 i18n.language === 'bn' ? '"আরও টিপস চান? সাবস্ক্রাইব করুন!"' :
-                 '"Want more tips? Subscribe to our newsletter!"'}
-              </p>
-              <p className="text-white/70 text-sm">
-                {i18n.language === 'hi' ? 'Spam nahi, sirf useful content - promise!' :
-                 i18n.language === 'bn' ? 'স্প্যাম নয়, শুধু দরকারি কন্টেন্ট - প্রমিস!' :
-                 'No spam, only useful content - promise!'}
-              </p>
-            </div>
-          </motion.div>
+                    {/* Newsletter Subscribe */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 30 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.6, delay: 0.4 }}
+                      className="mt-16 max-w-2xl mx-auto"
+                    >
+                      <NewsletterSubscribe />
+                    </motion.div>
         </div>
       </section>
     </PublicLayout>

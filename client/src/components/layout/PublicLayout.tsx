@@ -192,15 +192,16 @@ export function PublicLayout({ children }: PublicLayoutProps) {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-    const navLinks = [
-      { href: '/', label: t('nav.home') },
-      { href: '/services', label: t('nav.services') },
-      { href: '/pricing', label: t('nav.pricing') },
-      { href: '/about', label: t('nav.about') },
-      { href: '/contact', label: t('nav.contact') },
-      { href: '/help', label: t('nav.help') },
-      { href: '/booking', label: t('nav.booking') },
-    ]
+        const navLinks = [
+          { href: '/', label: t('nav.home') },
+          { href: '/services', label: t('nav.services') },
+          { href: '/pricing', label: t('nav.pricing') },
+          { href: '/blog', label: t('nav.blog') },
+          { href: '/about', label: t('nav.about') },
+          { href: '/contact', label: t('nav.contact') },
+          { href: '/help', label: t('nav.help') },
+          { href: '/booking', label: t('nav.booking') },
+        ]
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/'

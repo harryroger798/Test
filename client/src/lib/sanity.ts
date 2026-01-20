@@ -112,3 +112,113 @@ export async function getRelatedPosts(currentPostId: string, categoryIds: string
   
   return sanityClient.fetch(query, { currentPostId, categoryIds, limit })
 }
+
+export interface SanityAuthor {
+  _id: string
+  name: string
+  slug: { current: string }
+  bio: string
+  image?: {
+    url: string
+    alt: string
+  }
+}
+
+export interface SanityCategory {
+  _id: string
+  title: string
+  slug: { current: string }
+  description?: string
+}
+
+export async function getAuthorBySlug(slug: string): Promise<SanityAuthor | null> {
+  const query = `*[_type == "author" && slug.current == $slug][0] {
+    _id,
+    name,
+    slug,
+    bio,
+    "image": {
+      "url": image.asset->url,
+      "alt": image.alt
+    }
+  }`
+  
+  return sanityClient.fetch(query, { slug })
+}
+
+export async function getPostsByAuthor(authorSlug: string): Promise<SanityPost[]> {
+  const query = `*[_type == "post" && status == "published" && author->slug.current == $authorSlug] | order(publishedAt desc) {
+    _id,
+    title,
+    slug,
+    body,
+    excerpt,
+    status,
+    publishedAt,
+    featuredImage,
+    seo,
+    "author": author->{_id, name, slug, bio},
+    "categories": categories[]->{_id, title, slug},
+    internalLinks,
+    externalLinks
+  }`
+  
+  return sanityClient.fetch(query, { authorSlug })
+}
+
+export async function getCategoryBySlug(slug: string): Promise<SanityCategory | null> {
+  const query = `*[_type == "category" && slug.current == $slug][0] {
+    _id,
+    title,
+    slug,
+    description
+  }`
+  
+  return sanityClient.fetch(query, { slug })
+}
+
+export async function getPostsByCategory(categorySlug: string): Promise<SanityPost[]> {
+  const query = `*[_type == "post" && status == "published" && $categorySlug in categories[]->slug.current] | order(publishedAt desc) {
+    _id,
+    title,
+    slug,
+    body,
+    excerpt,
+    status,
+    publishedAt,
+    featuredImage,
+    seo,
+    "author": author->{_id, name, slug, bio},
+    "categories": categories[]->{_id, title, slug},
+    internalLinks,
+    externalLinks
+  }`
+  
+  return sanityClient.fetch(query, { categorySlug })
+}
+
+export async function getAllAuthors(): Promise<SanityAuthor[]> {
+  const query = `*[_type == "author"] | order(name asc) {
+    _id,
+    name,
+    slug,
+    bio,
+    "image": {
+      "url": image.asset->url,
+      "alt": image.alt
+    }
+  }`
+  
+  return sanityClient.fetch(query)
+}
+
+export async function getAllCategories(): Promise<SanityCategory[]> {
+  const query = `*[_type == "category"] | order(title asc) {
+    _id,
+    title,
+    slug,
+    description
+  }`
+  
+  return sanityClient.fetch(query)
+}
