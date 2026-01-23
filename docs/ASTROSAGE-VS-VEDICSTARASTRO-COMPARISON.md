@@ -9,6 +9,45 @@
 
 ---
 
+## Complete Calculator Comparison
+
+### AstroSage Calculators vs VedicStarAstro
+
+| Calculator | AstroSage URL | VedicStarAstro | Status | Notes |
+|------------|---------------|----------------|--------|-------|
+| **Kundli Calculator** | /kundli/ | /tools/kundli-calculator | AVAILABLE | Accuracy verified |
+| **Moon Sign Calculator** | /moonSign.asp | /tools/moon-sign-calculator | AVAILABLE | Needs accuracy test |
+| **Sun Sign Calculator** | /sunsign.asp | /tools/sun-sign-calculator | AVAILABLE | Needs accuracy test |
+| **Ascendant Calculator** | /free/rising-ascendant-calculator.asp | /tools/ascendant-calculator | AVAILABLE | Needs accuracy test |
+| **Nakshatra Calculator** | /nakshatra-calculator.asp | /tools/nakshatra-finder | AVAILABLE | Needs accuracy test |
+| **Rasi Calculator** | /rasi-calculator.asp | - | MISSING | Can be added |
+| **Numerology Calculator** | /numerology/calculator.asp | - | MISSING | Can be added |
+| **Ayanamsa Calculator** | /astrology/ayanamsa-calculator.asp | - | MISSING | Can be added |
+| **Love Calculator** | /calculators/love-calculator.asp | /tools/love-calculator | AVAILABLE | Fun feature |
+| **Friendship Calculator** | /calculators/friendship-calculator.asp | - | MISSING | Low priority |
+| **Horoscope Matching** | /freechart/matchmaking.asp | /tools/horoscope-matching | AVAILABLE | Core feature |
+| **Dasha Calculator** | (part of Kundli) | /tools/dasha-calculator | AVAILABLE | Backend ready |
+| **Navamsa Chart** | (part of Kundli) | /tools/navamsa-chart | AVAILABLE | Backend ready |
+| **Transit Calculator** | /transits/ | /tools/transit-calculator | AVAILABLE | Needs verification |
+| **Mangal Dosh Calculator** | (part of Kundli) | /tools/mangal-dosh-calculator | AVAILABLE | Core feature |
+| **Sade Sati Calculator** | (part of Kundli) | /tools/sade-sati-calculator | AVAILABLE | Core feature |
+| **Muhurta Calculator** | /panchang/ | /tools/muhurta-calculator | AVAILABLE | Needs verification |
+| **Yoga Calculator** | (part of Kundli) | /tools/yoga-calculator | AVAILABLE | Needs verification |
+| **Yantra Calculator** | /yantra-calculator.asp | - | MISSING | Can be added |
+| **Rudraksha Calculator** | /rudraksha-calculator.asp | - | MISSING | Can be added |
+| **Ishta Devata Calculator** | /ishta-devata-calculator.asp | - | MISSING | Can be added |
+| **Jadi Calculator** | /jadi-calculator.asp | - | MISSING | Low priority |
+| **Chinese Zodiac Calculator** | /chineseastrology/calculator.asp | - | MISSING | Low priority |
+| **Naam Rashi Calculator** | /calculators/naamrashi.asp | - | MISSING | Can be added |
+| **Ghati to Hour Converter** | /calculators/ghati-to-hour-converter-nizhika.asp | - | MISSING | Low priority |
+
+### Summary
+- **VedicStarAstro has:** 14 calculators
+- **AstroSage has:** 25+ calculators
+- **Missing calculators:** 11+ (mostly specialized/niche)
+
+---
+
 ## Accuracy Verification
 
 ### Ascendant (Lagna) - CRITICAL
