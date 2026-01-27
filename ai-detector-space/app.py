@@ -10,7 +10,8 @@ import torch
 import torch.nn.functional as F
 from transformers import (
     AutoTokenizer, AutoModelForSequenceClassification,
-    RobertaTokenizer, RobertaForSequenceClassification
+    RobertaTokenizer, RobertaForSequenceClassification,
+    AutoModelForSeq2SeqLM
 )
 import boto3
 from botocore.config import Config
@@ -114,6 +115,21 @@ distilbert_model.to(device)
 roberta_model.to(device)
 print(f"Models loaded on {device}")
 
+# Load Ateeqq Humanizer model
+print("Loading Ateeqq Text-Rewriter-Paraphraser model...")
+try:
+    humanizer_tokenizer = AutoTokenizer.from_pretrained("Ateeqq/Text-Rewriter-Paraphraser")
+    humanizer_model = AutoModelForSeq2SeqLM.from_pretrained("Ateeqq/Text-Rewriter-Paraphraser")
+    humanizer_model.to(device)
+    humanizer_model.eval()
+    HUMANIZER_AVAILABLE = True
+    print("Humanizer model loaded successfully!")
+except Exception as e:
+    print(f"Warning: Could not load humanizer model: {e}")
+    humanizer_tokenizer = None
+    humanizer_model = None
+    HUMANIZER_AVAILABLE = False
+
 def predict_distilbert(text: str) -> tuple:
     """Get prediction from DistilBERT model."""
     inputs = distilbert_tokenizer(
@@ -187,6 +203,39 @@ Respond with ONLY a JSON object in this exact format (no other text):
     except Exception as e:
         print(f"Claude API error: {e}")
         return None, None, {"error": str(e)}
+
+def humanize_text(text: str, num_beams: int = 5, max_length: int = 512) -> str:
+    """Humanize AI-generated text using Ateeqq Text-Rewriter-Paraphraser model."""
+    if not HUMANIZER_AVAILABLE:
+        return "Error: Humanizer model not available"
+    
+    try:
+        # Prepare input with task prefix
+        input_text = f"paraphrase: {text}"
+        inputs = humanizer_tokenizer(
+            input_text, 
+            return_tensors="pt", 
+            truncation=True, 
+            max_length=max_length,
+            padding=True
+        )
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        
+        with torch.no_grad():
+            outputs = humanizer_model.generate(
+                **inputs,
+                max_length=max_length,
+                num_beams=num_beams,
+                early_stopping=True,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9
+            )
+        
+        humanized = humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return humanized
+    except Exception as e:
+        return f"Error during humanization: {str(e)}"
 
 def ensemble_predict(text: str, use_claude: bool = True) -> dict:
     """Get ensemble prediction combining all models."""
@@ -324,97 +373,220 @@ def analyze_text(text: str, use_claude: bool = True) -> str:
     result = ensemble_predict(text, use_claude=use_claude)
     return create_result_html(result, use_claude)
 
-# Create Gradio interface
+def humanize_and_analyze(text: str, use_claude: bool = True) -> tuple:
+    """Humanize text and then analyze both original and humanized versions."""
+    if not text or len(text.strip()) < 10:
+        error_msg = "<div style='padding: 20px; text-align: center;'>Please enter at least 10 characters of text.</div>"
+        return error_msg, "", error_msg
+    
+    if not HUMANIZER_AVAILABLE:
+        error_msg = "<div style='padding: 20px; text-align: center; color: red;'>Humanizer model not available.</div>"
+        return error_msg, "", error_msg
+    
+    # Analyze original text
+    original_result = ensemble_predict(text, use_claude=use_claude)
+    original_html = create_result_html(original_result, use_claude)
+    
+    # Humanize the text
+    humanized_text = humanize_text(text)
+    
+    if humanized_text.startswith("Error"):
+        return original_html, humanized_text, f"<div style='padding: 20px; color: red;'>{humanized_text}</div>"
+    
+    # Analyze humanized text
+    humanized_result = ensemble_predict(humanized_text, use_claude=use_claude)
+    humanized_html = create_result_html(humanized_result, use_claude)
+    
+    return original_html, humanized_text, humanized_html
+
+def just_humanize(text: str) -> str:
+    """Just humanize text without analysis."""
+    if not text or len(text.strip()) < 10:
+        return "Please enter at least 10 characters of text."
+    
+    if not HUMANIZER_AVAILABLE:
+        return "Error: Humanizer model not available."
+    
+    return humanize_text(text)
+
+# Create Gradio interface with tabs
 with gr.Blocks(
-    title="AI Text Detector - Ensemble",
+    title="AI Text Detector & Humanizer",
     theme=gr.themes.Soft(),
     css="""
-        .gradio-container { max-width: 900px !important; }
+        .gradio-container { max-width: 1000px !important; }
         .result-box { min-height: 200px; }
     """
 ) as demo:
     gr.Markdown("""
-    # AI Text Detector - Ensemble Model
+    # AI Text Detector & Humanizer
     
-    Detect whether text is **human-written**, **AI-generated**, or **humanized AI text**.
-    
-    This detector uses an **ensemble of 3 models** for improved accuracy:
-    - **DistilBERT** (99.55% test accuracy on training data)
-    - **RoBERTa** (99.89% test accuracy on training data)
-    - **Claude 3 Haiku** (via Blackbox API for edge case handling)
-    
-    The ensemble achieves **80% accuracy** on challenging real-world test cases (vs 40-60% for single models).
-    
-    ### How to use:
-    1. Paste or type your text in the box below
-    2. Optionally enable/disable Claude for faster results
-    3. Click "Analyze" to detect the text origin
-    4. View the ensemble result with individual model predictions
+    **Detect** whether text is human-written, AI-generated, or humanized AI text.
+    **Humanize** AI-generated text to make it appear more natural.
     """)
     
-    with gr.Row():
-        with gr.Column(scale=1):
-            text_input = gr.Textbox(
-                label="Enter text to analyze",
-                placeholder="Paste your text here (minimum 10 characters)...",
-                lines=10,
-                max_lines=20
-            )
+    with gr.Tabs():
+        # Tab 1: Detector
+        with gr.TabItem("Detect AI Text"):
+            gr.Markdown("""
+            ### AI Text Detection
+            
+            This detector uses an **ensemble of 3 models** for improved accuracy:
+            - **DistilBERT** (99.55% test accuracy)
+            - **RoBERTa** (99.89% test accuracy)
+            - **Claude 3 Haiku** (via Blackbox API)
+            
+            The ensemble achieves **80% accuracy** on challenging real-world test cases.
+            """)
+            
             with gr.Row():
-                use_claude_checkbox = gr.Checkbox(
-                    label="Use Claude (slower but more accurate for edge cases)",
+                with gr.Column(scale=1):
+                    detect_input = gr.Textbox(
+                        label="Enter text to analyze",
+                        placeholder="Paste your text here (minimum 10 characters)...",
+                        lines=10,
+                        max_lines=20
+                    )
+                    detect_claude = gr.Checkbox(
+                        label="Use Claude (slower but more accurate for edge cases)",
+                        value=True
+                    )
+                    detect_btn = gr.Button("Analyze", variant="primary", size="lg")
+                
+                with gr.Column(scale=1):
+                    detect_output = gr.HTML(
+                        label="Detection Result",
+                        elem_classes=["result-box"]
+                    )
+            
+            gr.Markdown("### Try these examples:")
+            gr.Examples(
+                examples=[
+                    ["I went to the coffee shop this morning and the barista totally messed up my order. Like, I asked for an oat milk latte and got regular milk instead. Had to go back and wait another 10 minutes. So annoying but whatever, at least they gave me a free pastry for the trouble."],
+                    ["Artificial intelligence has revolutionized numerous industries by enabling machines to perform tasks that traditionally required human intelligence. Through sophisticated algorithms and vast datasets, AI systems can now recognize patterns, make predictions, and generate content with remarkable accuracy."],
+                    ["So basically, AI is changing everything these days. It's kinda wild how machines can do stuff that used to need humans, you know? They use fancy algorithms and tons of data to spot patterns and make guesses. Pretty cool but also a bit scary if you think about it too much lol."],
+                ],
+                inputs=detect_input,
+                label="Example Texts"
+            )
+            
+            detect_btn.click(
+                fn=analyze_text,
+                inputs=[detect_input, detect_claude],
+                outputs=detect_output
+            )
+        
+        # Tab 2: Humanizer
+        with gr.TabItem("Humanize Text"):
+            gr.Markdown("""
+            ### Text Humanizer
+            
+            Transform AI-generated text to appear more natural and human-like using the **Ateeqq/Text-Rewriter-Paraphraser** model.
+            
+            This model was trained on 430K examples to rewrite text while preserving meaning but changing style.
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    humanize_input = gr.Textbox(
+                        label="Enter text to humanize",
+                        placeholder="Paste AI-generated text here...",
+                        lines=10,
+                        max_lines=20
+                    )
+                    humanize_btn = gr.Button("Humanize", variant="primary", size="lg")
+                
+                with gr.Column(scale=1):
+                    humanize_output = gr.Textbox(
+                        label="Humanized Text",
+                        lines=10,
+                        max_lines=20,
+                        interactive=False
+                    )
+            
+            gr.Markdown("### Example AI text to humanize:")
+            gr.Examples(
+                examples=[
+                    ["Artificial intelligence has revolutionized numerous industries by enabling machines to perform tasks that traditionally required human intelligence. Through sophisticated algorithms and vast datasets, AI systems can now recognize patterns, make predictions, and generate content with remarkable accuracy."],
+                    ["The implementation of sustainable practices in modern businesses has become increasingly important. Organizations are recognizing the need to balance economic growth with environmental responsibility, leading to innovative solutions that benefit both stakeholders and the planet."],
+                ],
+                inputs=humanize_input,
+                label="Example AI Texts"
+            )
+            
+            humanize_btn.click(
+                fn=just_humanize,
+                inputs=[humanize_input],
+                outputs=humanize_output
+            )
+        
+        # Tab 3: Detect & Humanize Workflow
+        with gr.TabItem("Detect & Humanize"):
+            gr.Markdown("""
+            ### Complete Workflow: Detect, Humanize, and Re-Detect
+            
+            This workflow:
+            1. **Analyzes** your original text to detect if it's AI-generated
+            2. **Humanizes** the text using the Ateeqq model
+            3. **Re-analyzes** the humanized text to verify the transformation
+            
+            Perfect for testing how well the humanizer evades AI detection!
+            """)
+            
+            with gr.Row():
+                workflow_input = gr.Textbox(
+                    label="Enter text to process",
+                    placeholder="Paste text here (works best with AI-generated text)...",
+                    lines=8,
+                    max_lines=15
+                )
+            
+            with gr.Row():
+                workflow_claude = gr.Checkbox(
+                    label="Use Claude in detection (slower but more accurate)",
                     value=True
                 )
-            analyze_btn = gr.Button("Analyze", variant="primary", size="lg")
-        
-        with gr.Column(scale=1):
-            result_output = gr.HTML(
-                label="Detection Result",
-                elem_classes=["result-box"]
+                workflow_btn = gr.Button("Detect & Humanize", variant="primary", size="lg")
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("#### Original Text Analysis")
+                    original_result = gr.HTML(elem_classes=["result-box"])
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("#### Humanized Text")
+                    humanized_text_output = gr.Textbox(
+                        label="",
+                        lines=6,
+                        max_lines=10,
+                        interactive=False
+                    )
+                
+                with gr.Column(scale=1):
+                    gr.Markdown("#### Humanized Text Analysis")
+                    humanized_result = gr.HTML(elem_classes=["result-box"])
+            
+            workflow_btn.click(
+                fn=humanize_and_analyze,
+                inputs=[workflow_input, workflow_claude],
+                outputs=[original_result, humanized_text_output, humanized_result]
             )
-    
-    # Example texts
-    gr.Markdown("### Try these examples:")
-    gr.Examples(
-        examples=[
-            ["I went to the coffee shop this morning and the barista totally messed up my order. Like, I asked for an oat milk latte and got regular milk instead. Had to go back and wait another 10 minutes. So annoying but whatever, at least they gave me a free pastry for the trouble."],
-            ["Artificial intelligence has revolutionized numerous industries by enabling machines to perform tasks that traditionally required human intelligence. Through sophisticated algorithms and vast datasets, AI systems can now recognize patterns, make predictions, and generate content with remarkable accuracy."],
-            ["So basically, AI is changing everything these days. It's kinda wild how machines can do stuff that used to need humans, you know? They use fancy algorithms and tons of data to spot patterns and make guesses. Pretty cool but also a bit scary if you think about it too much lol."],
-        ],
-        inputs=text_input,
-        label="Example Texts"
-    )
-    
-    # Connect button to function
-    analyze_btn.click(
-        fn=analyze_text,
-        inputs=[text_input, use_claude_checkbox],
-        outputs=result_output
-    )
-    
-    # Also trigger on Enter key
-    text_input.submit(
-        fn=analyze_text,
-        inputs=[text_input, use_claude_checkbox],
-        outputs=result_output
-    )
     
     gr.Markdown("""
     ---
-    ### About the Ensemble Model
+    ### About the Models
     
+    **Detector Ensemble:**
     - **DistilBERT**: Fast, lightweight transformer trained on 115K balanced samples
     - **RoBERTa**: More powerful transformer with better contextual understanding
     - **Claude 3 Haiku**: LLM-based detector for nuanced edge cases
+    - **Ensemble Weights**: DistilBERT (1.0x) + RoBERTa (1.2x) + Claude (1.8x)
     
-    **Ensemble Weights**: DistilBERT (1.0x) + RoBERTa (1.2x) + Claude (1.8x)
+    **Humanizer:**
+    - **Ateeqq/Text-Rewriter-Paraphraser**: T5-based model trained on 430K paraphrase examples
+    - Rewrites text while preserving meaning but changing style and structure
     
     **Training Data**: 115,083 balanced samples (50K human + 50K AI-generated + 15K humanized)
-    - Human sources: Wikipedia, Reddit, The Pile
-    - AI sources: GPT Wiki Intros, Essays, Perplexity, Venice AI
-    
-    **Note**: This detector works best with English text of at least 50-100 words.
-    Disabling Claude will make predictions faster but may reduce accuracy on edge cases.
     """)
 
 # Launch the app
