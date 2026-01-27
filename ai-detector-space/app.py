@@ -1,7 +1,8 @@
 """
 AI Text Detector - Gradio App
 Detects whether text is human-written, AI-generated, or humanized AI text.
-Model trained on 174K samples with 99.81% accuracy.
+Model trained on 115K balanced samples with 99.55% accuracy.
+Uses diverse AI sources: GPT Wiki, Essays, Perplexity, Venice AI.
 """
 
 import gradio as gr
@@ -18,8 +19,8 @@ E2_BUCKET = "crop-spray-uploads"
 E2_ACCESS_KEY = os.environ.get("E2_ACCESS_KEY", "EQQ53Vm4Cr9Rov1FsOPt")
 E2_SECRET_KEY = os.environ.get("E2_SECRET_KEY", "far8XneFX3NH9UT6HFUjAAt9YZ3CB8RmJiCvKpe6")
 
-# Model path on e2
-MODEL_PREFIX = "ai-detector-platform/models/detector_174k/"
+# Model path on e2 - Updated to balanced_v2 model trained on 115K diverse samples
+MODEL_PREFIX = "ai-detector-platform/models/detector_balanced_v2/"
 
 # Local model directory
 MODEL_DIR = Path("/tmp/detector_model")
@@ -172,7 +173,7 @@ with gr.Blocks(
     
     Detect whether text is **human-written**, **AI-generated**, or **humanized AI text**.
     
-    This model was trained on 174,615 samples and achieves **99.81% accuracy** on the test set.
+    This model was trained on **115,083 balanced samples** from diverse AI sources and achieves **99.55% accuracy** on the test set.
     
     ### How to use:
     1. Paste or type your text in the box below
@@ -227,8 +228,9 @@ with gr.Blocks(
     ### About the Model
     
     - **Architecture**: DistilBERT (distilbert-base-uncased)
-    - **Training Data**: 174,615 samples (148K human + 6K AI-generated + 20K humanized)
-    - **Test Accuracy**: 99.81%
+    - **Training Data**: 115,083 balanced samples (50K human + 50K AI-generated + 15K humanized)
+    - **AI Sources**: GPT Wiki Intros, Essays, Perplexity, Venice AI
+    - **Test Accuracy**: 99.55%
     - **Classes**: Human-Written, AI-Generated, Humanized AI
     
     **Note**: This detector works best with English text of at least 50-100 words.
