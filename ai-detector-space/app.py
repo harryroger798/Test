@@ -43,44 +43,175 @@ LABEL_COLORS = {
 # ============== 10-LEVEL DETECTION SYSTEM ==============
 
 class Level2_StatisticalFingerprinting:
-    """AI has statistical patterns humans don't"""
+    """AI has statistical patterns humans don't - IMPROVED for casual human text"""
     
     def detect(self, text: str) -> float:
-        words = text.split()
-        if not words or len(words) < 10:
+        """
+        IMPROVED: Recognizes casual human writing patterns including personal anecdotes.
+        Returns AI score (0.0 = definitely human, 1.0 = definitely AI)
+        """
+        if not text or not text.strip():
             return 0.5
         
+        words = text.split()
+        if not words:
+            return 0.5
+        
+        text_lower = text.lower()
+        words_lower = [w.lower().strip('.,!?;:"\'-') for w in words]
+        
+        # ===== CASUAL WORD MARKERS =====
+        casual_word_markers = {
+            "lol", "lmao", "rofl", "smh", "tbh", "ngl", "imo",
+            "wtf", "omg", "omfg", "fml", "btw", "idk",
+            "dude", "bro", "brah", "bruh", "yo",
+            "hey", "yeah", "yep", "nope", "yup",
+            "gonna", "wanna", "gotta", "kinda", "sorta",
+            "dunno", "lemme", "gimme", "ok", "okay",
+            "haha", "hahaha", "lmfao"
+        }
+        casual_count = sum(1 for w in words_lower if w in casual_word_markers)
+        
+        # ===== PERSONAL ANECDOTE INDICATORS =====
+        anecdote_patterns = [
+            r'\bi was\b', r'\bi am\b', r'\bi\'m\b', r'\bi swear\b', r'\bi think\b',
+            r'\bi guess\b', r'\bi mean\b', r'\bi got\b', r'\bi had\b', r'\bi have\b',
+            r'\bmy \w+\b', r'\bme \w+\b',
+            r'\byesterday\b', r'\btoday\b', r'\bthis morning\b', r'\blast night\b',
+            r'\bthe guy\b', r'\bthe dude\b', r'\bsome guy\b',
+            r'\blike \d+\b',
+        ]
+        anecdote_count = sum(1 for p in anecdote_patterns if re.search(p, text_lower))
+        
+        # ===== CONTRACTIONS =====
+        contractions = len(re.findall(r"n't|'re|'ve|'ll|'d|'m|'s", text))
+        contraction_ratio = contractions / len(words) if words else 0
+        
+        # ===== PUNCTUATION PATTERNS =====
+        multiple_punct = len(re.findall(r'[!?]{2,}', text))
+        exclamation_marks = text.count('!')
+        question_marks = text.count('?')
+        
+        # ===== PRONOUNS =====
+        pronoun_words = {"i", "me", "we", "you", "my", "your", "our", "us", "myself"}
+        pronouns = sum(1 for w in words_lower if w in pronoun_words)
+        pronoun_ratio = pronouns / len(words) if words else 0
+        
+        # ===== INFORMAL PATTERNS =====
+        informal_starters = ["so ", "and ", "but ", "like ", "well ", "anyway "]
+        starts_informal = any(text_lower.startswith(s) for s in informal_starters)
+        
+        # Short sentence fragments
+        sentences = re.split(r'[.!?]+', text)
+        short_sentences = sum(1 for s in sentences if s.strip() and len(s.split()) <= 5)
+        
+        # ===== CALCULATE HUMAN SCORE =====
+        human_score = 0
+        
+        # Casual markers (strong)
+        if casual_count >= 3:
+            human_score += 0.45
+        elif casual_count >= 2:
+            human_score += 0.35
+        elif casual_count >= 1:
+            human_score += 0.25
+        
+        # Personal anecdotes (strong indicator)
+        if anecdote_count >= 4:
+            human_score += 0.40
+        elif anecdote_count >= 3:
+            human_score += 0.30
+        elif anecdote_count >= 2:
+            human_score += 0.20
+        elif anecdote_count >= 1:
+            human_score += 0.10
+        
+        # Contractions (important)
+        if contraction_ratio > 0.08:
+            human_score += 0.30
+        elif contraction_ratio > 0.04:
+            human_score += 0.20
+        elif contractions >= 2:
+            human_score += 0.15
+        elif contractions >= 1:
+            human_score += 0.10
+        
+        # Multiple punctuation (strong for casual)
+        if multiple_punct > 0:
+            human_score += 0.30
+        
+        # High pronoun usage
+        if pronoun_ratio > 0.12:
+            human_score += 0.25
+        elif pronoun_ratio > 0.08:
+            human_score += 0.18
+        elif pronoun_ratio > 0.05:
+            human_score += 0.12
+        
+        # Exclamation/question marks
+        if (exclamation_marks + question_marks) > 3:
+            human_score += 0.15
+        elif (exclamation_marks + question_marks) > 1:
+            human_score += 0.08
+        
+        # Informal start
+        if starts_informal:
+            human_score += 0.10
+        
+        # Short sentence fragments (conversational)
+        if short_sentences >= 2:
+            human_score += 0.15
+        
+        # ===== SPECIAL CASES =====
+        
+        # Short text with any human indicator
+        if len(words) < 20 and (casual_count > 0 or anecdote_count > 0 or contractions > 0):
+            human_score += 0.15
+        
+        # Very short responses
+        if len(words) <= 3:
+            short_human = {'k', 'ok', 'lol', 'no', 'yes', 'yeah', 'nope', 
+                          'yep', 'sure', 'nah', 'haha', 'omg', 'wow', 'nice', 'cool'}
+            if any(w in short_human for w in words_lower):
+                human_score = 0.95
+        
+        # Just punctuation (confused/expressive human)
+        if re.match(r'^[!?]+$', text.strip()):
+            human_score = 0.95
+        
+        # Text with lots of question marks + words = confused human
+        if question_marks >= 4 and len(words) < 15:
+            human_score += 0.30
+        
+        # ===== AI SCORE =====
         ai_score = 0
         
-        # Word length variation (AI has LOWER variation)
-        word_lengths = [len(w) for w in words]
-        avg_len = sum(word_lengths) / len(word_lengths)
-        variance = sum((x - avg_len) ** 2 for x in word_lengths) / len(word_lengths)
-        std = variance ** 0.5
+        if human_score < 0.30:
+            formal_words = {
+                "furthermore", "moreover", "however", "thus", "therefore",
+                "consequently", "notwithstanding", "subsequently",
+                "additionally", "nevertheless", "henceforth",
+                "leverage", "transformative", "organizations", "comprehensive",
+                "implementation", "facilitate", "utilize"
+            }
+            formal_count = sum(1 for w in words_lower if w in formal_words)
+            if formal_count >= 3:
+                ai_score += 0.30
+            elif formal_count >= 2:
+                ai_score += 0.20
+            elif formal_count >= 1:
+                ai_score += 0.10
+            
+            if contractions == 0 and len(words) > 25:
+                ai_score += 0.15
+            
+            if pronoun_ratio < 0.02 and len(words) > 25:
+                ai_score += 0.12
         
-        if std < 3.5:
-            ai_score += 0.1
+        # ===== FINAL SCORE =====
+        final_score = max(0, min(1 - human_score + ai_score, 1.0))
         
-        # Contractions (humans use MORE)
-        contractions = len(re.findall(r"n't|'re|'ve|'ll|'d|'m|'s", text))
-        if contractions < len(words) * 0.02:
-            ai_score += 0.1
-        
-        # Formal words (AI uses MORE)
-        formal_words = sum(1 for w in words if w.lower() in 
-                          ["furthermore", "moreover", "however", "thus", 
-                           "consequently", "notwithstanding", "additionally",
-                           "subsequently", "nevertheless", "henceforth"])
-        if formal_words > 2:
-            ai_score += 0.15
-        
-        # Pronouns (humans use MORE)
-        pronouns = sum(1 for w in words if w.lower() in 
-                      ["i", "me", "we", "you", "my", "your", "our", "us"])
-        if pronouns < len(words) * 0.05:
-            ai_score += 0.1
-        
-        return min(ai_score, 1.0)
+        return final_score
 
 
 class Level3_SyntacticPatterns:
@@ -391,7 +522,13 @@ except Exception as e:
 # ============== PREDICTION FUNCTIONS ==============
 
 def predict(text: str) -> Dict[str, Any]:
-    """Get prediction from trained RoBERTa model."""
+    """
+    Get prediction from trained RoBERTa model with casual human text correction.
+    
+    The RoBERTa model was trained on formal human text, so it may incorrectly
+    flag casual/informal human text as AI. This function uses the improved
+    Level 2 statistical analysis to correct such cases.
+    """
     inputs = tokenizer(
         text, return_tensors="pt", truncation=True, max_length=512, padding=True
     )
@@ -403,12 +540,45 @@ def predict(text: str) -> Dict[str, Any]:
         pred_class = torch.argmax(probs, dim=-1).item()
         confidence = probs[0][pred_class].item()
     
+    human_prob = probs[0][0].item()
+    ai_prob = probs[0][1].item()
+    label = LABELS[pred_class]
+    
+    # ===== CASUAL HUMAN TEXT CORRECTION =====
+    # If RoBERTa says AI, check if Level 2 strongly indicates casual human text
+    # Be CONSERVATIVE - only override for SHORT text with STRONG casual indicators
+    if pred_class == 1:  # RoBERTa says AI
+        level2 = Level2_StatisticalFingerprinting()
+        level2_score = level2.detect(text)
+        word_count = len(text.split())
+        
+        # Only override for SHORT text (< 30 words) with VERY strong casual indicators
+        if word_count < 30 and level2_score < 0.20:
+            # Very strong casual human indicators in short text
+            label = "Human-Written"
+            human_prob = max(human_prob, 1 - level2_score)
+            ai_prob = min(ai_prob, level2_score)
+            confidence = human_prob
+        elif word_count < 20 and level2_score < 0.35:
+            # Strong casual indicators in very short text
+            label = "Human-Written"
+            human_prob = max(human_prob, 0.75)
+            ai_prob = min(ai_prob, 0.25)
+            confidence = human_prob
+        elif word_count < 10 and level2_score < 0.50:
+            # Moderate casual indicators in extremely short text (likely human)
+            label = "Human-Written"
+            human_prob = max(human_prob, 0.65)
+            ai_prob = min(ai_prob, 0.35)
+            confidence = human_prob
+        # For longer text, trust RoBERTa - don't override
+    
     return {
-        "label": LABELS[pred_class],
+        "label": label,
         "confidence": confidence,
         "probabilities": {
-            "Human-Written": probs[0][0].item(),
-            "AI-Generated": probs[0][1].item()
+            "Human-Written": human_prob,
+            "AI-Generated": ai_prob
         }
     }
 
