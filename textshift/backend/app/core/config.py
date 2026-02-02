@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
+    # Intercom Integration
+    INTERCOM_APP_ID: str = "l05shlaq"
+    INTERCOM_ACCESS_TOKEN: str = ""  # Set via environment variable
+    INTERCOM_IDENTITY_SECRET: str = ""  # Set via environment variable for identity verification
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
