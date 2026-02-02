@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     
     # ML Models paths
     MODELS_DIR: str = "/opt/textshift/models"
-    DETECTOR_MODEL_PATH: str = "/opt/textshift/models/detector"
+    DETECTOR_MODEL_PATH: str = "/opt/textshift/models/detector_chatgpt"  # Hello-SimpleAI/chatgpt-detector-roberta
     HUMANIZER_MODEL_PATH: str = "/opt/textshift/models/humanizer"
     PLAGIARISM_MODEL_PATH: str = "/opt/textshift/models/plagiarism"
     TONE_DETECTOR_MODEL_PATH: str = "/opt/textshift/models/tone-detector"
