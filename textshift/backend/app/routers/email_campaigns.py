@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
@@ -470,13 +471,13 @@ async def get_email_stats(
     total_campaigns = db.query(EmailCampaign).count()
     sent_campaigns = db.query(EmailCampaign).filter(EmailCampaign.status == CampaignStatus.SENT).count()
     total_emails_sent = db.query(EmailCampaign).with_entities(
-        db.func.sum(EmailCampaign.emails_sent)
+        func.sum(EmailCampaign.emails_sent)
     ).scalar() or 0
     total_opens = db.query(EmailCampaign).with_entities(
-        db.func.sum(EmailCampaign.emails_opened)
+        func.sum(EmailCampaign.emails_opened)
     ).scalar() or 0
     total_clicks = db.query(EmailCampaign).with_entities(
-        db.func.sum(EmailCampaign.emails_clicked)
+        func.sum(EmailCampaign.emails_clicked)
     ).scalar() or 0
     
     return {

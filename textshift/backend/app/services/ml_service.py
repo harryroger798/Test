@@ -693,8 +693,9 @@ class MLModelService:
         with torch.no_grad():
             outputs = self._detector_model(**inputs)
             probabilities = torch.softmax(outputs.logits, dim=-1)
-        human_prob = probabilities[0][0].item()
-        ai_prob = probabilities[0][1].item()
+        # Model labels: Label 0 = AI, Label 1 = Human (based on training)
+        ai_prob = probabilities[0][0].item()
+        human_prob = probabilities[0][1].item()
         confidence_score = self._calculate_confidence_score(ai_prob)
         return {
             "ai_probability": round(ai_prob * 100, 2),
