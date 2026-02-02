@@ -655,7 +655,7 @@ export default function Dashboard() {
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => { setActiveTab(tab.id); setResult(null); }}
+                  onClick={() => { setActiveTab(tab.id); setResult(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                   className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-medium transition-all ${
                     activeTab === tab.id 
                       ? tab.color === 'emerald' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
