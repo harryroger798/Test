@@ -813,26 +813,68 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
+    def _is_corrupted_output(self, output: str) -> bool:
+        """Check if model output is a corrupted training artifact."""
+        if not output:
+            return True
+        output_lower = output.lower().strip()
+        corrupted_patterns = [
+            "natural human-written",
+            "human-written paraphrases",
+            "human-written alternatives",
+            "human-written versions",
+            "## 5 natural",
+            "# 5 natural",
+            "here are 5",
+            "here are some",
+            "paraphrased versions",
+        ]
+        for pattern in corrupted_patterns:
+            if pattern in output_lower:
+                return True
+        if len(output) < 20:
+            return True
+        if output.startswith("#") or output.startswith("##"):
+            return True
+        return False
+    
+    def _generate_humanized_output(self, text: str, temperature: float = 0.8) -> str:
+        """Generate humanized output from the model with given temperature."""
+        input_text = f"humanize: {text}"
+        inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+        with torch.no_grad():
+            outputs = self._humanizer_model.generate(
+                **inputs,
+                max_length=512,
+                num_beams=4,
+                do_sample=True,
+                temperature=temperature,
+                top_p=0.9,
+                repetition_penalty=2.5,
+                no_repeat_ngram_size=3
+            )
+        return self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
     def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
         model_output = None
         use_fallback = False
         
         try:
             self._load_humanizer()
-            input_text = f"humanize: {text}"
-            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._humanizer_model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=4,
-                    do_sample=True,
-                    temperature=0.8,
-                    top_p=0.9,
-                    repetition_penalty=2.5,
-                    no_repeat_ngram_size=3
-                )
-            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            model_output = self._generate_humanized_output(text, temperature=0.8)
+            
+            if self._is_corrupted_output(model_output):
+                logger.warning(f"Corrupted model output detected: '{model_output[:50]}...', retrying with different temperature")
+                model_output = self._generate_humanized_output(text, temperature=0.6)
+            
+            if self._is_corrupted_output(model_output):
+                logger.warning(f"Still corrupted after retry: '{model_output[:50]}...', retrying with temperature=0.9")
+                model_output = self._generate_humanized_output(text, temperature=0.9)
+            
+            if self._is_corrupted_output(model_output):
+                logger.warning(f"Model output still corrupted after retries, using HuggingFace API fallback")
+                use_fallback = True
+                model_output = self._humanize_with_hf_api(text)
         except Exception as e:
             logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
             use_fallback = True
