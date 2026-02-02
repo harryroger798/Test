@@ -855,6 +855,35 @@ class MLModelService:
             )
         return self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
     
+    def _simple_paraphrase(self, text: str) -> str:
+        """Simple rule-based paraphrase as last resort fallback."""
+        result = text
+        simple_replacements = [
+            ("In the journey of", "Throughout"),
+            ("there are moments when", "sometimes"),
+            ("we seek clarity", "we look for answers"),
+            ("what we truly need", "what we actually require"),
+            ("silence speaks louder than words", "silence can say more than words"),
+            ("offering comfort", "providing solace"),
+            ("beyond explanation", "that words cannot describe"),
+            ("As we navigate", "While we work through"),
+            ("the complexities of existence", "life's challenges"),
+            ("we continue to move forward", "we keep going"),
+            ("carrying our emotions", "holding our feelings"),
+            ("with resilience and quiet strength", "with inner strength"),
+            ("Furthermore,", "Also,"),
+            ("However,", "But,"),
+            ("Therefore,", "So,"),
+            ("Additionally,", "Plus,"),
+            ("Moreover,", "What's more,"),
+            ("Nevertheless,", "Still,"),
+            ("Consequently,", "As a result,"),
+            ("Subsequently,", "Then,"),
+        ]
+        for old, new in simple_replacements:
+            result = result.replace(old, new)
+        return result
+    
     def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
         model_output = None
         use_fallback = False
@@ -864,17 +893,13 @@ class MLModelService:
             model_output = self._generate_humanized_output(text, temperature=0.8)
             
             if self._is_corrupted_output(model_output):
-                logger.warning(f"Corrupted model output detected: '{model_output[:50]}...', retrying with different temperature")
-                model_output = self._generate_humanized_output(text, temperature=0.6)
-            
-            if self._is_corrupted_output(model_output):
-                logger.warning(f"Still corrupted after retry: '{model_output[:50]}...', retrying with temperature=0.9")
-                model_output = self._generate_humanized_output(text, temperature=0.9)
-            
-            if self._is_corrupted_output(model_output):
-                logger.warning(f"Model output still corrupted after retries, using HuggingFace API fallback")
+                logger.warning(f"Corrupted model output detected: '{model_output[:50]}...', using HuggingFace API fallback immediately")
                 use_fallback = True
                 model_output = self._humanize_with_hf_api(text)
+                
+                if self._is_corrupted_output(model_output) or model_output == text:
+                    logger.warning("HuggingFace fallback also failed, using simple paraphrase")
+                    model_output = self._simple_paraphrase(text)
         except Exception as e:
             logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
             use_fallback = True
