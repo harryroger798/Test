@@ -878,7 +878,8 @@ export default function Dashboard() {
                                 {/* Sentence Breakdown */}
                                 {result.results?.sentence_analysis && result.results.sentence_analysis.length > 0 && (
                                   <div className="p-4 bg-black/30 rounded-2xl border border-white/10">
-                                    <h4 className="text-gray-500 text-sm uppercase tracking-wider mb-3">Sentence Breakdown</h4>
+                                    <h4 className="text-gray-500 text-sm uppercase tracking-wider mb-1">Sentence Breakdown</h4>
+                                    <p className="text-gray-500 text-xs mb-3 italic">Note: Individual sentence scores may differ from the overall result, as AI patterns are often detected across multiple sentences rather than within single sentences.</p>
                                     <div className="space-y-2 max-h-48 overflow-y-auto">
                                       {result.results.sentence_analysis.map((sentence: any, idx: number) => (
                                         <div key={idx} className="flex items-start gap-3 p-2 rounded-lg hover:bg-white/5">
