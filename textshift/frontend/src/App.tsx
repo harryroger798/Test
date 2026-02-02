@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, lazy, Suspense } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import IntercomProvider from '@/components/IntercomProvider';
 
 // Eager load critical pages for fast initial render
 import LandingPage from '@/pages/LandingPage';
@@ -88,9 +89,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <ScrollToTop />
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
+        <IntercomProvider>
+          <ScrollToTop />
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
             {/* Public pages - no auth required */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/pricing" element={<PricingPage />} />
@@ -119,8 +121,9 @@ function App() {
             
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+            </Routes>
+          </Suspense>
+        </IntercomProvider>
       </Router>
     </QueryClientProvider>
   );
