@@ -89,9 +89,15 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
+    # Intercom (optional)
+    INTERCOM_APP_ID: str = ""
+    INTERCOM_ACCESS_TOKEN: str = ""
+    INTERCOM_IDENTITY_SECRET: str = ""
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra env vars not defined in Settings
 
 
 @lru_cache()
