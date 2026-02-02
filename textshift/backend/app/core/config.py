@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     
-    # JWT
-    SECRET_KEY: str = "textshift-super-secret-key-change-in-production-2024"
+    # JWT - SECRET_KEY must be set via environment variable for security
+    SECRET_KEY: str = ""  # REQUIRED: Set via SECRET_KEY environment variable
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     

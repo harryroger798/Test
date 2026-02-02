@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -11,6 +11,7 @@ from app.core.security import (
     get_current_active_user
 )
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models.user import User
 from app.schemas.user import (
     UserCreate, 
@@ -28,7 +29,9 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=TokenResponse)
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     user_data: UserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -80,7 +83,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -123,7 +128,9 @@ class LoginRequest(BaseModel):
     password: str
 
 @router.post("/token", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login_json(
+    request: Request,
     login_data: LoginRequest,
     db: Session = Depends(get_db)
 ):
@@ -185,13 +192,15 @@ async def change_password(
 
 
 @router.post("/forgot-password")
+@limiter.limit("3/minute")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    request: Request,
+    forgot_request: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Request a password reset email."""
-    user = db.query(User).filter(User.email == request.email).first()
+    user = db.query(User).filter(User.email == forgot_request.email).first()
     
     if user:
         token = generate_token()
@@ -211,13 +220,15 @@ async def forgot_password(
 
 
 @router.post("/reset-password")
+@limiter.limit("5/minute")
 async def reset_password(
-    request: ResetPasswordRequest,
+    request: Request,
+    reset_request: ResetPasswordRequest,
     db: Session = Depends(get_db)
 ):
     """Reset password using the token from email."""
     user = db.query(User).filter(
-        User.password_reset_token == request.token,
+        User.password_reset_token == reset_request.token,
         User.password_reset_token_expires_at > datetime.utcnow()
     ).first()
     
@@ -227,7 +238,7 @@ async def reset_password(
             detail="Invalid or expired reset token"
         )
     
-    user.hashed_password = get_password_hash(request.new_password)
+    user.hashed_password = get_password_hash(reset_request.new_password)
     user.password_reset_token = None
     user.password_reset_token_expires_at = None
     db.commit()
@@ -236,14 +247,16 @@ async def reset_password(
 
 
 @router.post("/verify-email")
+@limiter.limit("5/minute")
 async def verify_email(
-    request: VerifyEmailRequest,
+    request: Request,
+    verify_request: VerifyEmailRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Verify email using the token from email."""
     user = db.query(User).filter(
-        User.verification_token == request.token,
+        User.verification_token == verify_request.token,
         User.verification_token_expires_at > datetime.utcnow()
     ).first()
     
@@ -269,13 +282,15 @@ async def verify_email(
 
 
 @router.post("/resend-verification")
+@limiter.limit("3/minute")
 async def resend_verification(
-    request: ResendVerificationRequest,
+    request: Request,
+    resend_request: ResendVerificationRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """Resend email verification link."""
-    user = db.query(User).filter(User.email == request.email).first()
+    user = db.query(User).filter(User.email == resend_request.email).first()
     
     if not user:
         # Don't reveal if email exists or not for security
