@@ -497,6 +497,7 @@ class MLModelService:
     _plagiarism_classifier = None
     _triboost_predictor = None
     _final_humanizer = None
+    _stealthwriter_postprocessor = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -726,6 +727,20 @@ class MLModelService:
             logger.warning(f"Failed to load Final Humanizer: {e}")
             return False
     
+    def _load_stealthwriter_postprocessor(self):
+        """Load Stealthwriter Post-Processor V7 for bypassing Stealthwriter detection."""
+        if self._stealthwriter_postprocessor is not None:
+            return True
+        
+        try:
+            from app.services.stealthwriter_postprocessor import StealthwriterPostProcessor
+            self._stealthwriter_postprocessor = StealthwriterPostProcessor()
+            logger.info("Stealthwriter Post-Processor V7 loaded")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load Stealthwriter Post-Processor: {e}")
+            return False
+    
     def detect_ai(self, text: str, use_triboost: bool = True) -> Dict[str, Any]:
         """Detect AI-generated text using TriBoost V4 ensemble or RoBERTa fallback.
         
@@ -883,36 +898,39 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2, use_final_humanizer: bool = True) -> Dict[str, Any]:
-        """Humanize AI-generated text to bypass AI detectors.
+    def humanize(self, text: str, use_two_stage: bool = True, intensity: str = 'high') -> Dict[str, Any]:
+        """Humanize AI-generated text using two-stage pipeline to bypass BOTH Originality.ai AND Stealthwriter.
+        
+        Two-Stage Pipeline:
+        - Stage 1: Final Humanizer (ESL patterns + anecdotes) - bypasses Originality.ai (<3% AI)
+        - Stage 2: Stealthwriter Post-Processor V7 - bypasses Stealthwriter (<10% AI)
         
         Args:
             text: Text to humanize
-            use_post_processor: Apply StealthWriter post-processor
-            passes: Number of post-processor passes
-            use_final_humanizer: If True, use Final Humanizer (0.8% AI detection).
-                                 If False, use T5 model.
+            use_two_stage: If True, apply both stages. If False, only Stage 1.
+            intensity: Post-processor intensity ('low', 'medium', 'high')
         
         Returns:
-            Dict with original_text, humanized_text, changes_made, etc.
+            Dict with original_text, humanized_text, stages_applied, etc.
         """
-        model_output = None
+        stages_applied = []
+        stage1_output = None
+        stage2_output = None
         use_fallback = False
-        humanizer_used = "t5"
         
-        # Try Final Humanizer first (if enabled)
-        if use_final_humanizer and self._load_final_humanizer():
+        # Stage 1: Final Humanizer (for Originality.ai bypass)
+        if self._load_final_humanizer():
             try:
                 result = self._final_humanizer.humanize(text, aggressive=True)
-                model_output = result["humanized_text"]
-                humanizer_used = "final_humanizer"
-                logger.info(f"Final Humanizer applied, topic: {result['topic']}")
+                stage1_output = result["humanized_text"]
+                stages_applied.append("final_humanizer")
+                logger.info(f"Stage 1 (Final Humanizer) applied, topic: {result.get('topic', 'unknown')}")
             except Exception as e:
-                logger.warning(f"Final Humanizer failed: {e}, falling back to T5")
-                model_output = None
+                logger.warning(f"Stage 1 (Final Humanizer) failed: {e}, using T5 fallback")
+                stage1_output = None
         
-        # Fallback to T5 model
-        if model_output is None:
+        # Fallback to T5 model if Final Humanizer fails
+        if stage1_output is None:
             try:
                 self._load_humanizer()
                 input_text = f"humanize: {text}"
@@ -928,34 +946,49 @@ class MLModelService:
                         repetition_penalty=2.5,
                         no_repeat_ngram_size=3
                     )
-                model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-                humanizer_used = "t5"
-            except Exception as e:
-                logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
+                stage1_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+                stages_applied.append("t5_fallback")
                 use_fallback = True
-                model_output = self._humanize_with_hf_api(text)
-                humanizer_used = "huggingface_api"
+            except Exception as e:
+                logger.warning(f"T5 fallback failed: {e}, using HuggingFace API")
+                stage1_output = self._humanize_with_hf_api(text)
+                stages_applied.append("huggingface_api_fallback")
+                use_fallback = True
         
-        # Apply post-processor if using T5 or HF API (Final Humanizer already has its own processing)
-        if humanizer_used != "final_humanizer" and use_post_processor:
-            final_output = self._apply_stealthwriter_postprocessor(model_output, passes)
-        else:
-            final_output = model_output
+        # Stage 2: Stealthwriter Post-Processor (for Stealthwriter bypass)
+        final_output = stage1_output
+        if use_two_stage and self._load_stealthwriter_postprocessor():
+            try:
+                result = self._stealthwriter_postprocessor.process(stage1_output, intensity=intensity)
+                stage2_output = result["processed_text"]
+                final_output = stage2_output
+                stages_applied.append("stealthwriter_postprocessor_v7")
+                logger.info(f"Stage 2 (Stealthwriter Post-Processor) applied, transformations: {result.get('transformations_applied', [])}")
+            except Exception as e:
+                logger.warning(f"Stage 2 (Stealthwriter Post-Processor) failed: {e}")
+                final_output = stage1_output
         
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
+        
         return {
             "original_text": text,
-            "model_output": model_output,
+            "stage1_output": stage1_output,
+            "stage2_output": stage2_output,
             "humanized_text": final_output,
             "changes_made": changes,
             "original_length": len(text),
             "humanized_length": len(final_output),
-            "post_processor_used": use_post_processor and humanizer_used != "final_humanizer",
-            "passes": passes,
+            "stages_applied": stages_applied,
+            "humanizer_model": "two_stage_pipeline" if len(stages_applied) >= 2 else stages_applied[0] if stages_applied else "none",
             "used_fallback": use_fallback,
-            "humanizer_model": humanizer_used
+            "intensity": intensity,
+            "expected_results": {
+                "originality_ai": "<3% AI detection (Stage 1)",
+                "stealthwriter": "<10% AI detection (Stage 2)",
+                "triboost_v4": "Will still detect as AI (expected - our own detector)"
+            }
         }
     
     def _sync_web_search(self, text: str) -> List[Dict[str, Any]]:
