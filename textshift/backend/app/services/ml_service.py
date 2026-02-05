@@ -1186,7 +1186,17 @@ class PlagiarismClassifier(nn.Module):
 
 
 class MLModelService:
-    """Singleton service for ML models with lazy loading. Uses trained models from iDrive e2."""
+    """Singleton service for ML models with lazy loading. Uses trained models from iDrive e2.
+    
+    AI Detection: Uses TriBoost V4 ensemble (XGBoost + LightGBM + CatBoost) with 565 features
+                  for 99.18% accuracy. Falls back to RoBERTa if TriBoost unavailable.
+    
+    Humanization: Two-stage pipeline:
+      Stage 1: Final Humanizer (ESL patterns + anecdotes) - bypasses Originality.ai (<3% AI)
+      Stage 2: Stealthwriter Post-Processor V7 with 400+ word and 100+ phrase replacements
+    
+    Plagiarism: Uses Sentence-BERT + Neural Network Classifier with web search.
+    """
     
     _instance = None
     _current_model: Optional[str] = None
@@ -1196,6 +1206,9 @@ class MLModelService:
     _humanizer_tokenizer = None
     _plagiarism_encoder = None
     _plagiarism_classifier = None
+    _triboost_predictor = None
+    _final_humanizer = None
+    _stealthwriter_postprocessor = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -1210,6 +1223,9 @@ class MLModelService:
         self._humanizer_tokenizer = None
         self._plagiarism_encoder = None
         self._plagiarism_classifier = None
+        self._triboost_predictor = None
+        self._final_humanizer = None
+        self._stealthwriter_postprocessor = None
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -1397,7 +1413,77 @@ class MLModelService:
             "weights": weights
         }
     
-    def detect_ai(self, text: str) -> Dict[str, Any]:
+    def _load_triboost(self) -> bool:
+        if self._triboost_predictor is not None:
+            return True
+        try:
+            from app.services.triboost_predictor import TriBoostPredictor
+            self._triboost_predictor = TriBoostPredictor()
+            if self._triboost_predictor.models_loaded:
+                logger.info("TriBoost V4 predictor loaded successfully")
+                return True
+            logger.warning("TriBoost models not available, will use RoBERTa fallback")
+            self._triboost_predictor = None
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to load TriBoost: {e}")
+            self._triboost_predictor = None
+            return False
+    
+    def _load_final_humanizer(self) -> bool:
+        if self._final_humanizer is not None:
+            return True
+        try:
+            from app.services.final_humanizer import FinalHumanizer
+            self._final_humanizer = FinalHumanizer()
+            logger.info("Final Humanizer loaded successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load Final Humanizer: {e}")
+            self._final_humanizer = None
+            return False
+    
+    def _load_stealthwriter_postprocessor(self) -> bool:
+        if self._stealthwriter_postprocessor is not None:
+            return True
+        try:
+            from app.services.stealthwriter_postprocessor import StealthwriterPostProcessor
+            self._stealthwriter_postprocessor = StealthwriterPostProcessor()
+            logger.info("Stealthwriter Post-Processor loaded successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load Stealthwriter Post-Processor: {e}")
+            self._stealthwriter_postprocessor = None
+            return False
+    
+    def detect_ai(self, text: str, use_triboost: bool = True) -> Dict[str, Any]:
+        detector_model = "roberta"
+        
+        if use_triboost and getattr(settings, 'USE_TRIBOOST_DETECTOR', True):
+            if self._load_triboost():
+                try:
+                    result = self._triboost_predictor.predict(text)
+                    ai_prob = result["ai_probability"] / 100.0
+                    human_prob = result["human_probability"] / 100.0
+                    detector_model = "triboost_v4"
+                    confidence_score = self._calculate_confidence_score(ai_prob)
+                    return {
+                        "ai_probability": round(ai_prob * 100, 2),
+                        "human_probability": round(human_prob * 100, 2),
+                        "confidence_score": confidence_score,
+                        "confidence_level": self._get_confidence_level(confidence_score),
+                        "detector_model": detector_model,
+                        "analysis": {
+                            "text_length": len(text),
+                            "word_count": len(text.split()),
+                            "avg_sentence_length": self._avg_sentence_length(text)
+                        },
+                        "sentence_analysis": self._analyze_sentences(text),
+                        "level_analysis": self._perform_10_level_analysis(text, ai_prob)
+                    }
+                except Exception as e:
+                    logger.warning(f"TriBoost prediction failed, falling back to RoBERTa: {e}")
+        
         self._load_detector()
         inputs = self._detector_tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
         with torch.no_grad():
@@ -1411,6 +1497,7 @@ class MLModelService:
             "human_probability": round(human_prob * 100, 2),
             "confidence_score": confidence_score,
             "confidence_level": self._get_confidence_level(confidence_score),
+            "detector_model": detector_model,
             "analysis": {
                 "text_length": len(text),
                 "word_count": len(text.split()),
@@ -1567,45 +1654,89 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
-        model_output = None
+    def humanize(self, text: str, use_two_stage: bool = True, intensity: str = 'high') -> Dict[str, Any]:
+        """Humanize AI-generated text using two-stage pipeline to bypass BOTH Originality.ai AND Stealthwriter.
+        
+        Two-Stage Pipeline:
+        - Stage 1: Final Humanizer (ESL patterns + anecdotes) - bypasses Originality.ai (<3% AI)
+        - Stage 2: Stealthwriter Post-Processor V7 with 400+ word and 100+ phrase replacements
+        
+        Args:
+            text: Text to humanize
+            use_two_stage: If True, apply both stages. If False, only Stage 1.
+            intensity: Post-processor intensity ('low', 'medium', 'high')
+        
+        Returns:
+            Dict with original_text, humanized_text, stages_applied, etc.
+        """
+        stages_applied = []
+        stage1_output = None
+        stage2_output = None
         use_fallback = False
         
-        try:
-            self._load_humanizer()
-            input_text = f"humanize: {text}"
-            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._humanizer_model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=4,
-                    do_sample=True,
-                    temperature=0.8,
-                    top_p=0.9,
-                    repetition_penalty=2.5,
-                    no_repeat_ngram_size=3
-                )
-            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        except Exception as e:
-            logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-            use_fallback = True
-            model_output = self._humanize_with_hf_api(text)
+        if self._load_final_humanizer():
+            try:
+                result = self._final_humanizer.humanize(text, aggressive=True)
+                stage1_output = result["humanized_text"]
+                stages_applied.append("final_humanizer")
+                logger.info(f"Stage 1 (Final Humanizer) applied: {len(text)} -> {len(stage1_output)} chars")
+            except Exception as e:
+                logger.warning(f"Final Humanizer failed: {e}")
         
-        final_output = self._apply_stealthwriter_postprocessor(model_output, passes) if use_post_processor else model_output
+        if stage1_output is None:
+            try:
+                self._load_humanizer()
+                input_text = f"humanize: {text}"
+                inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+                with torch.no_grad():
+                    outputs = self._humanizer_model.generate(
+                        **inputs, max_length=512, num_beams=4, do_sample=True,
+                        temperature=0.8, top_p=0.9, repetition_penalty=2.5, no_repeat_ngram_size=3
+                    )
+                stage1_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+                stages_applied.append("t5_humanizer")
+            except Exception as e:
+                logger.warning(f"T5 humanizer failed: {e}, using HuggingFace API fallback")
+                use_fallback = True
+                stage1_output = self._humanize_with_hf_api(text)
+                stages_applied.append("hf_api_fallback")
+        
+        current_output = stage1_output
+        
+        if use_two_stage:
+            if self._load_stealthwriter_postprocessor():
+                try:
+                    sw_result = self._stealthwriter_postprocessor.process(current_output, intensity=intensity)
+                    stage2_output = sw_result["processed_text"]
+                    stages_applied.append("stealthwriter_postprocessor_v7")
+                    logger.info(f"Stage 2 (Stealthwriter V7) applied: {len(current_output)} -> {len(stage2_output)} chars")
+                    current_output = stage2_output
+                except Exception as e:
+                    logger.warning(f"Stealthwriter V7 post-processor failed: {e}, using built-in")
+                    stage2_output = self._apply_stealthwriter_postprocessor(current_output)
+                    stages_applied.append("stealthwriter_builtin")
+                    current_output = stage2_output
+            else:
+                stage2_output = self._apply_stealthwriter_postprocessor(current_output)
+                stages_applied.append("stealthwriter_builtin")
+                current_output = stage2_output
+        
+        final_output = current_output
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
+        
         return {
             "original_text": text,
-            "model_output": model_output,
             "humanized_text": final_output,
+            "stage1_output": stage1_output,
+            "stage2_output": stage2_output,
+            "stages_applied": stages_applied,
             "changes_made": changes,
             "original_length": len(text),
             "humanized_length": len(final_output),
-            "post_processor_used": use_post_processor,
-            "passes": passes,
-            "used_fallback": use_fallback
+            "used_fallback": use_fallback,
+            "intensity": intensity
         }
     
     def _sync_web_search(self, text: str) -> List[Dict[str, Any]]:

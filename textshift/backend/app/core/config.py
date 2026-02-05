@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     TONE_DETECTOR_MODEL_PATH: str = "/opt/textshift/models/tone-detector"
     TRANSLATOR_MODELS_DIR: str = "/opt/textshift/models/translators"
     
+    # TriBoost V4 ensemble models (XGBoost + LightGBM + CatBoost)
+    TRIBOOST_MODEL_PATH: str = "/opt/textshift/models/triboost_v4"
+    TRIBOOST_S3_PREFIX: str = "triboost-models/ai_detector_v4/"
+    
+    # Use TriBoost for AI detection (set to False to use RoBERTa fallback)
+    USE_TRIBOOST_DETECTOR: bool = True
+    
     # External APIs (fallback)
     SERPER_API_KEY: str = "14e76cf7d90184e9053825ba67d99621705dc122"
     ORIGINALITY_API_KEY: str = "4mrg7suxpdhfi2ty6kq85ne9cz3ljowv"
@@ -92,6 +99,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 @lru_cache()
