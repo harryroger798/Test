@@ -383,7 +383,8 @@ class StealthwriterPostProcessor:
                         main_part = match.group(1)
                         time_phrase = match.group(2)
                         punct = match.group(3)
-                        sentence = f"{time_phrase.capitalize()}, {main_part[0].lower()}{main_part[1:]}{punct}"
+                        if len(main_part) > 1:
+                            sentence = f"{time_phrase.capitalize()}, {main_part[0].lower()}{main_part[1:]}{punct}"
                         break
             
             result_sentences.append(sentence)

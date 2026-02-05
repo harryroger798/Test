@@ -967,6 +967,7 @@ class MLModelService:
             except Exception as e:
                 logger.warning(f"Stage 2 (Stealthwriter Post-Processor) failed: {e}")
                 final_output = stage1_output
+                stages_applied.append("stealthwriter_postprocessor_v7_failed")
         
         original_words = text.lower().split()
         final_words = final_output.lower().split()
