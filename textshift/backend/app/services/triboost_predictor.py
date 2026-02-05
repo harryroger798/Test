@@ -89,7 +89,11 @@ class TriBoostPredictor:
             return False
     
     def _load_models(self) -> bool:
-        """Load TriBoost ensemble models."""
+        """Load TriBoost ensemble models.
+        
+        Validates that all required components are loaded before marking as ready.
+        If any model fails to load, resets state and returns False.
+        """
         if self._models_loaded:
             return True
         
@@ -103,26 +107,46 @@ class TriBoostPredictor:
             xgb_path = os.path.join(self.LOCAL_MODEL_DIR, 'xgboost_model.pkl')
             if os.path.exists(xgb_path):
                 with open(xgb_path, 'rb') as f:
-                    self._xgboost_model = pickle.load(f)
+                    self._xgboost_model = pickle.load(f)  # noqa: S301 - trusted S3 source
                 logger.info("XGBoost model loaded")
             
             # Load LightGBM
             lgb_path = os.path.join(self.LOCAL_MODEL_DIR, 'lightgbm_model.pkl')
             if os.path.exists(lgb_path):
                 with open(lgb_path, 'rb') as f:
-                    self._lightgbm_model = pickle.load(f)
+                    self._lightgbm_model = pickle.load(f)  # noqa: S301 - trusted S3 source
                 logger.info("LightGBM model loaded")
             
             # Load CatBoost
             cb_path = os.path.join(self.LOCAL_MODEL_DIR, 'catboost_model.pkl')
             if os.path.exists(cb_path):
                 with open(cb_path, 'rb') as f:
-                    self._catboost_model = pickle.load(f)
+                    self._catboost_model = pickle.load(f)  # noqa: S301 - trusted S3 source
                 logger.info("CatBoost model loaded")
             
             # Load feature extractor
             from app.services.feature_extractor import FeatureExtractor565
             self._feature_extractor = FeatureExtractor565()
+            
+            # Validate all required components are loaded
+            missing_components = []
+            if self._xgboost_model is None:
+                missing_components.append('XGBoost')
+            if self._lightgbm_model is None:
+                missing_components.append('LightGBM')
+            if self._catboost_model is None:
+                missing_components.append('CatBoost')
+            if self._feature_extractor is None:
+                missing_components.append('FeatureExtractor')
+            
+            if missing_components:
+                logger.error(f"Failed to load components: {', '.join(missing_components)}")
+                # Reset partially loaded state
+                self._xgboost_model = None
+                self._lightgbm_model = None
+                self._catboost_model = None
+                self._feature_extractor = None
+                return False
             
             self._models_loaded = True
             logger.info("TriBoost V4 ensemble loaded successfully")
@@ -130,6 +154,11 @@ class TriBoostPredictor:
             
         except Exception as e:
             logger.error(f"Failed to load TriBoost models: {e}")
+            # Reset state on error
+            self._xgboost_model = None
+            self._lightgbm_model = None
+            self._catboost_model = None
+            self._feature_extractor = None
             return False
     
     def _get_model_predictions(self, features: np.ndarray) -> Dict[str, Tuple[float, float]]:
@@ -219,12 +248,18 @@ class TriBoostPredictor:
                 "ai_probability": 50.0,
                 "human_probability": 50.0,
                 "confidence_score": 1,
-                "confidence_level": "very_low"
+                "confidence_level": "very_low",
+                "model_predictions": {},
+                "ensemble_method": "weighted_soft_voting",
+                "model_weights": self.MODEL_WEIGHTS,
+                "model_confidences": {},
+                "features_extracted": 0,
+                "model_version": "triboost_v4"
             }
         
         try:
             # Extract 565 features
-            features = self._feature_extractor.extract_all_features(text)
+            features = self._feature_extractor.extract_all(text)
             features_array = np.array(features).reshape(1, -1)
             
             # Get predictions from each model

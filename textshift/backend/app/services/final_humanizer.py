@@ -87,15 +87,16 @@ class FinalHumanizer:
         }
         
         # Verb expansions to progressive/perfect tense
+        # Note: Stative verbs (knew, remember, process) use grammatically correct forms
         self.verb_expansions = {
             'transformed': 'has been transforming',
             'exceeded': 'has been exceeding',
             'driven': 'has been driving',
             'positioned': 'has been positioning',
             'indicates': 'is indicating',
-            'told': 'were telling',
-            'knew': 'was knowing',
-            'remember': 'be remembering',
+            'told': 'had told',
+            'knew': 'had known',
+            'remember': 'remembers',
             'changed': 'has been changing',
             'developed': 'has been developing',
             'improved': 'has been improving',
@@ -103,7 +104,7 @@ class FinalHumanizer:
             'grown': 'has been growing',
             'achieved': 'has been achieving',
             'enabled': 'is enabling',
-            'process': 'be processing',
+            'process': 'is processing',
             'poses': 'is posing',
             'led': 'has been leading',
             'predict': 'are predicting',
@@ -218,9 +219,15 @@ class FinalHumanizer:
             'algorithms', 'data', 'computers', 'systems', 'networks',
         ]
         
+        # Determiners and possessives to check for (avoid double articles)
+        determiners = r'a|an|the|this|that|these|those|some|my|your|his|her|their|our|each|every'
+        
         for noun in nouns_to_article:
-            # Add 'the' before noun if not already there
-            pattern = re.compile(r'(?<!\bthe\s)\b(' + re.escape(noun) + r')\b', re.IGNORECASE)
+            # Add 'the' before noun only if no determiner/possessive precedes it
+            pattern = re.compile(
+                r'(?<!\b(?:' + determiners + r')\s)\b(' + re.escape(noun) + r')\b',
+                re.IGNORECASE
+            )
             text = pattern.sub(r'the \1', text)
         
         return text
@@ -268,7 +275,19 @@ class FinalHumanizer:
                     verb = match.group(2)
                     rest = match.group(3)
                     # Use 'it' for singular, 'they' for plural
-                    pronoun = 'they' if subject.endswith('s') else 'it'
+                    # Exception list for singular nouns ending in 's'
+                    singular_s_nouns = [
+                        'analysis', 'business', 'success', 'process', 'progress',
+                        'news', 'mathematics', 'physics', 'economics', 'politics',
+                        'statistics', 'series', 'species', 'thesis', 'crisis'
+                    ]
+                    subject_lower = subject.lower().strip()
+                    if subject_lower in singular_s_nouns:
+                        pronoun = 'it'
+                    elif subject.endswith('s') and subject_lower not in singular_s_nouns:
+                        pronoun = 'they'
+                    else:
+                        pronoun = 'it'
                     sentence = f"The {subject}, {pronoun} {verb} {rest}"
             
             # Add observation to last sentence
