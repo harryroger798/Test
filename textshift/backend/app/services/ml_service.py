@@ -416,21 +416,192 @@ FORMAL_STARTERS = [
     "From a practical standpoint, ", "Upon closer examination, ",
 ]
 
+# Comprehensive Stealthwriter-style word replacements (150+ patterns)
+# Extracted from analysis of Stealthwriter transformations
 SYNONYM_REPLACEMENTS = {
-    "help": "assist", "use": "utilize", "get": "obtain", "think": "believe",
-    "very": "quite", "big": "substantial", "small": "modest", "good": "favorable",
-    "bad": "unfavorable", "important": "significant", "show": "demonstrate",
-    "make": "create", "need": "require", "want": "desire", "start": "commence",
-    "end": "conclude", "give": "provide", "take": "acquire", "find": "discover",
-    "tell": "inform", "ask": "inquire", "try": "attempt", "keep": "maintain",
-    "let": "permit", "seem": "appear", "feel": "sense", "become": "evolve into",
-    "leave": "depart", "put": "place", "mean": "signify", "old": "aged",
-    "new": "recent", "last": "final", "long": "extended", "great": "remarkable",
-    "little": "minimal", "own": "possess", "other": "alternative", "right": "correct",
-    "high": "elevated", "different": "distinct", "whole": "entire",
-    "large": "considerable", "next": "subsequent", "early": "initial",
-    "young": "youthful", "hard": "difficult", "major": "principal",
-    "better": "superior", "best": "optimal",
+    # Formal verbs to simpler alternatives
+    "leverage": "use", "utilize": "apply", "optimize": "improve",
+    "facilitate": "help", "implement": "put in place", "encompasses": "includes",
+    "demonstrates": "shows", "indicates": "shows", "necessitate": "require",
+    "cultivate": "develop", "foster": "build", "harness": "use",
+    "streamlines": "simplifies", "revolutionized": "changed", "transformed": "changed",
+    "alters": "changes", "enables": "allows", "empowers": "helps",
+    "anticipate": "expect", "mitigating": "reducing", "capitalizing": "taking advantage of",
+    "underscore": "highlight", "illuminate": "explain", "elucidate": "clarify",
+    "ascertain": "find out", "substantiate": "support", "corroborate": "confirm",
+    "delineate": "outline", "exemplify": "show", "manifest": "show",
+    "proliferate": "spread", "disseminate": "share", "propagate": "spread",
+    "ameliorate": "improve", "exacerbate": "worsen", "precipitate": "cause",
+    "engender": "create", "obviate": "prevent", "preclude": "prevent",
+    "augment": "increase", "diminish": "reduce", "attenuate": "weaken",
+    "bolster": "strengthen", "buttress": "support", "fortify": "strengthen",
+    "expedite": "speed up", "accelerate": "speed up", "hasten": "hurry",
+    "impede": "block", "hinder": "slow down", "obstruct": "block",
+    "transcend": "go beyond", "surpass": "beat", "exceed": "go beyond",
+    "permeate": "spread through", "pervade": "fill", "saturate": "fill",
+    "epitomize": "represent", "embody": "represent", "personify": "represent",
+    "juxtapose": "compare", "contrast": "compare", "differentiate": "tell apart",
+    "synthesize": "combine", "amalgamate": "merge", "consolidate": "combine",
+    "bifurcate": "split", "diverge": "separate", "deviate": "differ",
+    "converge": "come together", "coalesce": "merge", "integrate": "combine",
+    "recalibrate": "adjust", "reconfigure": "change", "restructure": "reorganize",
+    
+    # Academic/formal nouns to simpler alternatives
+    "paradigm": "approach", "methodology": "method", "framework": "structure",
+    "infrastructure": "system", "ecosystem": "environment", "landscape": "area",
+    "trajectory": "path", "modality": "way", "mechanism": "process",
+    "phenomenon": "event", "manifestation": "sign", "instantiation": "example",
+    "ramification": "effect", "implication": "meaning", "connotation": "meaning",
+    "juxtaposition": "comparison", "dichotomy": "split", "duality": "two sides",
+    "synergy": "teamwork", "confluence": "meeting", "convergence": "coming together",
+    "divergence": "difference", "discrepancy": "gap", "disparity": "difference",
+    "proliferation": "spread", "dissemination": "sharing", "propagation": "spread",
+    "implementation": "use", "utilization": "use", "deployment": "use",
+    "optimization": "improvement", "enhancement": "improvement", "augmentation": "increase",
+    "mitigation": "reduction", "alleviation": "relief", "amelioration": "improvement",
+    "exacerbation": "worsening", "deterioration": "decline", "degradation": "damage",
+    "culmination": "result", "apex": "peak", "zenith": "peak",
+    "nadir": "low point", "inception": "start", "commencement": "beginning",
+    "cessation": "end", "termination": "end", "conclusion": "end",
+    "stakeholders": "people involved", "constituents": "members", "participants": "people",
+    "efficacy": "effectiveness", "potency": "strength", "viability": "workability",
+    "feasibility": "possibility", "sustainability": "long-term success", "scalability": "growth potential",
+    "resilience": "toughness", "robustness": "strength", "durability": "lasting power",
+    "volatility": "instability", "fluctuation": "change", "variability": "variation",
+    "homogeneity": "sameness", "heterogeneity": "variety", "diversity": "variety",
+    "ubiquity": "presence everywhere", "prevalence": "commonness", "pervasiveness": "spread",
+    "scarcity": "shortage", "abundance": "plenty", "paucity": "lack",
+    "plethora": "many", "myriad": "many", "multitude": "many",
+    "dearth": "lack", "deficit": "shortage", "surplus": "extra",
+    
+    # Abstract adjectives to concrete alternatives
+    "unprecedented": "never seen before", "remarkable": "amazing", "substantial": "large",
+    "significant": "important", "considerable": "large", "profound": "deep",
+    "comprehensive": "complete", "extensive": "wide", "exhaustive": "thorough",
+    "meticulous": "careful", "rigorous": "strict", "stringent": "strict",
+    "robust": "strong", "resilient": "tough", "durable": "lasting",
+    "volatile": "unstable", "dynamic": "changing", "static": "fixed",
+    "holistic": "complete", "multifaceted": "complex", "nuanced": "subtle",
+    "intricate": "complex", "convoluted": "complicated", "labyrinthine": "maze-like",
+    "straightforward": "simple", "rudimentary": "basic", "elementary": "basic",
+    "sophisticated": "advanced", "cutting-edge": "latest", "state-of-the-art": "newest",
+    "innovative": "new", "novel": "new", "groundbreaking": "revolutionary",
+    "pivotal": "key", "crucial": "important", "paramount": "most important",
+    "indispensable": "essential", "imperative": "necessary", "requisite": "required",
+    "superfluous": "unnecessary", "redundant": "extra", "extraneous": "unrelated",
+    "pertinent": "relevant", "germane": "related", "apposite": "fitting",
+    "tangential": "side", "peripheral": "edge", "ancillary": "supporting",
+    "inherent": "built-in", "intrinsic": "natural", "innate": "inborn",
+    "extrinsic": "external", "exogenous": "outside", "extraneous": "unrelated",
+    "ubiquitous": "everywhere", "pervasive": "widespread", "omnipresent": "always there",
+    "sporadic": "occasional", "intermittent": "on and off", "episodic": "happening sometimes",
+    "perpetual": "constant", "incessant": "nonstop", "relentless": "never stopping",
+    "transient": "temporary", "ephemeral": "short-lived", "fleeting": "brief",
+    "enduring": "lasting", "persistent": "continuing", "sustained": "ongoing",
+    
+    # Formal transitions to natural alternatives
+    "furthermore": "also", "moreover": "in addition", "additionally": "also",
+    "consequently": "as a result", "subsequently": "then", "thereafter": "after that",
+    "henceforth": "from now on", "heretofore": "until now", "hitherto": "until now",
+    "nonetheless": "still", "nevertheless": "however", "notwithstanding": "despite",
+    "conversely": "on the other hand", "alternatively": "or", "contrarily": "opposite",
+    "correspondingly": "similarly", "likewise": "also", "similarly": "in the same way",
+    "ultimately": "in the end", "fundamentally": "basically", "essentially": "basically",
+    "predominantly": "mainly", "primarily": "mainly", "principally": "mainly",
+    "ostensibly": "seemingly", "purportedly": "supposedly", "allegedly": "reportedly",
+    "invariably": "always", "inevitably": "unavoidably", "inexorably": "unstoppably",
+    "conceivably": "possibly", "presumably": "probably", "arguably": "possibly",
+    "undoubtedly": "certainly", "indubitably": "without doubt", "unequivocally": "clearly",
+    
+    # Corporate/business jargon to plain language
+    "synergize": "work together", "incentivize": "encourage", "monetize": "make money from",
+    "operationalize": "put into action", "strategize": "plan", "prioritize": "rank",
+    "streamline": "simplify", "benchmark": "compare", "leverage": "use",
+    "actionable": "useful", "scalable": "growable", "sustainable": "long-lasting",
+    "deliverables": "results", "bandwidth": "time", "touchpoints": "contacts",
+    "stakeholder": "person involved", "synergy": "teamwork", "paradigm": "model",
+}
+
+# Stealthwriter-style phrase replacements (applied before word replacements)
+STEALTHWRITER_PHRASE_REPLACEMENTS = {
+    # Common AI phrases to natural expressions
+    "with unprecedented efficiency": "more efficiently than ever before",
+    "with unprecedented accuracy": "with a level of accuracy never seen before",
+    "with remarkable precision": "with incredible precision",
+    "in the realm of": "in the area of",
+    "from a practical standpoint": "practically speaking",
+    "it is worth noting that": "notably",
+    "it bears mentioning that": "it should be mentioned that",
+    "in light of": "considering",
+    "in terms of": "regarding",
+    "with respect to": "about",
+    "in the context of": "within",
+    "for the purpose of": "to",
+    "in order to": "to",
+    "due to the fact that": "because",
+    "in spite of the fact that": "although",
+    "at this point in time": "now",
+    "in the event that": "if",
+    "on the grounds that": "because",
+    "with the exception of": "except for",
+    "in the absence of": "without",
+    "in the presence of": "with",
+    "in conjunction with": "with",
+    "in accordance with": "following",
+    "in compliance with": "following",
+    "in alignment with": "matching",
+    
+    # Verb phrases
+    "has the ability to": "can",
+    "is able to": "can",
+    "has the capacity to": "can",
+    "is capable of": "can",
+    "is in a position to": "can",
+    "serves to": "helps to",
+    "functions to": "works to",
+    "operates to": "works to",
+    "tends to": "often",
+    "appears to": "seems to",
+    "proves to be": "is",
+    "turns out to be": "is",
+    "comes across as": "seems",
+    "gives rise to": "causes",
+    "brings about": "causes",
+    "results in": "leads to",
+    "contributes to": "helps",
+    "plays a role in": "affects",
+    "takes into account": "considers",
+    "takes into consideration": "considers",
+    "makes use of": "uses",
+    "puts emphasis on": "emphasizes",
+    "places importance on": "values",
+    "draws attention to": "highlights",
+    "sheds light on": "explains",
+    "paves the way for": "enables",
+    "lays the groundwork for": "prepares for",
+    "sets the stage for": "prepares for",
+    
+    # Abstract expressions to concrete
+    "navigate the complexities of": "deal with the challenges of",
+    "navigate complex": "work through difficult",
+    "demonstrates remarkable": "shows amazing",
+    "exhibits remarkable": "shows amazing",
+    "yields dividends": "pays off",
+    "fosters innovation": "encourages new ideas",
+    "drives sustainable": "supports lasting",
+    "enables seamless": "allows smooth",
+    "facilitates effective": "helps with good",
+    "ensures optimal": "makes sure of the best",
+    "achieves significant": "gets major",
+    "presents unprecedented opportunities": "offers huge new chances",
+    "poses existential challenges": "creates serious problems",
+    "necessitates comprehensive": "requires complete",
+    "encompasses a wide range": "includes many",
+    "spans multiple": "covers several",
+    "transcends traditional": "goes beyond usual",
+    "revolutionizes the way": "changes how",
+    "transforms the landscape": "changes the field",
+    "reshapes the future": "changes what comes next",
 }
 
 FILLERS_TO_REMOVE = [
@@ -732,26 +903,68 @@ class MLModelService:
         return result.strip()
     
     def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 2) -> str:
+        """
+        Apply Stealthwriter-style transformations to make text sound more human.
+        
+        Process order (important for best results):
+        1. Remove meta-commentary
+        2. Apply phrase replacements (longer patterns first)
+        3. Expand contractions
+        4. Remove filler words
+        5. Apply word replacements
+        6. Add occasional formal starters
+        """
         result = text
         # First remove meta-commentary
         result = self._remove_meta_commentary(result)
+        
         for _ in range(passes):
+            # Step 1: Apply phrase replacements FIRST (longer patterns before shorter)
+            # Sort by length descending to avoid partial matches
+            sorted_phrases = sorted(STEALTHWRITER_PHRASE_REPLACEMENTS.items(), 
+                                   key=lambda x: len(x[0]), reverse=True)
+            for phrase, replacement in sorted_phrases:
+                # Case-insensitive replacement while preserving sentence case
+                pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+                matches = pattern.findall(result)
+                for match in matches:
+                    # Preserve capitalization of first letter
+                    if match[0].isupper():
+                        new_replacement = replacement[0].upper() + replacement[1:]
+                    else:
+                        new_replacement = replacement
+                    result = result.replace(match, new_replacement, 1)
+            
+            # Step 2: Expand contractions
             for contraction, expansion in CONTRACTION_EXPANSIONS.items():
                 result = re.sub(re.escape(contraction), expansion, result, flags=re.IGNORECASE)
+            
+            # Step 3: Remove filler words
             for filler in FILLERS_TO_REMOVE:
                 result = result.replace(filler, "").replace(filler.capitalize(), "")
+            
+            # Step 4: Apply word replacements
             words = result.split()
             new_words = []
             for word in words:
-                lower_word = word.lower()
+                # Strip punctuation for matching
+                clean_word = word.strip('.,!?;:()[]{}"\'-')
+                lower_word = clean_word.lower()
+                
                 if lower_word in SYNONYM_REPLACEMENTS:
                     replacement = SYNONYM_REPLACEMENTS[lower_word]
-                    if word[0].isupper():
+                    # Preserve capitalization
+                    if clean_word and clean_word[0].isupper():
                         replacement = replacement.capitalize()
-                    new_words.append(replacement)
+                    # Preserve punctuation
+                    prefix = word[:len(word) - len(word.lstrip('.,!?;:()[]{}"\'-'))]
+                    suffix = word[len(word.rstrip('.,!?;:()[]{}"\'-')):]
+                    new_words.append(prefix + replacement + suffix)
                 else:
                     new_words.append(word)
             result = " ".join(new_words)
+            
+            # Step 5: Restructure sentences (occasional formal starters)
             sentences = self._split_sentences(result)
             new_sentences = []
             for i, sentence in enumerate(sentences):
@@ -762,6 +975,8 @@ class MLModelService:
             result = ". ".join(new_sentences)
             if not result.endswith("."):
                 result += "."
+        
+        # Clean up extra whitespace
         return re.sub(r'\s+', ' ', result).strip()
     
     def _humanize_with_hf_api(self, text: str) -> str:
