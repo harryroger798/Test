@@ -1189,7 +1189,7 @@ class PlagiarismClassifier(nn.Module):
 
 
 class MLModelService:
-    """Singleton service for ML models with lazy loading. Uses TriBoost V4 ensemble from iDrive e2."""
+    """Singleton service for ML models with lazy loading. Uses Super-Ensemble (RoBERTa + all TriBoost versions)."""
     
     _instance = None
     _current_model: Optional[str] = None
@@ -1200,16 +1200,17 @@ class MLModelService:
     _plagiarism_encoder = None
     _plagiarism_classifier = None
     
-    # TriBoost V4 ensemble models
-    _triboost_models: Optional[Dict[str, Any]] = None
+    # Super-Ensemble: RoBERTa + TriBoost Original + V3 + V4
+    _triboost_models: Optional[Dict[str, Dict[str, Any]]] = None  # {version: {model_name: model}}
     _feature_extractor: Optional[FeatureExtractor565] = None
     _triboost_loaded: bool = False
+    _roberta_loaded: bool = False
     
-    # iDrive e2 configuration for TriBoost models
+    # iDrive e2 configuration for models
     IDRIVE_ENDPOINT = "https://s3.us-west-1.idrivee2.com"
     IDRIVE_BUCKET = "crop-spray-uploads"
-    TRIBOOST_S3_PATH = "triboost-models/ai_detector"
-    LOCAL_TRIBOOST_CACHE = "/tmp/triboost_v4_models"
+    TRIBOOST_VERSIONS = ["original", "v3", "v4"]  # All TriBoost versions for super-ensemble
+    LOCAL_TRIBOOST_CACHE = "/tmp/triboost_super_ensemble"
     
     def __new__(cls):
         if cls._instance is None:
@@ -1226,39 +1227,52 @@ class MLModelService:
             config=Config(signature_version='s3v4')
         )
     
-    def _download_triboost_model(self, model_name: str) -> str:
-        """Download a TriBoost model from iDrive e2 to local cache."""
-        os.makedirs(self.LOCAL_TRIBOOST_CACHE, exist_ok=True)
-        local_path = os.path.join(self.LOCAL_TRIBOOST_CACHE, f"{model_name}_model.pkl")
+    def _download_triboost_model(self, version: str, model_name: str) -> str:
+        """Download a TriBoost model from iDrive e2 to local cache.
+        
+        Args:
+            version: 'original', 'v3', or 'v4'
+            model_name: 'xgboost', 'lightgbm', or 'catboost'
+        """
+        version_dir = os.path.join(self.LOCAL_TRIBOOST_CACHE, version)
+        os.makedirs(version_dir, exist_ok=True)
+        local_path = os.path.join(version_dir, f"{model_name}_model.pkl")
         
         if not os.path.exists(local_path):
-            s3_key = f"{self.TRIBOOST_S3_PATH}/{model_name}_model.pkl"
-            logger.info(f"Downloading TriBoost {model_name} model from iDrive e2...")
+            # Map version to iDrive path
+            if version == "original":
+                s3_key = f"triboost-models/ai_detector/{model_name}_model.pkl"
+            else:
+                s3_key = f"triboost-models/ai_detector_{version}/{model_name}_model.pkl"
+            
+            logger.info(f"Downloading TriBoost {version} {model_name} model from iDrive e2...")
             try:
                 s3_client = self._get_s3_client_for_triboost()
                 s3_client.download_file(self.IDRIVE_BUCKET, s3_key, local_path)
-                logger.info(f"Downloaded {model_name} model to {local_path}")
+                logger.info(f"Downloaded {version}/{model_name} model to {local_path}")
             except Exception as e:
-                logger.error(f"Failed to download {model_name} model: {e}")
+                logger.error(f"Failed to download {version}/{model_name} model: {e}")
                 raise
         
         return local_path
     
     def _load_triboost_models(self):
-        """Load TriBoost V4 ensemble models (XGBoost + LightGBM + CatBoost)."""
+        """Load all TriBoost versions for super-ensemble (Original + V3 + V4)."""
         if self._triboost_loaded and self._triboost_models:
             return
         
-        logger.info("Loading TriBoost V4 ensemble models...")
+        logger.info("Loading Super-Ensemble TriBoost models (Original + V3 + V4)...")
         self._triboost_models = {}
         model_names = ["xgboost", "lightgbm", "catboost"]
         
         try:
-            for model_name in model_names:
-                model_path = self._download_triboost_model(model_name)
-                with open(model_path, 'rb') as f:
-                    self._triboost_models[model_name] = pickle.load(f)
-                logger.info(f"Loaded TriBoost {model_name} model")
+            for version in self.TRIBOOST_VERSIONS:
+                self._triboost_models[version] = {}
+                for model_name in model_names:
+                    model_path = self._download_triboost_model(version, model_name)
+                    with open(model_path, 'rb') as f:
+                        self._triboost_models[version][model_name] = pickle.load(f)
+                    logger.info(f"Loaded TriBoost {version}/{model_name} model")
             
             # Initialize feature extractor
             if self._feature_extractor is None:
@@ -1266,7 +1280,7 @@ class MLModelService:
                 logger.info("Initialized 565-feature extractor")
             
             self._triboost_loaded = True
-            logger.info("TriBoost V4 ensemble loaded successfully (99.82% accuracy)")
+            logger.info("Super-Ensemble TriBoost loaded: 9 models (3 versions x 3 algorithms)")
         except Exception as e:
             logger.error(f"Failed to load TriBoost models: {e}")
             self._triboost_loaded = False
@@ -1511,54 +1525,43 @@ class MLModelService:
             "weights": weights
         }
     
-    def _detect_with_triboost(self, text: str) -> Dict[str, Any]:
+    def _get_triboost_predictions(self, text: str) -> Dict[str, Dict[str, float]]:
+        """Get AI probability from all TriBoost versions.
+        
+        Returns:
+            Dict mapping version name to {'ai_prob': float, 'human_prob': float}
         """
-        Detect AI using TriBoost V4 ensemble (XGBoost + LightGBM + CatBoost).
-        Uses 565 features extracted from text for high accuracy detection.
-        """
+        self._load_triboost_models()
+        
         # Extract 565 features
         features = self._feature_extractor.extract_all(text)
         X = features.reshape(1, -1)
         
-        # Get predictions from each model
-        predictions = {}
-        probabilities = {}
+        results = {}
+        for version in self.TRIBOOST_VERSIONS:
+            version_probs = []
+            for model_name in ["xgboost", "lightgbm", "catboost"]:
+                model = self._triboost_models[version][model_name]
+                prob = model.predict_proba(X)[0]
+                version_probs.append(prob[1])  # AI probability
+            
+            # Average across 3 models in this version
+            avg_ai_prob = float(np.mean(version_probs))
+            results[version] = {
+                'ai_prob': avg_ai_prob,
+                'human_prob': 1.0 - avg_ai_prob
+            }
         
-        for name, model in self._triboost_models.items():
-            pred = model.predict(X)[0]
-            prob = model.predict_proba(X)[0]
-            predictions[name] = int(pred)
-            probabilities[name] = prob.tolist()
-        
-        # Ensemble prediction (majority voting)
-        ensemble_pred = int(sum(predictions.values()) >= 2)
-        
-        # Average probability across all models
-        avg_prob = np.mean([probabilities[m] for m in self._triboost_models.keys()], axis=0)
-        
-        # Class 0 = Human, Class 1 = AI
-        human_prob = float(avg_prob[0])
-        ai_prob = float(avg_prob[1])
-        
-        return {
-            "ai_probability": ai_prob,
-            "human_probability": human_prob,
-            "ensemble_prediction": ensemble_pred,
-            "individual_predictions": predictions,
-            "individual_probabilities": probabilities,
-            "model_used": "triboost_v4"
-        }
+        return results
     
-    def detect_ai(self, text: str) -> Dict[str, Any]:
-        """
-        Detect AI-generated text using fine-tuned RoBERTa model.
+    def _get_roberta_prediction(self, text: str) -> Dict[str, float]:
+        """Get AI probability from RoBERTa model.
         
-        The model was trained on a balanced dataset of human-written and AI-generated text,
-        achieving high accuracy in distinguishing between the two.
+        Returns:
+            Dict with 'ai_prob' and 'human_prob'
         """
         self._load_detector()
         
-        # Use fine-tuned RoBERTa for AI detection
         inputs = self._detector_tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
         with torch.no_grad():
             outputs = self._detector_model(**inputs)
@@ -1566,13 +1569,71 @@ class MLModelService:
         
         human_prob = probabilities[0][0].item()
         ai_prob = probabilities[0][1].item()
-        logger.info(f"RoBERTa AI detection: {ai_prob*100:.2f}% AI")
         
-        confidence_score = self._calculate_confidence_score(ai_prob)
+        return {
+            'ai_prob': ai_prob,
+            'human_prob': human_prob
+        }
+    
+    def detect_ai(self, text: str) -> Dict[str, Any]:
+        """
+        Detect AI-generated text using Super-Ensemble (RoBERTa + TriBoost Original + V3 + V4).
+        
+        The super-ensemble combines:
+        - RoBERTa: Fine-tuned transformer (355M params)
+        - TriBoost Original: XGBoost + LightGBM + CatBoost (99.85% accuracy)
+        - TriBoost V3: Enhanced with humanized samples (99.86% accuracy)
+        - TriBoost V4: Weighted humanized training (99.82% accuracy)
+        
+        Strategy: Hybrid with TriBoost priority
+        - If ANY TriBoost version detects AI (>50%), use TriBoost average
+        - Otherwise, use RoBERTa's judgment
+        - This gives highest confidence while maintaining accuracy
+        """
+        # Get predictions from all models
+        triboost_results = self._get_triboost_predictions(text)
+        roberta_result = self._get_roberta_prediction(text)
+        
+        # Log individual model results
+        logger.info(f"RoBERTa: {roberta_result['ai_prob']*100:.1f}% AI")
+        for version, result in triboost_results.items():
+            logger.info(f"TriBoost {version}: {result['ai_prob']*100:.1f}% AI")
+        
+        # Calculate TriBoost average
+        triboost_ai_probs = [r['ai_prob'] for r in triboost_results.values()]
+        triboost_avg = float(np.mean(triboost_ai_probs))
+        
+        # Hybrid strategy: TriBoost priority
+        any_triboost_detects_ai = any(p > 0.5 for p in triboost_ai_probs)
+        
+        if any_triboost_detects_ai:
+            # Use TriBoost average when any version detects AI
+            final_ai_prob = triboost_avg
+            strategy_used = "triboost_priority"
+            logger.info(f"Super-Ensemble using TriBoost (detected AI): {final_ai_prob*100:.1f}% AI")
+        else:
+            # Use simple average of all 4 model groups when no AI detected
+            all_probs = triboost_ai_probs + [roberta_result['ai_prob']]
+            final_ai_prob = float(np.mean(all_probs))
+            strategy_used = "full_average"
+            logger.info(f"Super-Ensemble using full average: {final_ai_prob*100:.1f}% AI")
+        
+        final_human_prob = 1.0 - final_ai_prob
+        
+        # Calculate confidence score
+        confidence_score = self._calculate_confidence_score(final_ai_prob)
+        
+        # Count votes (how many model groups say AI)
+        votes_ai = sum([
+            1 if roberta_result['ai_prob'] > 0.5 else 0,
+            1 if triboost_results['original']['ai_prob'] > 0.5 else 0,
+            1 if triboost_results['v3']['ai_prob'] > 0.5 else 0,
+            1 if triboost_results['v4']['ai_prob'] > 0.5 else 0
+        ])
         
         result = {
-            "ai_probability": round(ai_prob * 100, 2),
-            "human_probability": round(human_prob * 100, 2),
+            "ai_probability": round(final_ai_prob * 100, 2),
+            "human_probability": round(final_human_prob * 100, 2),
             "confidence_score": confidence_score,
             "confidence_level": self._get_confidence_level(confidence_score),
             "analysis": {
@@ -1580,9 +1641,21 @@ class MLModelService:
                 "word_count": len(text.split()),
                 "avg_sentence_length": self._avg_sentence_length(text)
             },
-            "sentence_analysis": self._analyze_sentences(text),
-            "level_analysis": self._perform_10_level_analysis(text, ai_prob),
-            "model_used": "roberta_finetuned"
+            "model_breakdown": {
+                "roberta": round(roberta_result['ai_prob'] * 100, 2),
+                "triboost_original": round(triboost_results['original']['ai_prob'] * 100, 2),
+                "triboost_v3": round(triboost_results['v3']['ai_prob'] * 100, 2),
+                "triboost_v4": round(triboost_results['v4']['ai_prob'] * 100, 2),
+                "triboost_average": round(triboost_avg * 100, 2)
+            },
+            "ensemble_info": {
+                "votes_ai": votes_ai,
+                "votes_human": 4 - votes_ai,
+                "strategy_used": strategy_used,
+                "total_models": 10  # 1 RoBERTa + 9 TriBoost (3 versions x 3 algorithms)
+            },
+            "level_analysis": self._perform_10_level_analysis(text, final_ai_prob),
+            "model_used": "super_ensemble"
         }
         
         return result
