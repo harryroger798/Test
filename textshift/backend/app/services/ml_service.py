@@ -476,7 +476,16 @@ class PlagiarismClassifier(nn.Module):
 
 
 class MLModelService:
-    """Singleton service for ML models with lazy loading. Uses trained models from iDrive e2."""
+    """Singleton service for ML models with lazy loading. Uses trained models from iDrive e2.
+    
+    AI Detection: Uses TriBoost V4 ensemble (XGBoost + LightGBM + CatBoost) with 565 features
+                  for 99.18% accuracy. Falls back to RoBERTa if TriBoost unavailable.
+    
+    Humanization: Uses Final Humanizer with ESL-style patterns, personal anecdotes,
+                  and question-based openings for 0.8% average AI detection rate.
+    
+    Plagiarism: Uses Sentence-BERT + Neural Network Classifier with web search.
+    """
     
     _instance = None
     _current_model: Optional[str] = None
@@ -486,6 +495,8 @@ class MLModelService:
     _humanizer_tokenizer = None
     _plagiarism_encoder = None
     _plagiarism_classifier = None
+    _triboost_predictor = None
+    _final_humanizer = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -687,7 +698,65 @@ class MLModelService:
             "weights": weights
         }
     
-    def detect_ai(self, text: str) -> Dict[str, Any]:
+    def _load_triboost(self):
+        """Load TriBoost V4 ensemble predictor."""
+        if self._triboost_predictor is not None:
+            return True
+        
+        try:
+            from app.services.triboost_predictor import TriBoostPredictor
+            self._triboost_predictor = TriBoostPredictor()
+            logger.info("TriBoost V4 predictor loaded")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load TriBoost predictor: {e}")
+            return False
+    
+    def _load_final_humanizer(self):
+        """Load Final Humanizer with ESL patterns."""
+        if self._final_humanizer is not None:
+            return True
+        
+        try:
+            from app.services.final_humanizer import FinalHumanizer
+            self._final_humanizer = FinalHumanizer()
+            logger.info("Final Humanizer loaded")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load Final Humanizer: {e}")
+            return False
+    
+    def detect_ai(self, text: str, use_triboost: bool = True) -> Dict[str, Any]:
+        """Detect AI-generated text using TriBoost V4 ensemble or RoBERTa fallback.
+        
+        Args:
+            text: Text to analyze
+            use_triboost: If True, use TriBoost V4 (99.18% accuracy). If False, use RoBERTa.
+        
+        Returns:
+            Dict with ai_probability, human_probability, confidence_score, etc.
+        """
+        # Try TriBoost V4 first (if enabled and available)
+        if use_triboost and getattr(settings, 'USE_TRIBOOST_DETECTOR', True):
+            if self._load_triboost():
+                try:
+                    result = self._triboost_predictor.predict(text)
+                    if "error" not in result:
+                        # Add additional analysis
+                        result["analysis"] = {
+                            "text_length": len(text),
+                            "word_count": len(text.split()),
+                            "avg_sentence_length": self._avg_sentence_length(text)
+                        }
+                        result["level_analysis"] = self._perform_10_level_analysis(
+                            text, result["ai_probability"] / 100
+                        )
+                        result["detector_model"] = "triboost_v4"
+                        return result
+                except Exception as e:
+                    logger.warning(f"TriBoost prediction failed, falling back to RoBERTa: {e}")
+        
+        # Fallback to RoBERTa
         self._load_detector()
         inputs = self._detector_tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
         with torch.no_grad():
@@ -707,7 +776,8 @@ class MLModelService:
                 "avg_sentence_length": self._avg_sentence_length(text)
             },
             "sentence_analysis": self._analyze_sentences(text),
-            "level_analysis": self._perform_10_level_analysis(text, ai_prob)
+            "level_analysis": self._perform_10_level_analysis(text, ai_prob),
+            "detector_model": "roberta"
         }
     
     def _remove_meta_commentary(self, text: str) -> str:
@@ -813,32 +883,65 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
+    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2, use_final_humanizer: bool = True) -> Dict[str, Any]:
+        """Humanize AI-generated text to bypass AI detectors.
+        
+        Args:
+            text: Text to humanize
+            use_post_processor: Apply StealthWriter post-processor
+            passes: Number of post-processor passes
+            use_final_humanizer: If True, use Final Humanizer (0.8% AI detection).
+                                 If False, use T5 model.
+        
+        Returns:
+            Dict with original_text, humanized_text, changes_made, etc.
+        """
         model_output = None
         use_fallback = False
+        humanizer_used = "t5"
         
-        try:
-            self._load_humanizer()
-            input_text = f"humanize: {text}"
-            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._humanizer_model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=4,
-                    do_sample=True,
-                    temperature=0.8,
-                    top_p=0.9,
-                    repetition_penalty=2.5,
-                    no_repeat_ngram_size=3
-                )
-            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        except Exception as e:
-            logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-            use_fallback = True
-            model_output = self._humanize_with_hf_api(text)
+        # Try Final Humanizer first (if enabled)
+        if use_final_humanizer and self._load_final_humanizer():
+            try:
+                result = self._final_humanizer.humanize(text, aggressive=True)
+                model_output = result["humanized_text"]
+                humanizer_used = "final_humanizer"
+                logger.info(f"Final Humanizer applied, topic: {result['topic']}")
+            except Exception as e:
+                logger.warning(f"Final Humanizer failed: {e}, falling back to T5")
+                model_output = None
         
-        final_output = self._apply_stealthwriter_postprocessor(model_output, passes) if use_post_processor else model_output
+        # Fallback to T5 model
+        if model_output is None:
+            try:
+                self._load_humanizer()
+                input_text = f"humanize: {text}"
+                inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+                with torch.no_grad():
+                    outputs = self._humanizer_model.generate(
+                        **inputs,
+                        max_length=512,
+                        num_beams=4,
+                        do_sample=True,
+                        temperature=0.8,
+                        top_p=0.9,
+                        repetition_penalty=2.5,
+                        no_repeat_ngram_size=3
+                    )
+                model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+                humanizer_used = "t5"
+            except Exception as e:
+                logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
+                use_fallback = True
+                model_output = self._humanize_with_hf_api(text)
+                humanizer_used = "huggingface_api"
+        
+        # Apply post-processor if using T5 or HF API (Final Humanizer already has its own processing)
+        if humanizer_used != "final_humanizer" and use_post_processor:
+            final_output = self._apply_stealthwriter_postprocessor(model_output, passes)
+        else:
+            final_output = model_output
+        
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
@@ -849,9 +952,10 @@ class MLModelService:
             "changes_made": changes,
             "original_length": len(text),
             "humanized_length": len(final_output),
-            "post_processor_used": use_post_processor,
+            "post_processor_used": use_post_processor and humanizer_used != "final_humanizer",
             "passes": passes,
-            "used_fallback": use_fallback
+            "used_fallback": use_fallback,
+            "humanizer_model": humanizer_used
         }
     
     def _sync_web_search(self, text: str) -> List[Dict[str, Any]]:
