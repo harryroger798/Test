@@ -395,18 +395,20 @@ logger = logging.getLogger(__name__)
 
 
 # StealthWriter Post-Processor Constants
-CONTRACTION_EXPANSIONS = {
-    "it's": "it is", "don't": "do not", "can't": "cannot", "won't": "will not",
-    "wouldn't": "would not", "couldn't": "could not", "shouldn't": "should not",
-    "isn't": "is not", "aren't": "are not", "wasn't": "was not", "weren't": "were not",
-    "hasn't": "has not", "haven't": "have not", "hadn't": "had not",
-    "doesn't": "does not", "didn't": "did not", "I'm": "I am", "I've": "I have",
-    "I'll": "I will", "I'd": "I would", "you're": "you are", "you've": "you have",
-    "you'll": "you will", "you'd": "you would", "he's": "he is", "she's": "she is",
-    "we're": "we are", "we've": "we have", "we'll": "we will",
-    "they're": "they are", "they've": "they have", "they'll": "they will",
-    "that's": "that is", "there's": "there is", "here's": "here is",
-    "what's": "what is", "who's": "who is", "let's": "let us",
+# V8: Convert expanded forms BACK to contractions (opposite of V7)
+EXPANDED_TO_CONTRACTIONS = {
+    "it is": "it's", "do not": "don't", "does not": "doesn't", "did not": "didn't",
+    "cannot": "can't", "can not": "can't", "will not": "won't",
+    "would not": "wouldn't", "could not": "couldn't", "should not": "shouldn't",
+    "is not": "isn't", "are not": "aren't", "was not": "wasn't", "were not": "weren't",
+    "has not": "hasn't", "have not": "haven't", "had not": "hadn't",
+    "I am": "I'm", "I have": "I've", "I will": "I'll", "I would": "I'd",
+    "you are": "you're", "you have": "you've", "you will": "you'll",
+    "we are": "we're", "we have": "we've", "we will": "we'll",
+    "they are": "they're", "they have": "they've", "they will": "they'll",
+    "that is": "that's", "there is": "there's", "here is": "here's",
+    "what is": "what's", "who is": "who's", "let us": "let's",
+    "he is": "he's", "she is": "she's",
 }
 
 FORMAL_STARTERS = [
@@ -1528,61 +1530,43 @@ class MLModelService:
             result = result[0].upper() + result[1:]
         return result.strip()
     
-    def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 2) -> str:
+    def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 1) -> str:
         """
         Apply Stealthwriter-style transformations to make text sound more human.
         
-        Process order (important for best results):
+        V8 Process order:
         1. Remove meta-commentary
         2. Apply phrase replacements (longer patterns first)
-        3. Expand contractions
-        4. Remove filler words
-        5. Apply word replacements
-        6. Add occasional formal starters
+        3. Contract expanded forms back to contractions (keep text casual)
+        4. Apply word replacements (formal -> informal)
+        5. Remove commas before conjunctions
         """
         result = text
-        # First remove meta-commentary
         result = self._remove_meta_commentary(result)
         
         for _ in range(passes):
-            # Step 1: Apply phrase replacements FIRST (longer patterns before shorter)
-            # Sort by length descending to avoid partial matches
             sorted_phrases = sorted(STEALTHWRITER_PHRASE_REPLACEMENTS.items(), 
                                    key=lambda x: len(x[0]), reverse=True)
             for phrase, replacement in sorted_phrases:
-                # Case-insensitive replacement while preserving sentence case
                 pattern = re.compile(re.escape(phrase), re.IGNORECASE)
                 matches = pattern.findall(result)
                 for match in matches:
-                    # Preserve capitalization of first letter
                     if match[0].isupper():
                         new_replacement = replacement[0].upper() + replacement[1:]
                     else:
                         new_replacement = replacement
                     result = result.replace(match, new_replacement, 1)
             
-            # Step 2: Expand contractions
-            for contraction, expansion in CONTRACTION_EXPANSIONS.items():
-                result = re.sub(re.escape(contraction), expansion, result, flags=re.IGNORECASE)
-            
-            # Step 3: Remove filler words
-            for filler in FILLERS_TO_REMOVE:
-                result = result.replace(filler, "").replace(filler.capitalize(), "")
-            
-            # Step 4: Apply word replacements
             words = result.split()
             new_words = []
             for word in words:
-                # Strip punctuation for matching
                 clean_word = word.strip('.,!?;:()[]{}"\'-')
                 lower_word = clean_word.lower()
                 
                 if lower_word in SYNONYM_REPLACEMENTS:
                     replacement = SYNONYM_REPLACEMENTS[lower_word]
-                    # Preserve capitalization
                     if clean_word and clean_word[0].isupper():
                         replacement = replacement.capitalize()
-                    # Preserve punctuation
                     prefix = word[:len(word) - len(word.lstrip('.,!?;:()[]{}"\'-'))]
                     suffix = word[len(word.rstrip('.,!?;:()[]{}"\'-')):]
                     new_words.append(prefix + replacement + suffix)
@@ -1590,19 +1574,21 @@ class MLModelService:
                     new_words.append(word)
             result = " ".join(new_words)
             
-            # Step 5: Restructure sentences (occasional formal starters)
-            sentences = self._split_sentences(result)
-            new_sentences = []
-            for i, sentence in enumerate(sentences):
-                if i == 0 and len(sentence) > 20 and random.random() < 0.3:
-                    starter = random.choice(FORMAL_STARTERS)
-                    sentence = starter + sentence[0].lower() + sentence[1:]
-                new_sentences.append(sentence)
-            result = ". ".join(new_sentences)
-            if not result.endswith("."):
-                result += "."
+            sorted_expansions = sorted(EXPANDED_TO_CONTRACTIONS.items(),
+                                       key=lambda x: len(x[0]), reverse=True)
+            for expanded, contraction in sorted_expansions:
+                pattern = re.compile(r'\b' + re.escape(expanded) + r'\b', re.IGNORECASE)
+                matches = list(pattern.finditer(result))
+                for match in reversed(matches):
+                    original = match.group()
+                    if original[0].isupper():
+                        repl = contraction[0].upper() + contraction[1:]
+                    else:
+                        repl = contraction
+                    result = result[:match.start()] + repl + result[match.end():]
+            
+            result = re.sub(r',\s*(and|but|or)\s+', r' \1 ', result)
         
-        # Clean up extra whitespace
         return re.sub(r'\s+', ' ', result).strip()
     
     def _humanize_with_hf_api(self, text: str) -> str:

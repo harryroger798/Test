@@ -211,26 +211,26 @@ class FinalHumanizer:
     
     def add_articles(self, text: str) -> str:
         """Add extra articles before nouns (ESL pattern)."""
-        # Common nouns that ESL speakers add 'the' before
-        nouns_to_article = [
+        nouns_to_article = {
             'research', 'climate', 'temperatures', 'ecosystems', 'emissions',
             'healthcare', 'technology', 'telemedicine', 'pandemic', 'patients',
             'company', 'revenue', 'market', 'growth', 'organization',
             'algorithms', 'data', 'computers', 'systems', 'networks',
-        ]
-        
-        # Determiners and possessives to check for (avoid double articles)
-        determiners = r'a|an|the|this|that|these|those|some|my|your|his|her|their|our|each|every'
-        
-        for noun in nouns_to_article:
-            # Add 'the' before noun only if no determiner/possessive precedes it
-            pattern = re.compile(
-                r'(?<!\b(?:' + determiners + r')\s)\b(' + re.escape(noun) + r')\b',
-                re.IGNORECASE
-            )
-            text = pattern.sub(r'the \1', text)
-        
-        return text
+        }
+        determiners = {
+            'a', 'an', 'the', 'this', 'that', 'these', 'those', 'some',
+            'my', 'your', 'his', 'her', 'their', 'our', 'each', 'every',
+        }
+        words = text.split()
+        result = []
+        for i, word in enumerate(words):
+            clean = word.strip('.,!?;:()[]{}"\'-').lower()
+            if clean in nouns_to_article:
+                prev_clean = result[-1].strip('.,!?;:()[]{}"\'-').lower() if result else ''
+                if prev_clean not in determiners:
+                    result.append('the')
+            result.append(word)
+        return ' '.join(result)
     
     def restructure_with_esl_and_anecdotes(self, text: str, topic: str) -> str:
         """Restructure sentences with ESL patterns and personal anecdotes."""
