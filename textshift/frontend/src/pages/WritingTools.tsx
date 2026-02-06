@@ -368,15 +368,21 @@ export default function WritingTools() {
         body = { text: text || 'get docs' };
       }
 
+      // 5 minute timeout for writing tools (ML operations can take time)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000);
+
       const response = await fetch(`${API_BASE}${currentTool.endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       const data = await response.json();
 
       if (!response.ok) {

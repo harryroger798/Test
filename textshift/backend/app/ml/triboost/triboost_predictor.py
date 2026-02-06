@@ -16,8 +16,8 @@ from botocore.config import Config
 
 # Import feature extractor
 import sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from services.feature_extractor import FeatureExtractor565
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from app.services.feature_extractor import FeatureExtractor565
 
 
 class TriBoostPredictor:
@@ -37,8 +37,8 @@ class TriBoostPredictor:
     IDRIVE_BUCKET = "crop-spray-uploads"
     S3_BASE_PATH = "triboost-models"
     
-    # Local cache directory
-    LOCAL_CACHE_DIR = "/tmp/triboost_models"
+    # Local cache directory - use pre-deployed models
+    LOCAL_CACHE_DIR = "/opt/textshift/backend/triboost_models"
     
     # Task names
     TASKS = ["ai_detector", "humanizer", "plagiarism"]
@@ -77,7 +77,11 @@ class TriBoostPredictor:
                 endpoint_url=self.IDRIVE_ENDPOINT,
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
-                config=Config(signature_version='s3v4')
+                region_name='us-west-1',
+                config=Config(
+                    signature_version='s3v4',
+                    s3={'addressing_style': 'path'}
+                )
             )
         return self._s3_client
     
@@ -87,8 +91,12 @@ class TriBoostPredictor:
         local_path = os.path.join(self.LOCAL_CACHE_DIR, task, f"{model_name}_model.pkl")
         
         if not os.path.exists(local_path):
-            s3_key = f"{self.S3_BASE_PATH}/{task}/{model_name}_model.pkl"
-            self.s3_client.download_file(self.IDRIVE_BUCKET, s3_key, local_path)
+            # Try to download from S3 if not exists locally
+            try:
+                s3_key = f"{self.S3_BASE_PATH}/{task}/{model_name}_model.pkl"
+                self.s3_client.download_file(self.IDRIVE_BUCKET, s3_key, local_path)
+            except Exception as e:
+                raise FileNotFoundError(f"Model not found locally at {local_path} and failed to download from S3: {e}")
         
         return local_path
     

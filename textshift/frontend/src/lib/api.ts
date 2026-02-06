@@ -139,12 +139,17 @@ export const authApi = {
   },
 };
 
+// 5 minute timeout for all scan/processing endpoints (ML operations can take time)
+const SCAN_TIMEOUT = 300000;
+
 // Scan API
 export const scanApi = {
   detectAI: async (text: string) => {
     const response = await api.post('/api/scan/detect', {
       text,
       scan_type: 'ai_detection',
+    }, {
+      timeout: SCAN_TIMEOUT,
     });
     return response.data;
   },
@@ -153,6 +158,8 @@ export const scanApi = {
     const response = await api.post('/api/scan/humanize', {
       text,
       scan_type: 'humanize',
+    }, {
+      timeout: SCAN_TIMEOUT,
     });
     return response.data;
   },
@@ -161,6 +168,8 @@ export const scanApi = {
     const response = await api.post('/api/scan/plagiarism', {
       text,
       scan_type: 'plagiarism',
+    }, {
+      timeout: SCAN_TIMEOUT,
     });
     return response.data;
   },
@@ -257,17 +266,23 @@ export const apiKeysApi = {
 // Batch API (Pro+ only)
 export const batchApi = {
   detectAI: async (items: { text: string; id?: string }[]) => {
-    const response = await api.post('/api/batch/detect', { items });
+    const response = await api.post('/api/batch/detect', { items }, {
+      timeout: SCAN_TIMEOUT,
+    });
     return response.data;
   },
 
   humanize: async (items: { text: string; id?: string }[]) => {
-    const response = await api.post('/api/batch/humanize', { items });
+    const response = await api.post('/api/batch/humanize', { items }, {
+      timeout: SCAN_TIMEOUT,
+    });
     return response.data;
   },
 
   checkPlagiarism: async (items: { text: string; id?: string }[]) => {
-    const response = await api.post('/api/batch/plagiarism', { items });
+    const response = await api.post('/api/batch/plagiarism', { items }, {
+      timeout: SCAN_TIMEOUT,
+    });
     return response.data;
   },
 };
