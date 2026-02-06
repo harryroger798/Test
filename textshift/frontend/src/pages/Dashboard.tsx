@@ -582,7 +582,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full">
                 <CreditCard className="w-4 h-4 text-emerald-400" />
                 <span className="text-white font-medium">
-                  {credits?.balance === -1 ? 'Unlimited' : (credits?.balance?.toLocaleString() ?? user?.credits_balance?.toLocaleString() ?? 0)}
+                  {(credits?.balance === -1 || user?.credits_balance === -1) ? 'Unlimited' : (credits?.balance?.toLocaleString() ?? user?.credits_balance?.toLocaleString() ?? 0)}
                 </span>
                 <span className="text-gray-500">words</span>
               </div>
@@ -1170,7 +1170,7 @@ export default function Dashboard() {
                             )}
 
                             <div className="mt-6 pt-4 border-t border-white/10 text-gray-500 text-sm">
-                              Words used: <span className="text-white">{result.credits_used}</span> | Remaining: <span className="text-white">{credits?.balance === -1 ? 'Unlimited' : credits?.balance?.toLocaleString()}</span>
+                              Words used: <span className="text-white">{result.credits_used}</span> | Remaining: <span className="text-white">{(credits?.balance === -1 || user?.credits_balance === -1) ? 'Unlimited' : credits?.balance?.toLocaleString()}</span>
                             </div>
                           </div>
                         )}
@@ -1189,7 +1189,7 @@ export default function Dashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">Words Remaining</span>
                   <span className="text-white font-medium">
-                    {credits?.balance === -1 ? 'Unlimited' : (credits?.balance?.toLocaleString() ?? user?.credits_balance?.toLocaleString() ?? 0)}
+                    {(credits?.balance === -1 || user?.credits_balance === -1) ? 'Unlimited' : (credits?.balance?.toLocaleString() ?? user?.credits_balance?.toLocaleString() ?? 0)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
