@@ -1126,34 +1126,56 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="py-12 px-6 border-t border-white/10">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-            <Link to="/" className="flex items-center gap-2 justify-center md:justify-start">
-              <motion.img 
-                src="https://ik.imagekit.io/tijkyyzycl/logo.png?tr=w-32,h-32,f-webp,q-80" 
-                alt="TextShift" 
-                className="w-8 h-8 object-contain"
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.5 }}
-              />
-              <span className="text-white font-medium tracking-wide">TextShift</span>
-            </Link>
-            <div className="flex justify-center">
-              <a href="mailto:support@textshift.org" className="text-gray-300 text-sm hover:text-white transition">support@textshift.org</a>
-            </div>
-            <div className="flex items-center justify-center md:justify-end gap-6 text-gray-300 text-sm">
-              <Link to="/pricing" className="hover:text-white transition">Pricing</Link>
-              <a href="#faq" className="hover:text-white transition">FAQ</a>
-              <a href="https://twitter.com/textshift" className="hover:text-white transition">Twitter</a>
-              <a href="https://linkedin.com/company/textshift" className="hover:text-white transition">LinkedIn</a>
-            </div>
-          </div>
-          <div className="mt-8 pt-8 border-t border-white/10 text-center text-gray-300 text-sm">
-            &copy; {new Date().getFullYear()} TextShift. All rights reserved.
-          </div>
-        </div>
-      </footer>
+            <footer className="py-12 px-6 border-t border-white/10">
+              <div className="max-w-7xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                  <div className="flex flex-col items-center md:items-start">
+                    <Link to="/" className="flex items-center gap-2 mb-4">
+                      <motion.img 
+                        src="https://ik.imagekit.io/tijkyyzycl/logo.png?tr=w-32,h-32,f-webp,q-80" 
+                        alt="TextShift" 
+                        className="w-8 h-8 object-contain"
+                        whileHover={{ rotate: 360 }}
+                        transition={{ duration: 0.5 }}
+                      />
+                      <span className="text-white font-medium tracking-wide">TextShift</span>
+                    </Link>
+                    <a href="mailto:support@textshift.org" className="text-gray-400 text-sm hover:text-white transition">support@textshift.org</a>
+                    <p className="text-gray-500 text-xs mt-2">18/1 Banerjee Para Road<br />West Bengal - 700122, India</p>
+                  </div>
+                  <div className="text-center md:text-left">
+                    <h4 className="text-white font-medium mb-4">Product</h4>
+                    <div className="flex flex-col gap-2 text-gray-400 text-sm">
+                      <Link to="/features" className="hover:text-white transition">Features</Link>
+                      <Link to="/pricing" className="hover:text-white transition">Pricing</Link>
+                      <Link to="/pricing-details" className="hover:text-white transition">Pricing Details</Link>
+                      <Link to="/api-docs" className="hover:text-white transition">API Docs</Link>
+                    </div>
+                  </div>
+                  <div className="text-center md:text-left">
+                    <h4 className="text-white font-medium mb-4">Legal</h4>
+                    <div className="flex flex-col gap-2 text-gray-400 text-sm">
+                      <Link to="/terms" className="hover:text-white transition">Terms & Conditions</Link>
+                      <Link to="/privacy-policy" className="hover:text-white transition">Privacy Policy</Link>
+                      <Link to="/refund-policy" className="hover:text-white transition">Refund Policy</Link>
+                      <Link to="/shipping-policy" className="hover:text-white transition">Shipping Policy</Link>
+                    </div>
+                  </div>
+                  <div className="text-center md:text-left">
+                    <h4 className="text-white font-medium mb-4">Connect</h4>
+                    <div className="flex flex-col gap-2 text-gray-400 text-sm">
+                      <Link to="/contact" className="hover:text-white transition">Contact Us</Link>
+                      <a href="#faq" className="hover:text-white transition">FAQ</a>
+                      <a href="https://twitter.com/textshift" className="hover:text-white transition">Twitter</a>
+                      <a href="https://linkedin.com/company/textshift" className="hover:text-white transition">LinkedIn</a>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8 pt-8 border-t border-white/10 text-center text-gray-500 text-sm">
+                  &copy; {new Date().getFullYear()} TextShift. All rights reserved. | Founder: Sayan Roy Chowdhury
+                </div>
+              </div>
+            </footer>
 
       {/* Contact Modal */}
       {contactModalOpen && (
