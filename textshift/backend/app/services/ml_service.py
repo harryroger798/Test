@@ -1360,16 +1360,58 @@ class MLModelService:
                 self._detector_model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=2)
             self._current_model = "detector"
     
+    def _download_humanizer_from_idrive(self):
+        """Download Stealthwriter T5 Chaos humanizer from iDrive e2 if not available locally."""
+        local_path = settings.HUMANIZER_MODEL_PATH
+        s3_prefix = "stealthwriter_t5_chaos_final"
+        
+        # Check if model already exists locally
+        if os.path.exists(os.path.join(local_path, "model.safetensors")):
+            logger.info(f"Humanizer model already exists at {local_path}")
+            return True
+        
+        logger.info(f"Downloading Stealthwriter T5 Chaos humanizer from iDrive e2...")
+        os.makedirs(local_path, exist_ok=True)
+        
+        try:
+            s3_client = self._get_s3_client_for_triboost()
+            
+            # List and download all model files
+            response = s3_client.list_objects_v2(
+                Bucket=self.IDRIVE_BUCKET,
+                Prefix=f"{s3_prefix}/"
+            )
+            
+            for obj in response.get('Contents', []):
+                key = obj['Key']
+                filename = key.split('/')[-1]
+                if filename:
+                    local_file = os.path.join(local_path, filename)
+                    logger.info(f"  Downloading {filename}...")
+                    s3_client.download_file(self.IDRIVE_BUCKET, key, local_file)
+            
+            logger.info(f"Successfully downloaded humanizer model to {local_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to download humanizer from iDrive: {e}")
+            return False
+    
     def _load_humanizer(self):
+        """Load Stealthwriter T5 Chaos humanizer (trained for 0% AI detection)."""
         if self._current_model != "humanizer":
             self._unload_all_models()
-            logger.info("Loading humanizer model (T5 V3)...")
+            
+            # Try to download model from iDrive if not available locally
             model_path = settings.HUMANIZER_MODEL_PATH
+            if not os.path.exists(os.path.join(model_path, "model.safetensors")):
+                self._download_humanizer_from_idrive()
+            
+            logger.info("Loading Stealthwriter T5 Chaos humanizer...")
             if os.path.exists(os.path.join(model_path, "model.safetensors")):
                 self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
                 self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
                 self._humanizer_model.eval()
-                logger.info(f"Loaded trained T5 V3 model from {model_path}")
+                logger.info(f"Loaded Stealthwriter T5 Chaos model from {model_path}")
             else:
                 logger.warning(f"Local model not found at {model_path}, using base T5")
                 self._humanizer_tokenizer = T5Tokenizer.from_pretrained("t5-base")
@@ -1808,6 +1850,7 @@ class MLModelService:
             return text
     
     def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
+        """Humanize AI text using Stealthwriter T5 Chaos model (temp 1.5 for 0% AI detection)."""
         model_output = None
         use_fallback = False
         
@@ -1819,10 +1862,10 @@ class MLModelService:
                 outputs = self._humanizer_model.generate(
                     **inputs,
                     max_length=512,
-                    num_beams=4,
+                    num_beams=1,  # Disable beam search for more creative output
                     do_sample=True,
-                    temperature=0.8,
-                    top_p=0.9,
+                    temperature=1.5,  # CHAOS MODE - high temperature for 0% AI detection
+                    top_p=0.95,
                     repetition_penalty=2.5,
                     no_repeat_ngram_size=3
                 )
