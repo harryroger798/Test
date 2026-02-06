@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from datetime import datetime
 from app.core.database import Base
 
@@ -18,7 +18,8 @@ class HumanizedTextHash(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # SHA256 hash of the humanized text (64 chars)
-    text_hash = Column(String(64), unique=True, nullable=False, index=True)
+    # unique=True creates an index automatically
+    text_hash = Column(String(64), unique=True, nullable=False)
     
     # Optional: link to user who created it
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -28,8 +29,3 @@ class HumanizedTextHash(Base):
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # Index for fast hash lookups
-    __table_args__ = (
-        Index('ix_humanized_text_hashes_text_hash', 'text_hash'),
-    )
