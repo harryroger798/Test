@@ -874,7 +874,7 @@ export default function WritingTools() {
               <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full">
                 <CreditCard className="w-4 h-4 text-emerald-400" />
                 <span className="text-white font-medium">
-                  {credits?.balance === -1 ? 'Unlimited' : (credits?.balance?.toLocaleString() ?? 0)}
+                  {(credits?.balance === -1 || user?.credits_balance === -1) ? 'Unlimited' : (credits?.balance?.toLocaleString() ?? user?.credits_balance?.toLocaleString() ?? 0)}
                 </span>
                 <span className="text-gray-500">words</span>
               </div>
