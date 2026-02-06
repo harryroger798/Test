@@ -1363,7 +1363,7 @@ class MLModelService:
     def _download_humanizer_from_idrive(self):
         """Download Stealthwriter T5 Chaos humanizer from iDrive e2 if not available locally."""
         local_path = settings.HUMANIZER_MODEL_PATH
-        s3_prefix = "stealthwriter_t5_chaos_final"
+        s3_prefix = "stealthwriter_t5_final_9350"
         
         # Check if model already exists locally
         if os.path.exists(os.path.join(local_path, "model.safetensors")):
