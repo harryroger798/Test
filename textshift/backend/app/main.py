@@ -13,6 +13,8 @@ from app.models import UserFeedback, ModelVersion, TrainingRun, ABTestAssignment
 from app.models import Promo, PromoRedemption
 # Email campaign models
 from app.models import EmailCampaign, EmailSend
+# Humanized text hash tracking (for ensuring TextShift humanized outputs pass our detector)
+from app.models import HumanizedTextHash
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

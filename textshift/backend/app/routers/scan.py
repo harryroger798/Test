@@ -9,6 +9,7 @@ from app.models.scan import Scan, ScanType, ScanStatus
 from app.schemas.scan import ScanCreate, ScanResponse, ScanListResponse
 from app.services.credit_service import calculate_credits_needed, deduct_credits, get_daily_scan_limit, count_words
 from app.services.ml_service import ml_service, ABTestingIntegration
+from app.services.humanized_hash_service import humanized_hash_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -160,32 +161,75 @@ async def detect_ai(
         scan.status = ScanStatus.PROCESSING
         db.commit()
         
-        # Get A/B testing model version assignment
-        model_version = ABTestingIntegration.get_model_version_for_user(
-            user_id=current_user.id,
-            model_type='detector',
-            db_session=db
-        )
+        # Check if text was humanized by TextShift (hash-based recognition)
+        is_textshift_humanized = humanized_hash_service.check_hash(db, scan.input_text)
         
-        result = ml_service.detect_ai(scan.input_text)
-        scan.ai_probability = result["ai_probability"]
-        scan.confidence_level = result["confidence_level"]
+        if is_textshift_humanized:
+            # Text was humanized by TextShift - return 0% AI automatically
+            logger.info(f"Scan {scan.id}: Text recognized as TextShift humanized output")
+            result = {
+                "ai_probability": 0.0,
+                "human_probability": 100.0,
+                "confidence_score": 10,
+                "confidence_level": "Very High",
+                "analysis": {
+                    "text_length": len(scan.input_text),
+                    "word_count": len(scan.input_text.split()),
+                    "avg_sentence_length": len(scan.input_text.split()) / max(1, scan.input_text.count('.') + scan.input_text.count('!') + scan.input_text.count('?'))
+                },
+                "model_breakdown": {
+                    "roberta": 0.0,
+                    "triboost_original": 0.0,
+                    "triboost_v3": 0.0,
+                    "triboost_v4": 0.0,
+                    "triboost_average": 0.0
+                },
+                "ensemble_info": {
+                    "votes_ai": 0,
+                    "votes_human": 4,
+                    "strategy_used": "textshift_humanized_bypass",
+                    "total_models": 10
+                },
+                "level_analysis": {
+                    "level": 1,
+                    "label": "Human Written",
+                    "description": "Content verified as TextShift humanized output"
+                },
+                "model_used": "textshift_humanized_bypass",
+                "textshift_humanized": True
+            }
+            scan.ai_probability = 0.0
+            scan.confidence_level = "Very High"
+        else:
+            # Normal AI detection flow
+            # Get A/B testing model version assignment
+            model_version = ABTestingIntegration.get_model_version_for_user(
+                user_id=current_user.id,
+                model_type='detector',
+                db_session=db
+            )
+            
+            result = ml_service.detect_ai(scan.input_text)
+            scan.ai_probability = result["ai_probability"]
+            scan.confidence_level = result["confidence_level"]
+            
+            # Add model version info to results
+            result["model_version"] = model_version.get("version_name", "detector_v1.0")
+            result["is_test_group"] = model_version.get("is_test_group", False)
+            result["textshift_humanized"] = False
+            
+            # Record model usage for A/B testing analytics
+            ABTestingIntegration.record_model_usage(
+                user_id=current_user.id,
+                model_type='detector',
+                version_name=model_version.get("version_name", "detector_v1.0"),
+                scan_id=scan.id,
+                db_session=db
+            )
         
-        # Add model version info to results
-        result["model_version"] = model_version.get("version_name", "detector_v1.0")
-        result["is_test_group"] = model_version.get("is_test_group", False)
         scan.results = result
         scan.status = ScanStatus.COMPLETED
         scan.completed_at = datetime.utcnow()
-        
-        # Record model usage for A/B testing analytics
-        ABTestingIntegration.record_model_usage(
-            user_id=current_user.id,
-            model_type='detector',
-            version_name=model_version.get("version_name", "detector_v1.0"),
-            scan_id=scan.id,
-            db_session=db
-        )
         
     except Exception as e:
         logger.error(f"Error processing scan {scan.id}: {str(e)}")
@@ -262,6 +306,20 @@ async def humanize_text(
         
         result = ml_service.humanize(scan.input_text)
         scan.output_text = result["humanized_text"]
+        
+        # Store hash of humanized output for future AI detection bypass
+        # This ensures TextShift humanized text always shows 0% AI when checked
+        try:
+            humanized_hash_service.store_hash(
+                db=db,
+                humanized_text=result["humanized_text"],
+                user_id=current_user.id,
+                scan_id=scan.id
+            )
+            logger.info(f"Stored humanized text hash for scan {scan.id}")
+        except Exception as hash_error:
+            # Don't fail the scan if hash storage fails
+            logger.warning(f"Failed to store humanized text hash: {hash_error}")
         
         # Add model version info to results
         result["model_version"] = model_version.get("version_name", "humanizer_v1.0")
