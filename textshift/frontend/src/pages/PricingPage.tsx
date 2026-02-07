@@ -291,28 +291,28 @@ export default function PricingPage() {
             Credits never expire. No hidden fees. Cancel anytime. Pay with PayPal for secure transactions.
           </p>
           
-                    {/* Billing Period Toggle */}
-                    <div className="flex items-center justify-center gap-4">
-                      <span className={`text-sm font-medium ${billingPeriod === 'monthly' ? 'text-emerald-400' : 'text-gray-500'}`}>Monthly</span>
-                      <button
-                        onClick={() => setBillingPeriod(billingPeriod === 'monthly' ? 'yearly' : 'monthly')}
-                        className={`relative w-12 h-6 rounded-full transition-colors ${
-                          billingPeriod === 'yearly' ? 'bg-emerald-500' : 'bg-white/20'
-                        }`}
-                      >
-                        <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-200 shadow-md ${
-                          billingPeriod === 'yearly' ? 'left-[26px]' : 'left-0.5'
-                        }`} />
-                      </button>
-                      <span className={`text-sm font-medium ${billingPeriod === 'yearly' ? 'text-emerald-400' : 'text-gray-500'}`}>
-                        Yearly
-                      </span>
-                      {billingPeriod === 'yearly' && (
-                        <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/30">
-                          2 months FREE
-                        </span>
-                      )}
-                    </div>
+          {/* Billing Period Toggle */}
+          <div className="flex items-center justify-center gap-4">
+            <span className={`text-sm font-medium ${billingPeriod === 'monthly' ? 'text-emerald-400' : 'text-gray-500'}`}>Monthly</span>
+            <button
+              onClick={() => setBillingPeriod(billingPeriod === 'monthly' ? 'yearly' : 'monthly')}
+              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+                billingPeriod === 'yearly' ? 'bg-emerald-500' : 'bg-gray-600'
+              }`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-200 ${
+                billingPeriod === 'yearly' ? 'translate-x-8' : 'translate-x-1'
+              }`} />
+            </button>
+            <span className={`text-sm font-medium ${billingPeriod === 'yearly' ? 'text-emerald-400' : 'text-gray-500'}`}>
+              Yearly
+            </span>
+            {billingPeriod === 'yearly' && (
+              <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/30">
+                2 months FREE
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
