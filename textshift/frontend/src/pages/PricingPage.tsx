@@ -291,28 +291,28 @@ export default function PricingPage() {
             Credits never expire. No hidden fees. Cancel anytime. Pay with PayPal for secure transactions.
           </p>
           
-          {/* Billing Period Toggle */}
-          <div className="flex items-center justify-center gap-4">
-            <span className={`text-sm ${billingPeriod === 'monthly' ? 'text-white' : 'text-gray-500'}`}>Monthly</span>
-            <button
-              onClick={() => setBillingPeriod(billingPeriod === 'monthly' ? 'yearly' : 'monthly')}
-              className={`relative w-14 h-7 rounded-full transition-colors ${
-                billingPeriod === 'yearly' ? 'bg-emerald-500' : 'bg-white/20'
-              }`}
-            >
-              <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                billingPeriod === 'yearly' ? 'translate-x-8' : 'translate-x-1'
-              }`} />
-            </button>
-            <span className={`text-sm ${billingPeriod === 'yearly' ? 'text-white' : 'text-gray-500'}`}>
-              Yearly
-            </span>
-            {billingPeriod === 'yearly' && (
-              <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/30">
-                2 months FREE
-              </span>
-            )}
-          </div>
+                    {/* Billing Period Toggle */}
+                    <div className="flex items-center justify-center gap-4">
+                      <span className={`text-sm font-medium ${billingPeriod === 'monthly' ? 'text-emerald-400' : 'text-gray-500'}`}>Monthly</span>
+                      <button
+                        onClick={() => setBillingPeriod(billingPeriod === 'monthly' ? 'yearly' : 'monthly')}
+                        className={`relative w-12 h-6 rounded-full transition-colors ${
+                          billingPeriod === 'yearly' ? 'bg-emerald-500' : 'bg-white/20'
+                        }`}
+                      >
+                        <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all duration-200 shadow-md ${
+                          billingPeriod === 'yearly' ? 'left-[26px]' : 'left-0.5'
+                        }`} />
+                      </button>
+                      <span className={`text-sm font-medium ${billingPeriod === 'yearly' ? 'text-emerald-400' : 'text-gray-500'}`}>
+                        Yearly
+                      </span>
+                      {billingPeriod === 'yearly' && (
+                        <span className="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded-full border border-emerald-500/30">
+                          2 months FREE
+                        </span>
+                      )}
+                    </div>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
@@ -398,15 +398,17 @@ export default function PricingPage() {
           </div>
         </div>
 
-        <div className="text-center py-12 border-t border-white/10">
-          <h2 className="text-2xl md:text-3xl font-light text-white mb-4">Still have questions?</h2>
-          <p className="text-gray-400 mb-8">Contact our support team and we'll help you find the right plan.</p>
-          <a href="mailto:support@textshift.org">
-                        <Button variant="outline" className="bg-transparent border-white/20 text-white hover:bg-white/5 rounded-full px-8">
-                          Contact Support <ArrowRight className="ml-2 w-4 h-4" />
-                        </Button>
-          </a>
-        </div>
+                <div className="text-center py-12 border-t border-white/10">
+                  <h2 className="text-2xl md:text-3xl font-light text-white mb-4">Still have questions?</h2>
+                  <p className="text-gray-400 mb-8">Contact our support team and we'll help you find the right plan.</p>
+                  <Button 
+                    onClick={() => setShowContactModal(true)}
+                    variant="outline" 
+                    className="bg-transparent border-white/20 text-white hover:bg-white/5 rounded-full px-8"
+                  >
+                    Contact Support <ArrowRight className="ml-2 w-4 h-4" />
+                  </Button>
+                </div>
       </div>
 
       {/* Contact Sales Modal */}
