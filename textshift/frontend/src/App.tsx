@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, lazy, Suspense } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useIntercom } from '@/hooks/useIntercom';
 
 // Eager load critical pages for fast initial render
 import LandingPage from '@/pages/LandingPage';
@@ -50,6 +51,11 @@ function ScrollToTop() {
   return null;
 }
 
+function IntercomManager() {
+  useIntercom();
+  return null;
+}
+
 const queryClient= new QueryClient({
   defaultOptions: {
     queries: {
@@ -89,6 +95,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <Router>
         <ScrollToTop />
+        <IntercomManager />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             {/* Public pages - no auth required */}
