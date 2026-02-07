@@ -1143,15 +1143,14 @@ export default function LandingPage() {
                     <a href="mailto:support@textshift.org" className="text-gray-400 text-sm hover:text-white transition">support@textshift.org</a>
                     <p className="text-gray-500 text-xs mt-2">18/1 Banerjee Para Road<br />West Bengal - 700122, India</p>
                   </div>
-                  <div className="text-center md:text-left">
-                    <h4 className="text-white font-medium mb-4">Product</h4>
-                    <div className="flex flex-col gap-2 text-gray-400 text-sm">
-                      <Link to="/features" className="hover:text-white transition">Features</Link>
-                      <Link to="/pricing" className="hover:text-white transition">Pricing</Link>
-                      <Link to="/pricing-details" className="hover:text-white transition">Pricing Details</Link>
-                      <Link to="/api-docs" className="hover:text-white transition">API Docs</Link>
-                    </div>
-                  </div>
+                                    <div className="text-center md:text-left">
+                                      <h4 className="text-white font-medium mb-4">Product</h4>
+                                      <div className="flex flex-col gap-2 text-gray-400 text-sm">
+                                        <Link to="/features" className="hover:text-white transition">Features</Link>
+                                        <Link to="/pricing" className="hover:text-white transition">Pricing</Link>
+                                        <Link to="/api-docs" className="hover:text-white transition">API Docs</Link>
+                                      </div>
+                                    </div>
                   <div className="text-center md:text-left">
                     <h4 className="text-white font-medium mb-4">Legal</h4>
                     <div className="flex flex-col gap-2 text-gray-400 text-sm">

@@ -42,9 +42,9 @@ export default function PrivacyPolicyPage() {
               explains how we collect, use, disclose, and safeguard your information when you use our website 
               and services at textshift.org.
             </p>
-            <p className="leading-relaxed">
-              TextShift is operated by Sayan Roy Chowdhury, located at 18/1 Banerjee Para Road, West Bengal - 700122, India.
-            </p>
+                        <p className="leading-relaxed">
+                          For contact information, please visit our <Link to="/contact" className="text-emerald-400 hover:underline">Contact page</Link>.
+                        </p>
           </section>
 
           <section className="bg-gradient-to-b from-white/5 to-transparent border border-white/10 rounded-2xl p-6">
@@ -198,18 +198,14 @@ export default function PrivacyPolicyPage() {
             </p>
           </section>
 
-          <section className="bg-gradient-to-b from-white/5 to-transparent border border-white/10 rounded-2xl p-6">
-            <h2 className="text-xl font-medium text-white mb-4">Contact Us</h2>
-            <p className="leading-relaxed mb-4">
-              If you have questions about this Privacy Policy, please contact us:
-            </p>
-            <div className="space-y-2 text-gray-400">
-              <p><strong className="text-white">Company:</strong> TextShift</p>
-              <p><strong className="text-white">Founder:</strong> Sayan Roy Chowdhury</p>
-              <p><strong className="text-white">Address:</strong> 18/1 Banerjee Para Road, West Bengal - 700122, India</p>
-              <p><strong className="text-white">Email:</strong> privacy@textshift.org</p>
-            </div>
-          </section>
+                    <section className="bg-gradient-to-b from-white/5 to-transparent border border-white/10 rounded-2xl p-6">
+                      <h2 className="text-xl font-medium text-white mb-4">Contact Us</h2>
+                      <p className="leading-relaxed mb-4">
+                        If you have questions about this Privacy Policy, please contact us at{' '}
+                        <a href="mailto:privacy@textshift.org" className="text-emerald-400 hover:underline">privacy@textshift.org</a>{' '}
+                        or visit our <Link to="/contact" className="text-emerald-400 hover:underline">Contact page</Link>.
+                      </p>
+                    </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-white/10">
