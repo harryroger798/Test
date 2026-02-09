@@ -95,6 +95,51 @@ const DARK_PATTERN_TAXONOMY: Record<string, { description: string; severity: str
   },
 };
 
+const PATTERN_ALIASES: Record<string, string> = {
+  "Roach motel": "Roach Motel",
+  "Forced continuity": "Forced Continuity",
+  "Hidden cancel button": "Hidden Cancellation",
+  "Phone-only cancellation": "Forced Phone Call",
+  "Phone cancellation": "Forced Phone Call",
+  "In-person or certified mail only": "Forced Phone Call",
+  "In-person cancellation": "Forced Phone Call",
+  "Phone/email only": "Forced Phone Call",
+  "Retention offers": "Obstruction",
+  "Retention screens": "Obstruction",
+  "Multiple retention screens": "Obstruction",
+  "Aggressive retention": "Obstruction",
+  "Long hold times": "Obstruction",
+  "Transfer maze": "Obstruction",
+  "Pause before cancel": "Obstruction",
+  "Pause option": "Obstruction",
+  "Multiple confirmation screens": "Obstruction",
+  "Visual interference": "Misdirection",
+  "Preselection": "Misdirection",
+  "Trick questions": "Misdirection",
+  "Scare tactics": "Fear-Based Retention",
+  "Fear-based messaging": "Fear-Based Retention",
+  "Equipment return threats": "Fear-Based Retention",
+  "Equipment return": "Fear-Based Retention",
+  "Streak guilt": "Emotional Manipulation",
+  "Early termination fees": "Bait and Switch",
+  "Early termination fee (50%)": "Bait and Switch",
+  "Early termination fee (75% remaining)": "Bait and Switch",
+  "Early cancellation fees": "Bait and Switch",
+  "Buyout fees": "Bait and Switch",
+  "Discount offers": "Countdown Timers",
+  "30-day notice": "Subscription Creep",
+  "31-day notice period": "Subscription Creep",
+  "30-day notice period": "Subscription Creep",
+  "30-day refund window": "Subscription Creep",
+  "Notice period": "Subscription Creep",
+  "No online cancellation": "Roach Motel",
+  "Contract terms vary by location": "Roach Motel",
+};
+
+function normalizePattern(dp: string): string {
+  return PATTERN_ALIASES[dp] || dp;
+}
+
 export default function DarkPatternsPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +160,7 @@ export default function DarkPatternsPage() {
 
   const patternCounts = allPatterns.reduce<Record<string, number>>((acc, pattern) => {
     acc[pattern] = companies.filter((c) =>
-      Array.isArray(c.darkPatterns) && (c.darkPatterns as string[]).includes(pattern)
+      Array.isArray(c.darkPatterns) && (c.darkPatterns as string[]).some((dp) => normalizePattern(dp) === pattern)
     ).length;
     return acc;
   }, {});
@@ -125,7 +170,7 @@ export default function DarkPatternsPage() {
   const filteredCompanies = companies.filter((c) => {
     if (!c.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (selectedPattern) {
-      return Array.isArray(c.darkPatterns) && (c.darkPatterns as string[]).includes(selectedPattern);
+      return Array.isArray(c.darkPatterns) && (c.darkPatterns as string[]).some((dp) => normalizePattern(dp) === selectedPattern);
     }
     return Array.isArray(c.darkPatterns) && (c.darkPatterns as string[]).length > 0;
   });
@@ -235,7 +280,7 @@ export default function DarkPatternsPage() {
                         <span
                           key={dp}
                           className={`border px-1.5 py-0.5 text-[10px] ${
-                            dp === selectedPattern ? "border-[#FF3131]/50 bg-[#FF3131]/10 text-[#FF3131]" : "border-[#1E1E1E] text-[#888888]"
+                            normalizePattern(dp) === selectedPattern ? "border-[#FF3131]/50 bg-[#FF3131]/10 text-[#FF3131]" : "border-[#1E1E1E] text-[#888888]"
                           }`}
                         >
                           {dp}
