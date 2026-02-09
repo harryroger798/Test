@@ -192,6 +192,7 @@ export default function WallOfShamePage() {
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
         </div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative mx-auto max-w-7xl">
+          <img src="/characters/rage_point.png" alt="" aria-hidden className="pointer-events-none select-none absolute -right-8 -bottom-6 hidden w-[420px] opacity-80 md:block lg:w-[520px]" />
           <h1 className="mb-2 text-3xl font-bold md:text-4xl">
             <Flame className="mr-2 inline h-8 w-8 text-[#FF3131]" />
             Wall of Shame

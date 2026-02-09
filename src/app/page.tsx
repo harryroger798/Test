@@ -58,6 +58,13 @@ export default function Home() {
           <div className="absolute inset-0 bg-[#0A0A0A]/85" />
         </div>
         <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/10 to-transparent" />
+        {/* Rage character smashing cancel button */}
+        <img
+          src="/characters/rage_cancel.png"
+          alt="Rage character slamming cancel button"
+          aria-hidden
+          className="pointer-events-none select-none absolute -right-10 bottom-0 hidden w-[520px] opacity-80 md:block lg:w-[640px]"
+        />
         <div className="relative mx-auto max-w-5xl text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -209,6 +216,10 @@ export default function Home() {
               </motion.div>
             ))}
           </motion.div>
+          {/* Peeking rage character divider */}
+          <div className="pointer-events-none absolute bottom-0 left-0 flex h-36 w-full items-end justify-center overflow-hidden">
+            <img src="/characters/rage_peek.png" alt="" aria-hidden className="translate-y-6 w-[420px] opacity-90" />
+          </div>
         </div>
       </section>
 
