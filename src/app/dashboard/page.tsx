@@ -109,7 +109,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
+    <div className="relative mx-auto max-w-6xl px-4 py-12">
+      <img src="/characters/rage_laptop.png" alt="" aria-hidden className="pointer-events-none select-none absolute -right-20 top-0 hidden w-[340px] opacity-50 lg:block" />
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>

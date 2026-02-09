@@ -125,7 +125,8 @@ export default function CommunityPage() {
   const darkPatternTypes = ["confirmshaming", "obstruction", "hidden_costs", "forced_continuity", "misdirection", "social_proof", "urgency", "scarcity", "trick_questions", "roach_motel", "bait_switch", "disguised_ads", "friend_spam", "privacy_zuckering"];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
+    <div className="relative mx-auto max-w-6xl px-4 py-12">
+      <img src="/characters/rage_cool.png" alt="" aria-hidden className="pointer-events-none select-none absolute -left-16 top-8 hidden w-[280px] opacity-40 lg:block" />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="mb-8 text-center">
           <h1 className="mb-2 text-4xl font-bold">
