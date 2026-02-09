@@ -48,6 +48,7 @@ export default function PricingPage() {
     daysRemaining?: number;
   } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/btc/rate")
@@ -69,6 +70,7 @@ export default function PricingPage() {
       return;
     }
     setLoading(planType);
+    setError(null);
     try {
       const res = await fetch("/api/payments/create", {
         method: "POST",
@@ -78,8 +80,12 @@ export default function PricingPage() {
       const data = await res.json();
       if (data.payment) {
         router.push(`/checkout/${data.payment.invoiceId}`);
+        return;
       }
+      setError(data.error || "Failed to create payment. Please try again.");
     } catch {
+      setError("Network error. Please try again.");
+    } finally {
       setLoading(null);
     }
   };
@@ -127,6 +133,12 @@ export default function PricingPage() {
               : `${proStatus.daysRemaining} days remaining on annual plan`}
           </p>
         </motion.div>
+      )}
+
+      {error && (
+        <div className="mb-6 border border-[#FF3131]/30 bg-[#FF3131]/10 p-3 text-center text-sm text-[#FF3131]">
+          {error}
+        </div>
       )}
 
       <div className="grid gap-6 md:grid-cols-3">

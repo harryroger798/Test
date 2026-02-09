@@ -13,12 +13,46 @@ export async function GET() {
       });
     }
 
-    const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-      { next: { revalidate: 30 } }
-    );
+    let price: number | null = null;
 
-    if (!res.ok) {
+    try {
+      const res = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+        { next: { revalidate: 30 }, signal: AbortSignal.timeout(5000) }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        price = data.bitcoin?.usd ?? null;
+      }
+    } catch {}
+
+    if (!price) {
+      try {
+        const res = await fetch(
+          "https://mempool.space/api/v1/prices",
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          price = data.USD ?? null;
+        }
+      } catch {}
+    }
+
+    if (!price) {
+      try {
+        const res = await fetch(
+          "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          price = parseFloat(data.data?.amount) || null;
+        }
+      } catch {}
+    }
+
+    if (!price) {
       if (cachedRate) {
         return NextResponse.json({
           price: cachedRate.price,
@@ -28,9 +62,6 @@ export async function GET() {
       }
       return NextResponse.json({ error: "Failed to fetch BTC rate" }, { status: 502 });
     }
-
-    const data = await res.json();
-    const price = data.bitcoin.usd;
 
     cachedRate = { price, timestamp: Date.now() };
 

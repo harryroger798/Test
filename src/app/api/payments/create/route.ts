@@ -42,14 +42,49 @@ export async function POST(req: NextRequest) {
 
     const amountUsd = planType === "annual" ? 19 : 49;
 
-    const rateRes = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
-    );
-    if (!rateRes.ok) {
-      return NextResponse.json({ error: "Failed to fetch BTC rate" }, { status: 502 });
+    let btcRate: number | null = null;
+
+    try {
+      const rateRes = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (rateRes.ok) {
+        const rateData = await rateRes.json();
+        btcRate = rateData.bitcoin?.usd ?? null;
+      }
+    } catch {}
+
+    if (!btcRate) {
+      try {
+        const rateRes = await fetch(
+          "https://mempool.space/api/v1/prices",
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (rateRes.ok) {
+          const rateData = await rateRes.json();
+          btcRate = rateData.USD ?? null;
+        }
+      } catch {}
     }
-    const rateData = await rateRes.json();
-    const btcRate = rateData.bitcoin.usd;
+
+    if (!btcRate) {
+      try {
+        const rateRes = await fetch(
+          "https://api.coinbase.com/v2/prices/BTC-USD/spot",
+          { signal: AbortSignal.timeout(5000) }
+        );
+        if (rateRes.ok) {
+          const rateData = await rateRes.json();
+          btcRate = parseFloat(rateData.data?.amount) || null;
+        }
+      } catch {}
+    }
+
+    if (!btcRate) {
+      return NextResponse.json({ error: "Unable to fetch BTC rate. Please try again in a moment." }, { status: 502 });
+    }
+
     const amountBtc = parseFloat((amountUsd / btcRate).toFixed(8));
 
     const expiresAt = new Date(Date.now() + INVOICE_EXPIRY * 1000);
