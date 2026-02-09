@@ -91,8 +91,8 @@ export default function PricingPage() {
 
   return (
     <div className="relative mx-auto max-w-5xl px-4 py-12">
-      <img src="/characters/rage_celebrate.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-2 top-4 hidden max-h-[180px] w-auto opacity-70 md:block" />
-      <img src="/characters/rage_trophy.png" alt="" aria-hidden className="pointer-events-none select-none absolute left-2 bottom-10 hidden max-h-[160px] w-auto opacity-40 md:block" />
+      <img src="/characters/rage_celebrate.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-0 top-0 hidden w-[280px] opacity-70 md:block lg:w-[350px]" />
+      <img src="/characters/rage_trophy.png" alt="" aria-hidden className="pointer-events-none select-none absolute left-0 bottom-0 hidden w-[200px] opacity-40 md:block lg:w-[250px]" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
