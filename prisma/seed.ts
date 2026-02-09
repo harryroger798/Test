@@ -2,6 +2,11 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+const regionCurrency: Record<string, string> = {
+  US: "USD", UK: "GBP", EU: "EUR", GERMANY: "EUR", FRANCE: "EUR",
+  INDIA: "INR", AU: "AUD", SOUTH_KOREA: "KRW", CANADA: "CAD", GLOBAL: "USD",
+};
+
 const companies = [
   // STREAMING (20 companies)
   {
@@ -2607,6 +2612,7 @@ async function main() {
       alternatives: JSON.stringify(company.alternatives || []),
       knownLawsuits: company.knownLawsuits || null,
       totalCancellations: Math.floor(Math.random() * 50000) + 1000,
+      currency: regionCurrency[(company.regions || ["GLOBAL"])[0]] || "USD",
     };
 
     await prisma.saasCompany.upsert({

@@ -17,9 +17,20 @@ interface Company {
   category: string;
   avgMonthlyPrice: number | null;
   yearlyPrice: number | null;
+  currency: string;
   difficultyScore: number;
   alternatives: Alternative[];
   freeTierAvailable: boolean;
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$", GBP: "£", EUR: "€", INR: "₹", AUD: "A$", CAD: "C$", KRW: "₩",
+};
+
+function formatPrice(price: number, currency: string): string {
+  const sym = CURRENCY_SYMBOLS[currency] || "$";
+  if (currency === "KRW") return `${sym}${price.toLocaleString("en", { maximumFractionDigits: 0 })}`;
+  return `${sym}${price.toFixed(2)}`;
 }
 
 export default function AlternativesPage() {
@@ -70,7 +81,7 @@ export default function AlternativesPage() {
               Find cheaper or free alternatives to expensive subscriptions. Stop overpaying.
             </p>
             <p className="text-sm text-[#00FF88]">
-              Potential annual savings across all services: <span className="font-mono font-bold">${totalSavings.toLocaleString()}</span>
+              Potential annual savings across all services: <span className="font-mono font-bold">${totalSavings.toLocaleString()}</span> (USD equivalent)
             </p>
           </motion.div>
         </div>
@@ -128,13 +139,13 @@ export default function AlternativesPage() {
                       </Link>
                       <span className="ml-2 text-xs text-[#888888]">{company.category}</span>
                       {company.avgMonthlyPrice && (
-                        <span className="ml-2 font-mono text-sm text-[#FF3131]">${company.avgMonthlyPrice}/mo</span>
+                        <span className="ml-2 font-mono text-sm text-[#FF3131]">{formatPrice(company.avgMonthlyPrice, company.currency)}/mo</span>
                       )}
                     </div>
                     {savings > 0 && (
                       <div className="flex items-center gap-1 border border-[#00FF88]/30 bg-[#00FF88]/10 px-3 py-1">
                         <DollarSign className="h-4 w-4 text-[#00FF88]" />
-                        <span className="font-mono text-sm font-bold text-[#00FF88]">Save ${savings.toFixed(0)}/yr</span>
+                        <span className="font-mono text-sm font-bold text-[#00FF88]">Save {formatPrice(savings, company.currency)}/yr</span>
                       </div>
                     )}
                   </div>
@@ -145,7 +156,7 @@ export default function AlternativesPage() {
                         <ArrowRight className="h-3 w-3 text-[#00FF88]" />
                         <span className="text-sm text-white">{alt.name}</span>
                         <span className={`font-mono text-xs ${alt.price === 0 ? "text-[#00FF88]" : "text-[#888888]"}`}>
-                          {alt.price === 0 ? "FREE" : `$${alt.price}/mo`}
+                          {alt.price === 0 ? "FREE" : `${CURRENCY_SYMBOLS[company.currency] || "$"}${alt.price}/mo`}
                         </span>
                       </div>
                     ))}

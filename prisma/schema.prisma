@@ -41,6 +41,7 @@ model SaasCompany {
   regions             String[]            @default(["GLOBAL"])
   avgMonthlyPrice     Float?
   yearlyPrice         Float?
+  currency            String              @default("USD")
   cancellationUrl     String?
   cancellationPhone   String?
   cancellationEmail   String?

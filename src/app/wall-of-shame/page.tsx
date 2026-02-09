@@ -26,11 +26,23 @@ interface Company {
   darkPatterns: string[];
   totalCancellations: number;
   avgMonthlyPrice: number | null;
+  currency: string;
   clicksToCancel: number;
   estimatedCancelTime: number;
   cancellationMethod: string;
   freeTierAvailable: boolean;
   headquarters: string | null;
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$", GBP: "£", EUR: "€", INR: "₹", AUD: "A$", CAD: "C$", KRW: "₩",
+};
+
+function formatPrice(price: number | null, currency: string): string {
+  if (price === null || price === 0) return "";
+  const sym = CURRENCY_SYMBOLS[currency] || "$";
+  if (currency === "KRW") return `${sym}${price.toLocaleString("en", { maximumFractionDigits: 0 })}`;
+  return `${sym}${price.toFixed(2)}`;
 }
 
 type SortKey = "difficultyScore" | "darkPatternScore" | "totalCancellations" | "name" | "clicksToCancel" | "estimatedCancelTime";

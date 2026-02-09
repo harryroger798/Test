@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
       regions: true,
       avgMonthlyPrice: true,
       yearlyPrice: true,
+      currency: true,
       difficultyScore: true,
       darkPatternScore: true,
       darkPatterns: true,

@@ -60,6 +60,7 @@ interface CompanyData {
   totalCancellations: number;
   avgMonthlyPrice: number | null;
   yearlyPrice: number | null;
+  currency: string;
   cancellationUrl: string | null;
   cancellationPhone: string | null;
   cancellationEmail: string | null;
@@ -73,6 +74,16 @@ interface CompanyData {
   headquarters: string | null;
   knownLawsuits: string | null;
   retentionOffers: RetentionOffer[];
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$", GBP: "£", EUR: "€", INR: "₹", AUD: "A$", CAD: "C$", KRW: "₩",
+};
+
+function formatPrice(price: number, currency: string): string {
+  const sym = CURRENCY_SYMBOLS[currency] || "$";
+  if (currency === "KRW") return `${sym}${price.toLocaleString("en", { maximumFractionDigits: 0 })}`;
+  return `${sym}${price.toFixed(2)}`;
 }
 
 const POST_CANCEL_CHECKLIST = [
@@ -172,6 +183,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
   const difficulty = getDifficultyLabel(company.difficultyScore);
   const scriptType = company.cancellationMethod === "phone" ? "phone" : company.cancellationMethod === "email" ? "email" : "chat";
   const savings = company.avgMonthlyPrice ? company.avgMonthlyPrice * 12 : 0;
+  const cur = company.currency || "USD";
 
   return (
     <div>
@@ -199,7 +211,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
                 <Clock className="h-3 w-3" /> ~{company.estimatedCancelTime} min
               </span>
               <span>{company.totalCancellations.toLocaleString()} cancellations</span>
-              {company.avgMonthlyPrice && <span>~${company.avgMonthlyPrice}/mo</span>}
+              {company.avgMonthlyPrice && <span>~{formatPrice(company.avgMonthlyPrice, cur)}/mo</span>}
             </div>
           </motion.div>
         </div>
@@ -210,7 +222,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-[#00FF88]" />
               <span className="text-sm text-[#888888]">By cancelling, you&apos;ll save</span>
-              <span className="font-mono text-lg font-bold text-[#00FF88]">${savings.toFixed(0)}/year</span>
+              <span className="font-mono text-lg font-bold text-[#00FF88]">{formatPrice(savings, cur)}/year</span>
             </div>
           </div>
         )}
@@ -365,7 +377,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
                 <div key={alt.name} className="flex items-center gap-2 border border-[#1E1E1E] bg-[#141414] px-3 py-2">
                   <span className="text-sm text-white">{alt.name}</span>
                   <span className={`font-mono text-xs ${alt.price === 0 ? "text-[#00FF88]" : "text-[#888888]"}`}>
-                    {alt.price === 0 ? "FREE" : `$${alt.price}/mo`}
+                    {alt.price === 0 ? "FREE" : `${CURRENCY_SYMBOLS[cur] || "$"}${alt.price}/mo`}
                   </span>
                 </div>
               ))}
