@@ -21,5 +21,13 @@ export async function GET(
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
-  return NextResponse.json(company);
+  const parsed = {
+    ...company,
+    darkPatterns: typeof company.darkPatterns === "string" ? JSON.parse(company.darkPatterns) : company.darkPatterns,
+    alternatives: typeof company.alternatives === "string" ? JSON.parse(company.alternatives) : company.alternatives,
+    regions: typeof company.regions === "string" ? JSON.parse(company.regions) : company.regions,
+    cancellationSteps: typeof company.cancellationSteps === "string" ? JSON.parse(company.cancellationSteps) : company.cancellationSteps,
+  };
+
+  return NextResponse.json(parsed);
 }

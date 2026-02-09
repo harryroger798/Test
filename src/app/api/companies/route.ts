@@ -60,5 +60,12 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(companies);
+  const parsed = companies.map((c) => ({
+    ...c,
+    darkPatterns: typeof c.darkPatterns === "string" ? JSON.parse(c.darkPatterns) : c.darkPatterns,
+    alternatives: typeof c.alternatives === "string" ? JSON.parse(c.alternatives) : c.alternatives,
+    regions: typeof c.regions === "string" ? JSON.parse(c.regions) : c.regions,
+  }));
+
+  return NextResponse.json(parsed);
 }
