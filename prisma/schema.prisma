@@ -29,6 +29,28 @@ model User {
   alertPreferences  AlertPreference?
   reputation        Int                 @default(0)
   contributorLevel  String              @default("newcomer")
+  isPro             Boolean             @default(false)
+  planType          String?             // "annual" or "lifetime"
+  proExpiresAt      DateTime?
+  payments          Payment[]
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  planType        String   // "annual" or "lifetime"
+  amountUsd       Float
+  amountBtc       Float
+  btcAddress      String
+  btcRate         Float
+  status          String   @default("pending") // pending, confirming, completed, expired
+  txHash          String?
+  invoiceId       String   @unique @default(cuid())
+  expiresAt       DateTime
+  confirmedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model SaasCompany {
@@ -254,4 +276,14 @@ model Notification {
   isRead    Boolean  @default(false)
   metadata  Json     @default("{}")
   createdAt DateTime @default(now())
+}
+
+model BtcConfig {
+  id              String   @id @default(cuid())
+  walletAddress   String
+  annualPriceUsd  Float    @default(19)
+  lifetimePriceUsd Float   @default(49)
+  invoiceExpiry   Int      @default(900) // seconds (15 min)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

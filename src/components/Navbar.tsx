@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { Menu, X, Flame, Shield, BarChart3, Home, LogOut, LogIn, User, Scale, Eye, Users, Bell } from "lucide-react";
+import { Menu, X, Flame, Shield, BarChart3, Home, LogOut, LogIn, User, Scale, Eye, Users, Bell, Crown, Bitcoin } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/community", label: "Community", icon: Users },
   { href: "/scan", label: "Scanner", icon: Shield },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/pricing", label: "Pro", icon: Crown },
 ];
 
 interface NotifItem {
@@ -30,6 +31,7 @@ export default function Navbar() {
   const [bellOpen, setBellOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isPro, setIsPro] = useState(false);
   const { data: session } = useSession();
   const bellRef = useRef<HTMLDivElement>(null);
 
@@ -41,6 +43,10 @@ export default function Navbar() {
         setNotifications(data.notifications || []);
         setUnreadCount(data.unreadCount || 0);
       })
+      .catch(() => {});
+    fetch("/api/user/pro-status")
+      .then(r => r.json())
+      .then(d => setIsPro(d.isPro))
       .catch(() => {});
   }, [session]);
 
@@ -137,6 +143,11 @@ export default function Navbar() {
                     )}
                   </AnimatePresence>
                 </div>
+                {isPro && (
+                  <span className="flex items-center gap-1 border border-[#FF6B35]/30 bg-[#FF6B35]/10 px-2 py-0.5 text-xs font-bold text-[#FF6B35]">
+                    <Crown className="h-3 w-3" /> PRO
+                  </span>
+                )}
                 <span className="text-xs text-[#888888]">
                   {session.user?.email}
                 </span>
@@ -233,6 +244,10 @@ export default function Navbar() {
           <Link href="/dashboard" className="flex flex-col items-center gap-1 px-3 py-1 text-[#888888] hover:text-[#FF3131]">
             {session ? <User className="h-5 w-5" /> : <LogIn className="h-5 w-5" />}
             <span className="text-[10px]">{session ? "Dash" : "Login"}</span>
+          </Link>
+          <Link href="/pricing" className="flex flex-col items-center gap-1 px-3 py-1 text-[#FF6B35] hover:text-[#FF3131]">
+            <Bitcoin className="h-5 w-5" />
+            <span className="text-[10px]">Pro</span>
           </Link>
         </div>
       </div>

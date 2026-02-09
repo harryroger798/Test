@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Flame,
   Zap,
+  Crown,
+  Lock,
 } from "lucide-react";
 import CountUp from "@/components/CountUp";
 
@@ -31,11 +33,15 @@ interface Subscription {
   };
 }
 
+const FREE_SUB_LIMIT = 3;
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isPro, setIsPro] = useState(false);
+  const [proInfo, setProInfo] = useState<{ planType: string | null; daysRemaining?: number } | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -50,6 +56,13 @@ export default function DashboardPage() {
           setLoading(false);
         })
         .catch(() => setLoading(false));
+      fetch("/api/user/pro-status")
+        .then((r) => r.json())
+        .then((d) => {
+          setIsPro(d.isPro);
+          setProInfo(d);
+        })
+        .catch(() => {});
     }
   }, [status, router]);
 
@@ -104,13 +117,23 @@ export default function DashboardPage() {
             Welcome back, {session?.user?.name || session?.user?.email}
           </p>
         </div>
-        <Link
-          href="/dashboard/add"
-          className="inline-flex items-center gap-2 bg-[#FF3131] px-4 py-2 font-semibold text-white transition-all hover:bg-[#FF3131]/80"
-        >
-          <Plus className="h-4 w-4" />
-          Add Subscription
-        </Link>
+        <div className="flex items-center gap-3">
+          {isPro && (
+            <span className="flex items-center gap-1 border border-[#FF6B35]/30 bg-[#FF6B35]/10 px-3 py-1.5 text-xs font-bold text-[#FF6B35]">
+              <Crown className="h-3 w-3" /> PRO
+              {proInfo?.planType === "annual" && proInfo.daysRemaining !== undefined && (
+                <span className="ml-1 text-[#888888]">({proInfo.daysRemaining}d left)</span>
+              )}
+            </span>
+          )}
+          <Link
+            href="/dashboard/add"
+            className="inline-flex items-center gap-2 bg-[#FF3131] px-4 py-2 font-semibold text-white transition-all hover:bg-[#FF3131]/80"
+          >
+            <Plus className="h-4 w-4" />
+            Add Subscription
+          </Link>
+        </div>
       </div>
 
       <div className="mb-8 grid gap-4 grid-cols-2 md:grid-cols-4">
@@ -175,6 +198,32 @@ export default function DashboardPage() {
           </span>
         </motion.div>
       </div>
+
+      {!isPro && subs.length >= FREE_SUB_LIMIT && (
+        <div className="mb-6 border border-[#FF3131]/30 bg-[#FF3131]/5 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Lock className="h-5 w-5 text-[#FF3131]" />
+            <div>
+              <p className="text-sm font-semibold">Free plan limit: {FREE_SUB_LIMIT} subscriptions</p>
+              <p className="text-xs text-[#888888]">Upgrade to Pro for unlimited subscription tracking</p>
+            </div>
+          </div>
+          <Link href="/pricing" className="flex items-center gap-1 bg-[#FF3131] px-4 py-2 text-sm font-semibold text-white hover:bg-[#FF3131]/80">
+            <Crown className="h-4 w-4" /> Upgrade
+          </Link>
+        </div>
+      )}
+
+      {!isPro && (
+        <div className="mb-4 flex items-center justify-between border border-[#FF6B35]/30 bg-[#FF6B35]/5 px-4 py-2 text-sm">
+          <span className="text-[#888888]">
+            Subscriptions: <span className="font-mono font-bold text-white">{subs.length}/{FREE_SUB_LIMIT}</span>
+          </span>
+          <Link href="/pricing" className="flex items-center gap-1 text-xs font-semibold text-[#FF6B35] hover:underline">
+            <Crown className="h-3 w-3" /> Upgrade for unlimited
+          </Link>
+        </div>
+      )}
 
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-bold">Your Subscriptions</h2>

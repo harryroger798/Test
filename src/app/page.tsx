@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Flame, Shield, TrendingDown, ArrowRight, Star, Zap, Users } from "lucide-react";
+import { Flame, Shield, TrendingDown, ArrowRight, Star, Zap, Users, Bitcoin, Crown, Check } from "lucide-react";
 import CountUp from "@/components/CountUp";
 
 const shamePreview = [
@@ -280,6 +280,85 @@ export default function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative border-t border-[#1E1E1E] px-4 py-20 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/5 to-transparent" />
+        <div className="relative mx-auto max-w-5xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center"
+          >
+            <div className="mb-4 inline-flex items-center gap-2 border border-[#FF6B35]/30 bg-[#FF6B35]/10 px-4 py-1.5 text-sm text-[#FF6B35]">
+              <Bitcoin className="h-4 w-4" />
+              Pay with Bitcoin — No intermediaries, no fees
+            </div>
+            <h2 className="mb-3 text-3xl font-bold md:text-4xl">
+              Upgrade to <span className="text-[#FF3131]">Pro</span>
+            </h2>
+            <p className="mx-auto mb-8 max-w-xl text-[#888888]">
+              Unlock unlimited access to all features with a one-time Bitcoin payment.
+            </p>
+          </motion.div>
+
+          <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="border-2 border-[#FF3131] bg-[#141414] p-6"
+            >
+              <div className="mb-1 text-xs font-bold text-[#FF3131]">POPULAR</div>
+              <div className="mb-4 flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-[#FF3131]">$19</span>
+                <span className="text-sm text-[#888888]">/year</span>
+              </div>
+              <div className="mb-4 space-y-2">
+                {["Unlimited cancel guides", "Unlimited contract scans", "Full community access", "All 7 alert types"].map((f) => (
+                  <div key={f} className="flex items-center gap-2 text-sm">
+                    <Check className="h-4 w-4 text-[#00FF88]" />
+                    <span>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/pricing"
+                className="flex w-full items-center justify-center gap-2 bg-[#FF3131] px-4 py-3 font-semibold text-white transition-all hover:bg-[#FF3131]/80"
+              >
+                <Bitcoin className="h-4 w-4" /> Get Annual Pro
+              </Link>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="border border-[#FF6B35]/50 bg-[#141414] p-6"
+            >
+              <div className="mb-1 text-xs font-bold text-[#FF6B35]">BEST VALUE</div>
+              <div className="mb-4 flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-[#FF6B35]">$49</span>
+                <span className="text-sm text-[#888888]">one-time</span>
+              </div>
+              <div className="mb-4 space-y-2">
+                {["Everything in Annual", "Never expires", "Lifetime access", "Support development"].map((f) => (
+                  <div key={f} className="flex items-center gap-2 text-sm">
+                    <Check className="h-4 w-4 text-[#00FF88]" />
+                    <span>{f}</span>
+                  </div>
+                ))}
+              </div>
+              <Link
+                href="/pricing"
+                className="flex w-full items-center justify-center gap-2 border-2 border-[#FF6B35] px-4 py-3 font-semibold text-[#FF6B35] transition-all hover:bg-[#FF6B35] hover:text-white"
+              >
+                <Crown className="h-4 w-4" /> Get Lifetime Pro
+              </Link>
+            </motion.div>
           </div>
         </div>
       </section>

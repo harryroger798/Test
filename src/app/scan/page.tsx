@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, AlertTriangle, CheckCircle, Loader2 } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, Loader2, Lock, Crown } from "lucide-react";
 import DangerGauge from "@/components/DangerGauge";
+import { getUsageCount, incrementUsage, FREE_LIMITS } from "@/lib/usage";
 
 interface Finding {
   category: string;
@@ -22,12 +25,30 @@ interface ScanResult {
 }
 
 export default function ScanPage() {
+  const { data: session } = useSession();
   const [text, setText] = useState("");
   const [result, setResult] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [usageCount, setUsageCount] = useState(0);
+  const [limitReached, setLimitReached] = useState(false);
+
+  useEffect(() => {
+    setUsageCount(getUsageCount("contractScans"));
+    if (session) {
+      fetch("/api/user/pro-status")
+        .then((r) => r.json())
+        .then((d) => setIsPro(d.isPro))
+        .catch(() => {});
+    }
+  }, [session]);
 
   const handleScan = async () => {
     if (!text.trim()) return;
+    if (!isPro && usageCount >= FREE_LIMITS.contractScans) {
+      setLimitReached(true);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/scan", {
@@ -37,6 +58,10 @@ export default function ScanPage() {
       });
       const data = await res.json();
       setResult(data);
+      if (!isPro) {
+        const newCount = incrementUsage("contractScans");
+        setUsageCount(newCount);
+      }
     } catch {
       /* empty */
     }
@@ -68,6 +93,33 @@ export default function ScanPage() {
           Paste any Terms of Service or contract and we&apos;ll detect dark
           patterns, auto-renewals, hidden fees, and more.
         </p>
+
+        {!isPro && (
+          <div className="mb-4 flex items-center justify-between border border-[#FF6B35]/30 bg-[#FF6B35]/5 px-4 py-2 text-sm">
+            <span className="text-[#888888]">
+              Free scans: <span className="font-mono font-bold text-white">{usageCount}/{FREE_LIMITS.contractScans}</span> this month
+            </span>
+            <Link href="/pricing" className="flex items-center gap-1 text-xs font-semibold text-[#FF6B35] hover:underline">
+              <Crown className="h-3 w-3" /> Upgrade for unlimited
+            </Link>
+          </div>
+        )}
+
+        {limitReached && !isPro && (
+          <div className="mb-4 border border-[#FF3131]/30 bg-[#FF3131]/5 p-6 text-center">
+            <Lock className="mx-auto mb-3 h-8 w-8 text-[#FF3131]" />
+            <h3 className="mb-2 text-lg font-bold">Monthly Scan Limit Reached</h3>
+            <p className="mb-4 text-sm text-[#888888]">
+              Free accounts get {FREE_LIMITS.contractScans} contract scan per month. Upgrade to Pro for unlimited scans.
+            </p>
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 bg-[#FF3131] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#FF3131]/80"
+            >
+              <Crown className="h-4 w-4" /> Upgrade to Pro
+            </Link>
+          </div>
+        )}
 
         <div className="mb-6">
           <textarea

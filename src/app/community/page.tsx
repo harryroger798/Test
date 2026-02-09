@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Users, BookOpen, AlertTriangle, Send, Search, Star, Shield, Bell, ChevronRight, Award } from "lucide-react";
+import { Users, BookOpen, AlertTriangle, Send, Search, Star, Shield, Bell, ChevronRight, Award, Crown, Lock } from "lucide-react";
 
 interface Guide {
   id: string;
@@ -44,6 +44,7 @@ export default function CommunityPage() {
   const [guides, setGuides] = useState<Guide[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [isPro, setIsPro] = useState(false);
   const [tab, setTab] = useState<"guides" | "submit" | "alerts" | "report">("guides");
   const [companyName, setCompanyName] = useState("");
   const [category, setCategory] = useState("");
@@ -64,7 +65,10 @@ export default function CommunityPage() {
     fetch("/api/community/submit").then(r => r.json()).then(setSubmissions).catch(() => {});
     fetch("/api/alerts").then(r => r.json()).then(setAlerts).catch(() => {});
     fetch("/api/companies").then(r => r.json()).then(setCompanies).catch(() => {});
-  }, []);
+    if (session) {
+      fetch("/api/user/pro-status").then(r => r.json()).then(d => setIsPro(d.isPro)).catch(() => {});
+    }
+  }, [session]);
 
   const filteredCompanies = companies.filter(c =>
     c.name.toLowerCase().includes(companySearch.toLowerCase())
@@ -157,9 +161,14 @@ export default function CommunityPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">Community Cancel Guides</h2>
-              {session && (
+              {session && isPro && (
                 <Link href="/community/guides/create" className="bg-[#FF3131] px-4 py-2 text-sm font-semibold text-white hover:bg-[#FF3131]/80">
                   Create Guide
+                </Link>
+              )}
+              {session && !isPro && (
+                <Link href="/pricing" className="flex items-center gap-1 border border-[#FF6B35]/30 bg-[#FF6B35]/10 px-4 py-2 text-sm font-semibold text-[#FF6B35] hover:bg-[#FF6B35]/20">
+                  <Crown className="h-3 w-3" /> Upgrade to contribute
                 </Link>
               )}
             </div>
