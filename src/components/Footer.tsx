@@ -33,6 +33,16 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/calculator" className="hover:text-[#FF3131] transition-colors">
+                  Cost Calculator
+                </Link>
+              </li>
+              <li>
+                <Link href="/alternatives" className="hover:text-[#FF3131] transition-colors">
+                  Alternative Finder
+                </Link>
+              </li>
+              <li>
                 <Link href="/dashboard" className="hover:text-[#FF3131] transition-colors">
                   Dashboard
                 </Link>
@@ -41,17 +51,27 @@ export default function Footer() {
           </div>
           <div>
             <h4 className="mb-3 font-heading text-sm font-semibold uppercase tracking-wider text-white">
-              Community
+              Resources
             </h4>
             <ul className="space-y-2 text-sm text-[#888888]">
               <li>
-                <Link href="/submit" className="hover:text-[#FF3131] transition-colors">
-                  Submit a Guide
+                <Link href="/dark-patterns" className="hover:text-[#FF3131] transition-colors">
+                  Dark Pattern Gallery
+                </Link>
+              </li>
+              <li>
+                <Link href="/rights" className="hover:text-[#FF3131] transition-colors">
+                  Know Your Rights
+                </Link>
+              </li>
+              <li>
+                <Link href="/trending" className="hover:text-[#FF3131] transition-colors">
+                  Trending Cancellations
                 </Link>
               </li>
               <li>
                 <Link href="/submit" className="hover:text-[#FF3131] transition-colors">
-                  Share Retention Offer
+                  Submit a Guide
                 </Link>
               </li>
             </ul>
@@ -61,6 +81,11 @@ export default function Footer() {
               Legal
             </h4>
             <ul className="space-y-2 text-sm text-[#888888]">
+              <li>
+                <Link href="/rights" className="hover:text-[#FF3131] transition-colors">
+                  Consumer Rights
+                </Link>
+              </li>
               <li>
                 <Link href="#" className="hover:text-[#FF3131] transition-colors">
                   Privacy Policy

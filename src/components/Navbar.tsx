@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { Menu, X, Flame, Shield, BarChart3, Send, Home, LogOut, LogIn, User } from "lucide-react";
+import { Menu, X, Flame, Shield, BarChart3, Home, LogOut, LogIn, User, Scale, Eye } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
   { href: "/wall-of-shame", label: "Wall of Shame", icon: Flame },
+  { href: "/dark-patterns", label: "Dark Patterns", icon: Eye },
+  { href: "/rights", label: "Your Rights", icon: Scale },
   { href: "/scan", label: "Scanner", icon: Shield },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/submit", label: "Submit", icon: Send },
 ];
 
 export default function Navbar() {
