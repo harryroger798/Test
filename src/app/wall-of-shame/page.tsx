@@ -164,17 +164,25 @@ export default function WallOfShamePage() {
   const regionLaws = selectedRegion ? REGIONAL_LAWS[selectedRegion] || [] : [];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <h1 className="mb-2 text-3xl font-bold md:text-4xl">
-          <Flame className="mr-2 inline h-8 w-8 text-[#FF3131]" />
-          Wall of Shame
-        </h1>
-        <p className="text-[#888888]">
-          {filtered.length} companies ranked by how hard they make it to cancel.
-          {selectedRegion && ` Filtered for ${regionLabel}.`}
-        </p>
-      </motion.div>
+    <div>
+      <div className="relative overflow-hidden px-4 py-16 md:py-20">
+        <div className="absolute inset-0">
+          <img src="/images/wall-of-shame-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/88" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
+        </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative mx-auto max-w-7xl">
+          <h1 className="mb-2 text-3xl font-bold md:text-4xl">
+            <Flame className="mr-2 inline h-8 w-8 text-[#FF3131]" />
+            Wall of Shame
+          </h1>
+          <p className="text-[#888888]">
+            {filtered.length} companies ranked by how hard they make it to cancel.
+            {selectedRegion && ` Filtered for ${regionLabel}.`}
+          </p>
+        </motion.div>
+      </div>
+      <div className="mx-auto max-w-7xl px-4 py-8">
 
       <div className="mb-6 flex flex-wrap gap-2">
         {REGIONS.map((r) => (
@@ -380,6 +388,7 @@ export default function WallOfShamePage() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

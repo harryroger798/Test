@@ -174,29 +174,37 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
   const savings = company.avgMonthlyPrice ? company.avgMonthlyPrice * 12 : 0;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="mb-8">
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold md:text-4xl">How to Cancel {company.name}</h1>
-            <span className={`px-3 py-1 text-xs font-bold uppercase ${difficulty.color}`}>{difficulty.label}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm text-[#888888]">
-            <span>{company.category}</span>
-            <span className="flex items-center gap-1">
-              Difficulty: <span className="font-mono font-bold text-[#FF3131]">{company.difficultyScore.toFixed(1)}</span>/5
-            </span>
-            <span className="flex items-center gap-1">
-              <MousePointerClick className="h-3 w-3" /> {company.clicksToCancel} clicks
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" /> ~{company.estimatedCancelTime} min
-            </span>
-            <span>{company.totalCancellations.toLocaleString()} cancellations</span>
-            {company.avgMonthlyPrice && <span>~${company.avgMonthlyPrice}/mo</span>}
-          </div>
+    <div>
+      <div className="relative overflow-hidden px-4 py-16 md:py-20">
+        <div className="absolute inset-0">
+          <img src="/images/cancel-guide-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/88" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
         </div>
-
+        <div className="relative mx-auto max-w-4xl">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold md:text-4xl">How to Cancel {company.name}</h1>
+              <span className={`px-3 py-1 text-xs font-bold uppercase ${difficulty.color}`}>{difficulty.label}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-sm text-[#888888]">
+              <span>{company.category}</span>
+              <span className="flex items-center gap-1">
+                Difficulty: <span className="font-mono font-bold text-[#FF3131]">{company.difficultyScore.toFixed(1)}</span>/5
+              </span>
+              <span className="flex items-center gap-1">
+                <MousePointerClick className="h-3 w-3" /> {company.clicksToCancel} clicks
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" /> ~{company.estimatedCancelTime} min
+              </span>
+              <span>{company.totalCancellations.toLocaleString()} cancellations</span>
+              {company.avgMonthlyPrice && <span>~${company.avgMonthlyPrice}/mo</span>}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+      <div className="mx-auto max-w-4xl px-4 py-8">
         {savings > 0 && (
           <div className="mb-6 border border-[#00FF88]/30 bg-[#00FF88]/5 p-4">
             <div className="flex items-center gap-2">
@@ -431,7 +439,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
             <DollarSign className="h-4 w-4" /> Cost Calculator
           </Link>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

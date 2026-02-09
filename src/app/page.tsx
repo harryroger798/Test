@@ -53,7 +53,11 @@ export default function Home() {
   return (
     <div>
       <section className="relative overflow-hidden px-4 py-24 md:py-32">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/5 to-transparent" />
+        <div className="absolute inset-0">
+          <img src="/images/hero-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/85" />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/10 to-transparent" />
         <div className="relative mx-auto max-w-5xl text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -142,8 +146,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="border-y border-[#1E1E1E] px-4 py-16">
-        <div className="mx-auto max-w-5xl">
+      <section className="relative border-y border-[#1E1E1E] px-4 py-16 overflow-hidden">
+        <div className="absolute inset-0">
+          <img src="/images/wall-of-shame-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/90" />
+        </div>
+        <div className="relative mx-auto max-w-5xl">
           <div className="mb-8 flex items-center justify-between">
             <h2 className="text-2xl font-bold md:text-3xl">
               <Flame className="mr-2 inline h-6 w-6 text-[#FF3131]" />
@@ -204,8 +212,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="px-4 py-20">
-        <div className="mx-auto max-w-5xl">
+      <section className="relative px-4 py-20 overflow-hidden">
+        <div className="absolute inset-0">
+          <img src="/images/how-it-works-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/92" />
+        </div>
+        <div className="relative mx-auto max-w-5xl">
           <motion.h2
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
@@ -241,8 +253,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="border-t border-[#1E1E1E] bg-[#141414]/50 px-4 py-16">
-        <div className="mx-auto max-w-5xl">
+      <section className="relative border-t border-[#1E1E1E] px-4 py-16 overflow-hidden">
+        <div className="absolute inset-0">
+          <img src="/images/testimonials-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/88" />
+        </div>
+        <div className="relative mx-auto max-w-5xl">
           <h2 className="mb-8 text-center text-2xl font-bold">
             <Zap className="mr-2 inline h-5 w-5 text-[#00FF88]" />
             Real Savings from Real Users

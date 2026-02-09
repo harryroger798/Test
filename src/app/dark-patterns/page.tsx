@@ -184,19 +184,29 @@ export default function DarkPatternsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="mb-2 text-3xl font-bold md:text-4xl">
-          <Eye className="mr-2 inline h-8 w-8 text-[#FF3131]" />
-          Dark Pattern Gallery
-        </h1>
-        <p className="mb-2 text-[#888888]">
-          Exposing manipulative design patterns used by subscription services to prevent cancellation.
-        </p>
-        <p className="mb-8 text-sm text-[#FF6B35]">
-          ICPEN 2024 Sweep: 76% of 642 SaaS companies use at least one dark pattern.
-        </p>
-
+    <div>
+      <div className="relative overflow-hidden px-4 py-16 md:py-20">
+        <div className="absolute inset-0">
+          <img src="/images/dark-patterns-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/85" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
+        </div>
+        <div className="relative mx-auto max-w-6xl">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <h1 className="mb-2 text-3xl font-bold md:text-4xl">
+              <Eye className="mr-2 inline h-8 w-8 text-[#FF3131]" />
+              Dark Pattern Gallery
+            </h1>
+            <p className="mb-2 text-[#888888]">
+              Exposing manipulative design patterns used by subscription services to prevent cancellation.
+            </p>
+            <p className="text-sm text-[#FF6B35]">
+              ICPEN 2024 Sweep: 76% of 642 SaaS companies use at least one dark pattern.
+            </p>
+          </motion.div>
+        </div>
+      </div>
+      <div className="mx-auto max-w-6xl px-4 py-8">
         <h2 className="mb-4 text-xl font-bold">Dark Pattern Taxonomy</h2>
         <div className="mb-8 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {sortedPatterns.map((pattern) => {
@@ -307,7 +317,7 @@ export default function DarkPatternsPage() {
             )}
           </div>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

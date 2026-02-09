@@ -59,16 +59,26 @@ export default function CalculatorPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="mb-2 text-3xl font-bold md:text-4xl">
-          <Calculator className="mr-2 inline h-8 w-8 text-[#FF6B35]" />
-          Subscription Calculator
-        </h1>
-        <p className="mb-8 text-[#888888]">
-          See the true cost of your subscriptions over time. Add your services to calculate lifetime spending.
-        </p>
-
+    <div>
+      <div className="relative overflow-hidden px-4 py-16 md:py-20">
+        <div className="absolute inset-0">
+          <img src="/images/calculator-bg.jpg" alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-[#0A0A0A]/88" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
+        </div>
+        <div className="relative mx-auto max-w-5xl">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <h1 className="mb-2 text-3xl font-bold md:text-4xl">
+              <Calculator className="mr-2 inline h-8 w-8 text-[#FF6B35]" />
+              Subscription Calculator
+            </h1>
+            <p className="text-[#888888]">
+              See the true cost of your subscriptions over time. Add your services to calculate lifetime spending.
+            </p>
+          </motion.div>
+        </div>
+      </div>
+      <div className="mx-auto max-w-5xl px-4 py-8">
         <div className="mb-8 grid gap-4 grid-cols-2 md:grid-cols-4">
           <div className="border border-[#1E1E1E] bg-[#141414] p-4">
             <div className="mb-1 flex items-center gap-2 text-xs text-[#888888]">
@@ -208,7 +218,7 @@ export default function CalculatorPage() {
             <p className="text-xs text-[#888888]">The average American spends $219/month on subscriptions.</p>
           </div>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }
