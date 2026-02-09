@@ -81,7 +81,7 @@ export default function ScanPage() {
 
   return (
     <div className="relative mx-auto max-w-4xl px-4 py-12">
-      <img src="/characters/rage_laptop.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-0 top-0 hidden w-[280px] opacity-70 md:block lg:w-[320px]" />
+      <img src="/characters/rage_laptop.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-4 top-4 hidden max-h-[220px] w-auto opacity-50 md:block" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

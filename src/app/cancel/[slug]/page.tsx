@@ -190,14 +190,14 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
 
   return (
     <div>
-      <div className="relative overflow-hidden px-4 py-16 md:py-20">
+      <div className="relative overflow-hidden px-4 py-16 md:py-24">
         <div className="absolute inset-0">
           <img src="/images/cancel-guide-bg.jpg" alt="" className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-[#0A0A0A]/88" />
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
         </div>
-        <img src="/characters/rage_cancel.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-0 bottom-0 hidden w-[280px] opacity-60 md:block lg:w-[350px]" />
-        <div className="relative mx-auto max-w-4xl">
+        <img src="/characters/rage_cancel.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-4 bottom-0 z-10 hidden max-h-[220px] w-auto opacity-60 md:block" />
+        <div className="relative z-20 mx-auto max-w-4xl">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <h1 className="text-3xl font-bold md:text-4xl">How to Cancel {company.name}</h1>
