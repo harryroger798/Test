@@ -1,22 +1,68 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { Menu, X, Flame, Shield, BarChart3, Home, LogOut, LogIn, User, Scale, Eye } from "lucide-react";
+import { Menu, X, Flame, Shield, BarChart3, Home, LogOut, LogIn, User, Scale, Eye, Users, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const navLinks = [
   { href: "/wall-of-shame", label: "Wall of Shame", icon: Flame },
   { href: "/dark-patterns", label: "Dark Patterns", icon: Eye },
   { href: "/rights", label: "Your Rights", icon: Scale },
+  { href: "/community", label: "Community", icon: Users },
   { href: "/scan", label: "Scanner", icon: Shield },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
 ];
 
+interface NotifItem {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotifItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { data: session } = useSession();
+  const bellRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/notifications")
+      .then(r => r.json())
+      .then(data => {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      })
+      .catch(() => {});
+  }, [session]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setBellOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const markAllRead = async () => {
+    await fetch("/api/notifications", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAllRead: true }),
+    });
+    setUnreadCount(0);
+    setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+  };
 
   return (
     <>
@@ -41,6 +87,56 @@ export default function Navbar() {
             ))}
             {session ? (
               <div className="flex items-center gap-3">
+                <div ref={bellRef} className="relative">
+                  <button onClick={() => setBellOpen(!bellOpen)} className="relative text-[#888888] transition-colors hover:text-[#FF3131]">
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#FF3131] text-[10px] font-bold text-white">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </button>
+                  <AnimatePresence>
+                    {bellOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute right-0 top-8 w-80 border border-[#1E1E1E] bg-[#0A0A0A] shadow-xl"
+                      >
+                        <div className="flex items-center justify-between border-b border-[#1E1E1E] px-4 py-3">
+                          <span className="text-sm font-bold">Notifications</span>
+                          {unreadCount > 0 && (
+                            <button onClick={markAllRead} className="text-xs text-[#FF3131] hover:underline">
+                              Mark all read
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-64 overflow-y-auto">
+                          {notifications.length === 0 ? (
+                            <div className="p-4 text-center text-sm text-[#888888]">No notifications yet</div>
+                          ) : (
+                            notifications.slice(0, 10).map(n => (
+                              <div key={n.id} className={`border-b border-[#1E1E1E] px-4 py-3 ${!n.isRead ? "bg-[#141414]" : ""}`}>
+                                <p className="text-sm font-semibold">{n.title}</p>
+                                <p className="text-xs text-[#888888]">{n.message}</p>
+                                {n.link && (
+                                  <Link href={n.link} onClick={() => setBellOpen(false)} className="mt-1 inline-block text-xs text-[#FF3131] hover:underline">
+                                    View details &rarr;
+                                  </Link>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        <Link href="/dashboard/alerts" onClick={() => setBellOpen(false)}
+                          className="block border-t border-[#1E1E1E] px-4 py-2 text-center text-xs text-[#888888] hover:text-white">
+                          Alert Preferences
+                        </Link>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
                 <span className="text-xs text-[#888888]">
                   {session.user?.email}
                 </span>
@@ -125,6 +221,10 @@ export default function Navbar() {
           <Link href="/wall-of-shame" className="flex flex-col items-center gap-1 px-3 py-1 text-[#888888] hover:text-[#FF3131]">
             <Flame className="h-5 w-5" />
             <span className="text-[10px]">Shame</span>
+          </Link>
+          <Link href="/community" className="flex flex-col items-center gap-1 px-3 py-1 text-[#888888] hover:text-[#FF3131]">
+            <Users className="h-5 w-5" />
+            <span className="text-[10px]">Community</span>
           </Link>
           <Link href="/scan" className="flex flex-col items-center gap-1 px-3 py-1 text-[#888888] hover:text-[#FF3131]">
             <Shield className="h-5 w-5" />

@@ -8,66 +8,87 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  passwordHash    String
-  name            String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  subscriptions   Subscription[]
-  votes           Vote[]
-  retentionOffers RetentionOffer[]
-  savedAmount     Float            @default(0)
-  rageScore       Int              @default(0)
-  badges          Json             @default("[]")
-  cancelCount     Int              @default(0)
+  id                String              @id @default(cuid())
+  email             String              @unique
+  passwordHash      String
+  name              String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  subscriptions     Subscription[]
+  votes             Vote[]
+  retentionOffers   RetentionOffer[]
+  savedAmount       Float               @default(0)
+  rageScore         Int                 @default(0)
+  badges            Json                @default("[]")
+  cancelCount       Int                 @default(0)
+  guideContributions CommunityGuide[]
+  guideVotes        GuideVote[]
+  darkPatternReports DarkPatternReport[]
+  companySubmissions CompanySubmission[]
+  notifications     Notification[]
+  alertPreferences  AlertPreference?
+  reputation        Int                 @default(0)
+  contributorLevel  String              @default("newcomer")
 }
 
 model SaasCompany {
-  id                  String           @id @default(cuid())
-  name                String           @unique
-  slug                String           @unique
+  id                  String              @id @default(cuid())
+  name                String              @unique
+  slug                String              @unique
   logo                String?
   website             String?
   category            String
-  regions             String[]         @default(["GLOBAL"])
+  regions             String[]            @default(["GLOBAL"])
   avgMonthlyPrice     Float?
   yearlyPrice         Float?
   cancellationUrl     String?
   cancellationPhone   String?
   cancellationEmail   String?
-  cancellationMethod  String           @default("online")
+  cancellationMethod  String              @default("online")
   cancellationSteps   Json
-  difficultyScore     Float            @default(3)
-  darkPatternScore    Float            @default(0)
-  darkPatterns        Json             @default("[]")
-  clicksToCancel      Int              @default(3)
-  estimatedCancelTime Int              @default(5)
-  totalCancellations  Int              @default(0)
-  alternatives        Json             @default("[]")
+  difficultyScore     Float               @default(3)
+  darkPatternScore    Float               @default(0)
+  darkPatterns        Json                @default("[]")
+  clicksToCancel      Int                 @default(3)
+  estimatedCancelTime Int                 @default(5)
+  totalCancellations  Int                 @default(0)
+  alternatives        Json                @default("[]")
   knownLawsuits       String?
-  freeTierAvailable   Boolean          @default(false)
+  freeTierAvailable   Boolean             @default(false)
   headquarters        String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  verificationStatus  String              @default("verified")
+  communityScore      Float               @default(0)
+  successRate         Float               @default(0)
+  reportCount         Int                 @default(0)
+  lastPriceChange     DateTime?
+  previousPrice       Float?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
   subscriptions       Subscription[]
   retentionOffers     RetentionOffer[]
   votes               Vote[]
+  communityGuides     CommunityGuide[]
+  darkPatternReports  DarkPatternReport[]
+  companySubmissions  CompanySubmission[]
+  alerts              Alert[]
 }
 
 model Subscription {
-  id           String      @id @default(cuid())
-  userId       String
-  user         User        @relation(fields: [userId], references: [id])
-  companyId    String
-  company      SaasCompany @relation(fields: [companyId], references: [id])
-  monthlyPrice Float
-  billingCycle String
-  renewalDate  DateTime?
-  status       String      @default("active")
-  savedAmount  Float       @default(0)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  companyId      String
+  company        SaasCompany @relation(fields: [companyId], references: [id])
+  monthlyPrice   Float
+  billingCycle   String
+  renewalDate    DateTime?
+  status         String      @default("active")
+  savedAmount    Float       @default(0)
+  isFreeTrial    Boolean     @default(false)
+  freeTrialEnd   DateTime?
+  cancelWindow   Int?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 }
 
 model RetentionOffer {
@@ -112,4 +133,124 @@ model ContractScan {
   cancellationWindow String?
   penaltyClauses     Json?
   createdAt          DateTime @default(now())
+}
+
+model CommunityGuide {
+  id            String      @id @default(cuid())
+  companyId     String
+  company       SaasCompany @relation(fields: [companyId], references: [id])
+  authorId      String
+  author        User        @relation(fields: [authorId], references: [id])
+  title         String
+  steps         Json
+  region        String      @default("GLOBAL")
+  method        String      @default("online")
+  clickCount    Int         @default(0)
+  timeMinutes   Int         @default(5)
+  tips          String?
+  verified      Boolean     @default(false)
+  successCount  Int         @default(0)
+  failureCount  Int         @default(0)
+  upvotes       Int         @default(0)
+  downvotes     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  votes         GuideVote[]
+}
+
+model GuideVote {
+  id        String         @id @default(cuid())
+  guideId   String
+  guide     CommunityGuide @relation(fields: [guideId], references: [id])
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  voteType  String
+  worked    Boolean?
+  comment   String?
+  createdAt DateTime       @default(now())
+
+  @@unique([userId, guideId])
+}
+
+model DarkPatternReport {
+  id            String      @id @default(cuid())
+  companyId     String
+  company       SaasCompany @relation(fields: [companyId], references: [id])
+  reporterId    String
+  reporter      User        @relation(fields: [reporterId], references: [id])
+  patternType   String
+  description   String
+  screenshotUrl String?
+  platform      String      @default("web")
+  verified      Boolean     @default(false)
+  upvotes       Int         @default(0)
+  createdAt     DateTime    @default(now())
+}
+
+model CompanySubmission {
+  id                 String      @id @default(cuid())
+  submitterId        String
+  submitter          User        @relation(fields: [submitterId], references: [id])
+  companyId          String?
+  company            SaasCompany? @relation(fields: [companyId], references: [id])
+  companyName        String
+  companySlug        String
+  category           String
+  website            String?
+  avgMonthlyPrice    Float?
+  cancellationMethod String      @default("online")
+  cancellationUrl    String?
+  cancellationPhone  String?
+  cancellationSteps  Json?
+  regions            String[]    @default(["GLOBAL"])
+  status             String      @default("pending")
+  reviewNotes        String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model Alert {
+  id          String       @id @default(cuid())
+  companyId   String?
+  company     SaasCompany? @relation(fields: [companyId], references: [id])
+  alertType   String
+  title       String
+  message     String
+  severity    String       @default("info")
+  metadata    Json         @default("{}")
+  regions     String[]     @default(["GLOBAL"])
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  expiresAt   DateTime?
+}
+
+model AlertPreference {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id])
+  renewalReminders      Boolean  @default(true)
+  renewalDaysBefore     Int      @default(3)
+  priceIncreaseAlerts   Boolean  @default(true)
+  freeTrialAlerts       Boolean  @default(true)
+  trialDaysBefore       Int      @default(2)
+  cancelWindowAlerts    Boolean  @default(true)
+  legalActionAlerts     Boolean  @default(true)
+  darkPatternAlerts     Boolean  @default(true)
+  retentionOfferAlerts  Boolean  @default(true)
+  emailDigest           String   @default("weekly")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
 }
