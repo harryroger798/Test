@@ -255,10 +255,9 @@ export default function Home() {
               </motion.div>
             ))}
           </motion.div>
-          {/* Peeking rage character divider */}
-          <div className="pointer-events-none absolute bottom-0 left-0 flex h-48 w-full items-end justify-center overflow-hidden">
-            <img src="/characters/rage_peek.png" alt="" aria-hidden className="translate-y-12 w-[420px] opacity-90" />
-          </div>
+        </div>
+        <div className="pointer-events-none absolute bottom-0 left-0 z-10 flex h-48 w-full items-end justify-center overflow-hidden">
+          <img src="/characters/rage_peek.png" alt="" aria-hidden className="translate-y-8 max-h-[180px] w-auto opacity-90" />
         </div>
       </section>
 

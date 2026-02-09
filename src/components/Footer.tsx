@@ -3,8 +3,9 @@ import { Flame } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="border-t border-[#1E1E1E] bg-[#0A0A0A] pb-20 md:pb-0">
-      <div className="mx-auto max-w-7xl px-4 py-12">
+    <footer className="relative border-t border-[#1E1E1E] bg-[#0A0A0A] pb-20 md:pb-0 overflow-hidden">
+      <img src="/characters/rage_peek.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-4 top-0 hidden max-h-[120px] w-auto opacity-20 lg:block" />
+      <div className="relative mx-auto max-w-7xl px-4 py-12">
         <div className="grid gap-8 md:grid-cols-4">
           <div>
             <div className="flex items-center gap-2 mb-4">
