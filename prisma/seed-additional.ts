@@ -2,7 +2,13 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 type Co = { name: string; slug: string; category: string; regions: string[]; price: number; hq: string };
-type CatTpl = { diff: [number, number]; dark: [number, number]; methods: string[]; patterns: string[][] };
+
+const regionCurrency: Record<string, string> = {
+  US: "USD", UK: "GBP", EU: "EUR", GERMANY: "EUR", FRANCE: "EUR",
+  INDIA: "INR", AU: "AUD", SOUTH_KOREA: "KRW", CANADA: "CAD", GLOBAL: "USD",
+};
+
+type CatTpl= { diff: [number, number]; dark: [number, number]; methods: string[]; patterns: string[][] };
 
 const tpl: Record<string, CatTpl> = {
   "VPN": { diff: [1.5, 3.5], dark: [2, 6], methods: ["online"], patterns: [["Auto-renewal"], ["Retention offers"], ["Confirmshaming"]] },
@@ -513,6 +519,7 @@ async function main() {
     const data = {
       name: co.name, slug: co.slug, category: co.category, regions: co.regions,
       avgMonthlyPrice: co.price, yearlyPrice: co.price * 12 * 0.85,
+      currency: regionCurrency[co.regions[0]] || "USD",
       difficultyScore: Math.round(diff * 10) / 10,
       darkPatternScore: Math.round(dark * 10) / 10,
       clicksToCancel: method === "online" ? Math.floor(Math.random() * 5) + 3 : 0,
