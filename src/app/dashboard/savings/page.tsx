@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, TrendingUp, DollarSign } from "lucide-react";
+import { ArrowLeft, TrendingUp, Coins } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -108,7 +108,7 @@ export default function SavingsPage() {
 
         <div className="mb-8 grid gap-4 sm:grid-cols-3">
           <div className="border border-[#1E1E1E] bg-[#141414] p-6 text-center">
-            <DollarSign className="mx-auto mb-2 h-6 w-6 text-[#00FF88]" />
+            <Coins className="mx-auto mb-2 h-6 w-6 text-[#00FF88]" />
             <div className="font-mono text-3xl font-bold text-[#00FF88]">
               ${totalSaved.toFixed(2)}
             </div>

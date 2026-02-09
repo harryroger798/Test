@@ -19,7 +19,7 @@ import {
   MousePointerClick,
   Eye,
   Shield,
-  DollarSign,
+  Coins,
   ArrowRight,
   CheckCircle,
   Scale,
@@ -220,7 +220,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
         {savings > 0 && (
           <div className="mb-6 border border-[#00FF88]/30 bg-[#00FF88]/5 p-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-[#00FF88]" />
+              <Coins className="h-5 w-5 text-[#00FF88]" />
               <span className="text-sm text-[#888888]">By cancelling, you&apos;ll save</span>
               <span className="font-mono text-lg font-bold text-[#00FF88]">{formatPrice(savings, cur)}/year</span>
             </div>
@@ -448,7 +448,7 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
             <ArrowRight className="h-4 w-4" /> Find Alternatives
           </Link>
           <Link href="/calculator" className="flex items-center gap-1 text-[#FF6B35] hover:underline">
-            <DollarSign className="h-4 w-4" /> Cost Calculator
+            <Coins className="h-4 w-4" /> Cost Calculator
           </Link>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Calculator, Plus, Trash2, DollarSign, TrendingUp, AlertTriangle, PieChart } from "lucide-react";
+import { Calculator, Plus, Trash2, Coins, TrendingUp, AlertTriangle, PieChart } from "lucide-react";
 
 interface SubEntry {
   id: string;
@@ -82,7 +82,7 @@ export default function CalculatorPage() {
         <div className="mb-8 grid gap-4 grid-cols-2 md:grid-cols-4">
           <div className="border border-[#1E1E1E] bg-[#141414] p-4">
             <div className="mb-1 flex items-center gap-2 text-xs text-[#888888]">
-              <DollarSign className="h-3 w-3" /> Monthly
+              <Coins className="h-3 w-3" /> Monthly
             </div>
             <div className="font-mono text-2xl font-bold text-[#FF3131]">${totalMonthly.toFixed(2)}</div>
           </div>

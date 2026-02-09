@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Search, DollarSign, Zap, Filter } from "lucide-react";
+import { ArrowRight, Search, Coins, Zap, Filter } from "lucide-react";
 
 interface Alternative {
   name: string;
@@ -81,7 +81,7 @@ export default function AlternativesPage() {
               Find cheaper or free alternatives to expensive subscriptions. Stop overpaying.
             </p>
             <p className="text-sm text-[#00FF88]">
-              Potential annual savings across all services: <span className="font-mono font-bold">${totalSavings.toLocaleString()}</span> (USD equivalent)
+              Potential annual savings across all services: <span className="font-mono font-bold">{totalSavings.toLocaleString()}</span> (mixed currencies)
             </p>
           </motion.div>
         </div>
@@ -144,7 +144,7 @@ export default function AlternativesPage() {
                     </div>
                     {savings > 0 && (
                       <div className="flex items-center gap-1 border border-[#00FF88]/30 bg-[#00FF88]/10 px-3 py-1">
-                        <DollarSign className="h-4 w-4 text-[#00FF88]" />
+                        <Coins className="h-4 w-4 text-[#00FF88]" />
                         <span className="font-mono text-sm font-bold text-[#00FF88]">Save {formatPrice(savings, company.currency)}/yr</span>
                       </div>
                     )}

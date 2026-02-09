@@ -7,7 +7,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Plus,
-  DollarSign,
+  Coins,
   TrendingUp,
   Calendar,
   Trash2,
@@ -120,7 +120,7 @@ export default function DashboardPage() {
           className="border border-[#1E1E1E] bg-[#141414] p-4"
         >
           <div className="mb-1 flex items-center gap-2 text-xs text-[#888888]">
-            <DollarSign className="h-3 w-3" /> Monthly Spend
+            <Coins className="h-3 w-3" /> Monthly Spend
           </div>
           <CountUp
             end={totalMonthly}
