@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const BTC_ADDRESS = process.env.BTC_WALLET_ADDRESS || "";
+const BTC_ADDRESS = process.env.BTC_WALLET_ADDRESS || "bc1p5uc6872g3myx0d5ctptqarp0z674cvwpmdsgnzcfwqld5hph5shsvp8dse";
 const INVOICE_EXPIRY = 900; // 15 minutes
 
 export async function POST(req: NextRequest) {
