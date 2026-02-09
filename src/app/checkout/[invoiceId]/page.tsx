@@ -42,6 +42,9 @@ export default function CheckoutPage({
   const [copied, setCopied] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(900);
   const [checking, setChecking] = useState(false);
+  const [showTxInput, setShowTxInput] = useState(false);
+  const [txHashInput, setTxHashInput] = useState("");
+  const [confirmMessage, setConfirmMessage] = useState<{ type: "info" | "error" | "success"; text: string } | null>(null);
 
   const checkPayment = useCallback(async () => {
     try {
@@ -113,9 +116,36 @@ export default function CheckoutPage({
 
   const handleManualConfirm = async () => {
     setChecking(true);
+    setConfirmMessage(null);
+
+    if (txHashInput.trim()) {
+      try {
+        const res = await fetch("/api/payments/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invoiceId, txHash: txHashInput.trim() }),
+        });
+        const data = await res.json();
+        if (data.status === "confirmed" || data.status === "already_completed") {
+          setConfirmMessage({ type: "success", text: "Payment confirmed! Redirecting..." });
+          await checkPayment();
+          return;
+        } else if (data.status === "confirming") {
+          setConfirmMessage({ type: "info", text: "Transaction submitted. We're verifying it — this may take a few minutes." });
+          setChecking(false);
+          return;
+        }
+      } catch {
+        // fall through to regular check
+      }
+    }
+
     const status = await checkPayment();
-    if (status !== "completed") {
-      setTimeout(() => setChecking(false), 1000);
+    if (status === "completed") {
+      setConfirmMessage({ type: "success", text: "Payment confirmed!" });
+    } else {
+      setConfirmMessage({ type: "info", text: "No payment detected yet. It may take a few minutes for the transaction to appear on the blockchain. We'll keep checking automatically." });
+      setChecking(false);
     }
   };
 
@@ -303,6 +333,20 @@ export default function CheckoutPage({
             Waiting for payment... We check every 15 seconds.
           </div>
 
+          {confirmMessage && (
+            <div
+              className={`mb-4 border p-3 text-center text-sm ${
+                confirmMessage.type === "success"
+                  ? "border-[#00FF88]/30 bg-[#00FF88]/10 text-[#00FF88]"
+                  : confirmMessage.type === "error"
+                    ? "border-[#FF3131]/30 bg-[#FF3131]/10 text-[#FF3131]"
+                    : "border-[#FF6B35]/30 bg-[#FF6B35]/10 text-[#FF6B35]"
+              }`}
+            >
+              {confirmMessage.text}
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button
               onClick={handleManualConfirm}
@@ -316,6 +360,41 @@ export default function CheckoutPage({
               )}
             </button>
           </div>
+
+          {!showTxInput ? (
+            <button
+              onClick={() => setShowTxInput(true)}
+              className="mt-3 w-full text-center text-xs text-[#888888] underline hover:text-white"
+            >
+              Have a transaction hash? Enter it manually
+            </button>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <label className="block text-xs text-[#888888]">
+                Transaction Hash (optional — speeds up verification):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={txHashInput}
+                  onChange={(e) => setTxHashInput(e.target.value)}
+                  placeholder="e.g. a1b2c3d4e5f6..."
+                  className="flex-1 border border-[#1E1E1E] bg-[#0A0A0A] px-3 py-2 font-mono text-xs text-white placeholder:text-[#555555] focus:border-[#FF3131] focus:outline-none"
+                />
+                <button
+                  onClick={handleManualConfirm}
+                  disabled={checking || !txHashInput.trim()}
+                  className="border border-[#FF3131]/30 px-4 py-2 text-xs font-semibold text-[#FF3131] transition-all hover:bg-[#FF3131]/10 disabled:opacity-50"
+                >
+                  {checking ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Verify"
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="mt-4 text-center text-xs text-[#888888]">
             <p>
