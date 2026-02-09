@@ -88,10 +88,18 @@ const REGIONAL_LAWS: Record<string, { title: string; description: string; penalt
 };
 
 const CATEGORIES = [
-  "All", "Streaming", "Music", "Internet/Cable", "Fitness",
-  "Software/Productivity", "Security", "News/Media", "Food Delivery",
-  "AI/Tech", "Health/Wellness", "Education", "Dating", "Gaming",
-  "Cloud Storage", "Entertainment/Misc",
+  "All", "Streaming", "ISP", "Gym Chains", "Phone Plans", "Car Insurance",
+  "News/Magazines", "Fintech", "Hosting/Domains", "Food Delivery", "Telecom",
+  "Telecom/ISP", "Education/Learning", "Meal Kit", "Marketing Tools",
+  "Home Security", "Design Tools", "CRM Software", "E-commerce",
+  "Health/Wellness", "Dating Apps", "VPN", "Music Streaming",
+  "Productivity Tools", "Beauty/Grooming", "Project Management",
+  "Pet Services", "Audiobooks", "Video Conferencing", "AI Tools",
+  "HR/Payroll", "Accounting Software", "Cloud Backup", "Cloud Storage",
+  "Travel", "Antivirus/Security", "Fitness App", "Meditation Apps",
+  "Gaming", "Language Learning", "Music", "Internet/Cable", "Fitness",
+  "Software/Productivity", "Security", "News/Media", "AI/Tech",
+  "Education", "Dating", "Entertainment/Misc",
 ];
 
 export default function WallOfShamePage() {
