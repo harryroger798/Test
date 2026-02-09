@@ -67,7 +67,7 @@ export default function CalculatorPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]" />
         </div>
         <div className="relative mx-auto max-w-5xl">
-          <img src="/characters/rage_shredder.png" alt="" aria-hidden className="pointer-events-none select-none absolute -right-6 top-0 hidden w-[320px] opacity-60 md:block lg:w-[400px]" />
+          <img src="/characters/rage_shredder.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-0 top-0 hidden w-[280px] opacity-60 md:block lg:w-[340px]" />
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <h1 className="mb-2 text-3xl font-bold md:text-4xl">
               <Calculator className="mr-2 inline h-8 w-8 text-[#FF6B35]" />

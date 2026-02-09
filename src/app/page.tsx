@@ -77,7 +77,7 @@ export default function Home() {
           src="/characters/rage_cancel.png"
           alt="Rage character slamming cancel button"
           aria-hidden
-          className="pointer-events-none select-none absolute -right-10 bottom-0 hidden w-[520px] md:block lg:w-[640px] fire-glow"
+          className="pointer-events-none select-none absolute right-0 bottom-0 hidden w-[420px] md:block lg:w-[520px] fire-glow"
           initial={{ x: 200, opacity: 0, rotate: 10 }}
           animate={{ x: 0, opacity: 0.9, rotate: 0 }}
           transition={{ type: "spring", stiffness: 50, damping: 15, delay: 0.3 }}
@@ -256,8 +256,8 @@ export default function Home() {
             ))}
           </motion.div>
           {/* Peeking rage character divider */}
-          <div className="pointer-events-none absolute bottom-0 left-0 flex h-36 w-full items-end justify-center overflow-hidden">
-            <img src="/characters/rage_peek.png" alt="" aria-hidden className="translate-y-6 w-[420px] opacity-90" />
+          <div className="pointer-events-none absolute bottom-0 left-0 flex h-48 w-full items-end justify-center overflow-hidden">
+            <img src="/characters/rage_peek.png" alt="" aria-hidden className="translate-y-12 w-[420px] opacity-90" />
           </div>
         </div>
       </section>

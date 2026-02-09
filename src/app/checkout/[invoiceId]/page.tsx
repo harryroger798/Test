@@ -192,7 +192,7 @@ export default function CheckoutPage({
 
   return (
     <div className="relative mx-auto max-w-2xl px-4 py-12">
-      <img src="/characters/rage_face.png" alt="" aria-hidden className="pointer-events-none select-none absolute -right-40 -top-10 hidden w-[380px] opacity-60 md:block" />
+      <img src="/characters/rage_face.png" alt="" aria-hidden className="pointer-events-none select-none absolute right-0 top-0 hidden w-[280px] opacity-50 md:block" />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="mb-6 text-center">
           <h1 className="mb-2 text-3xl font-bold">Complete Your Payment</h1>

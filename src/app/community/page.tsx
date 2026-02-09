@@ -126,7 +126,7 @@ export default function CommunityPage() {
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-12">
-      <img src="/characters/rage_cool.png" alt="" aria-hidden className="pointer-events-none select-none absolute -left-16 top-8 hidden w-[280px] opacity-40 lg:block" />
+      <img src="/characters/rage_cool.png" alt="" aria-hidden className="pointer-events-none select-none absolute left-0 top-8 hidden w-[240px] opacity-40 lg:block" />
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <div className="mb-8 text-center">
           <h1 className="mb-2 text-4xl font-bold">
