@@ -1,9 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Flame, Shield, TrendingDown, ArrowRight, Star, Zap, Users, Bitcoin, Crown, Check } from "lucide-react";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { Flame, Shield, TrendingDown, ArrowRight, Star, Zap, Users, Bitcoin, Crown, Check, Swords, Trophy, Timer } from "lucide-react";
+import { useRef } from "react";
 import CountUp from "@/components/CountUp";
+import ParticleField from "@/components/ParticleField";
+import SocialProofTicker from "@/components/SocialProofTicker";
+import SubscriptionShredder from "@/components/SubscriptionShredder";
+import RageLeaderboard from "@/components/RageLeaderboard";
+import RageBadges from "@/components/RageBadges";
 
 const shamePreview = [
   { name: "Comcast/Xfinity", difficulty: 5.0, category: "Internet" },
@@ -50,22 +56,35 @@ const item = {
 };
 
 export default function Home() {
+  const heroRef = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
+  const characterY = useTransform(scrollYProgress, [0, 1], [0, 100]);
+  const characterScale = useTransform(scrollYProgress, [0, 1], [1, 0.8]);
+  const bgY = useTransform(scrollYProgress, [0, 1], [0, 50]);
+
   return (
     <div>
-      <section className="relative overflow-hidden px-4 py-24 md:py-32">
-        <div className="absolute inset-0">
+      {/* HERO — Particles + parallax character entrance */}
+      <section ref={heroRef} className="relative overflow-hidden px-4 py-24 md:py-32">
+        <motion.div className="absolute inset-0" style={{ y: bgY }}>
           <img src="/images/hero-bg.jpg" alt="" className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-[#0A0A0A]/85" />
-        </div>
+        </motion.div>
         <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/10 to-transparent" />
-        {/* Rage character smashing cancel button */}
-        <img
+        <ParticleField className="z-10" />
+
+        <motion.img
           src="/characters/rage_cancel.png"
           alt="Rage character slamming cancel button"
           aria-hidden
-          className="pointer-events-none select-none absolute -right-10 bottom-0 hidden w-[520px] opacity-80 md:block lg:w-[640px]"
+          className="pointer-events-none select-none absolute -right-10 bottom-0 hidden w-[520px] md:block lg:w-[640px] fire-glow"
+          initial={{ x: 200, opacity: 0, rotate: 10 }}
+          animate={{ x: 0, opacity: 0.9, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 50, damping: 15, delay: 0.3 }}
+          style={{ y: characterY, scale: characterScale }}
         />
-        <div className="relative mx-auto max-w-5xl text-center">
+
+        <div className="relative z-20 mx-auto max-w-5xl text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -75,6 +94,10 @@ export default function Home() {
             <div className="mb-6 inline-flex items-center gap-2 border border-[#1E1E1E] bg-[#141414] px-4 py-2 text-sm text-[#888888]">
               <Users className="h-4 w-4 text-[#FF3131]" />
               <span>Join 12,847 users who stopped bleeding money</span>
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00FF88] opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#00FF88]" />
+              </span>
             </div>
           </motion.div>
 
@@ -82,10 +105,16 @@ export default function Home() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="mb-6 text-4xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl"
+            className="glitch-text mb-6 text-4xl font-bold leading-tight tracking-tight md:text-6xl lg:text-7xl"
           >
             Stop Bleeding Money.{" "}
-            <span className="text-[#FF3131]">Start Fighting Back.</span>
+            <motion.span
+              className="text-[#FF3131]"
+              animate={{ textShadow: ["0 0 10px rgba(255,49,49,0.3)", "0 0 30px rgba(255,49,49,0.6)", "0 0 10px rgba(255,49,49,0.3)"] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              Start Fighting Back.
+            </motion.span>
           </motion.h1>
 
           <motion.p
@@ -106,15 +135,16 @@ export default function Home() {
           >
             <Link
               href="/dashboard"
-              className="pulse-glow inline-flex items-center gap-2 bg-[#FF3131] px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-[#FF3131]/90"
+              className="pulse-glow inline-flex items-center gap-2 bg-[#FF3131] px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-[#FF3131]/90 hover:scale-105"
             >
               Start Saving — Free
               <ArrowRight className="h-5 w-5" />
             </Link>
             <Link
               href="/wall-of-shame"
-              className="inline-flex items-center gap-2 border border-[#1E1E1E] px-8 py-4 text-lg text-[#888888] transition-all hover:border-[#FF3131] hover:text-white"
+              className="inline-flex items-center gap-2 border border-[#1E1E1E] px-8 py-4 text-lg text-[#888888] transition-all hover:border-[#FF3131] hover:text-white hover:scale-105"
             >
+              <Swords className="h-5 w-5" />
               View Wall of Shame
             </Link>
           </motion.div>
@@ -125,34 +155,42 @@ export default function Home() {
             transition={{ delay: 0.5 }}
             className="flex items-center justify-center gap-8 md:gap-16"
           >
-            <div className="text-center">
+            <motion.div className="text-center" whileHover={{ scale: 1.1 }} transition={{ type: "spring" }}>
               <CountUp
                 end={847293}
                 prefix="$"
                 className="block font-mono text-3xl font-bold text-[#00FF88] md:text-4xl"
               />
               <span className="text-sm text-[#888888]">Total Saved</span>
-            </div>
+            </motion.div>
             <div className="h-10 w-px bg-[#1E1E1E]" />
-            <div className="text-center">
+            <motion.div className="text-center" whileHover={{ scale: 1.1 }} transition={{ type: "spring" }}>
               <CountUp
                 end={12847}
                 className="block font-mono text-3xl font-bold text-white md:text-4xl"
               />
               <span className="text-sm text-[#888888]">Users</span>
-            </div>
+            </motion.div>
             <div className="h-10 w-px bg-[#1E1E1E]" />
-            <div className="text-center">
+            <motion.div className="text-center" whileHover={{ scale: 1.1 }} transition={{ type: "spring" }}>
               <CountUp
                 end={31456}
                 className="block font-mono text-3xl font-bold text-[#FF3131] md:text-4xl"
               />
               <span className="text-sm text-[#888888]">Cancellations</span>
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
 
+      {/* LIVE CANCELLATION FEED */}
+      <section className="relative border-y border-[#FF3131]/20 px-4 py-6">
+        <div className="mx-auto max-w-5xl">
+          <SocialProofTicker />
+        </div>
+      </section>
+
+      {/* WALL OF SHAME PREVIEW */}
       <section className="relative border-y border-[#1E1E1E] px-4 py-16 overflow-hidden">
         <div className="absolute inset-0">
           <img src="/images/wall-of-shame-bg.jpg" alt="" className="h-full w-full object-cover" />
@@ -182,7 +220,8 @@ export default function Home() {
               <motion.div
                 key={company.name}
                 variants={item}
-                className="flex items-center justify-between border border-[#1E1E1E] bg-[#141414] p-4 transition-all hover:border-[#FF3131]/30 hover:shadow-[0_0_20px_rgba(255,49,49,0.1)]"
+                whileHover={{ x: 5, borderColor: "rgba(255,49,49,0.5)" }}
+                className="flex items-center justify-between border border-[#1E1E1E] bg-[#141414] p-4 transition-all hover:shadow-[0_0_20px_rgba(255,49,49,0.1)]"
               >
                 <div className="flex items-center gap-4">
                   <span className="font-mono text-sm text-[#888888]">
@@ -248,7 +287,8 @@ export default function Home() {
               <motion.div
                 key={step.title}
                 variants={item}
-                className="group border border-[#1E1E1E] bg-[#141414] p-6 transition-all hover:border-[#FF3131]/30"
+                whileHover={{ y: -5, borderColor: "rgba(255,49,49,0.3)" }}
+                className="group border border-[#1E1E1E] bg-[#141414] p-6 transition-all"
               >
                 <div className="mb-4 flex h-12 w-12 items-center justify-center bg-[#FF3131]/10">
                   <step.icon className="h-6 w-6 text-[#FF3131]" />
@@ -275,9 +315,14 @@ export default function Home() {
             Real Savings from Real Users
           </h2>
           <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-            {testimonials.map((t) => (
-              <div
+            {testimonials.map((t, i) => (
+              <motion.div
                 key={t.name}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                whileHover={{ y: -3, borderColor: "rgba(0,255,136,0.3)" }}
                 className="min-w-[280px] flex-shrink-0 border border-[#1E1E1E] bg-[#141414] p-5"
               >
                 <p className="mb-3 text-sm text-[#888888]">
@@ -289,12 +334,79 @@ export default function Home() {
                     +${t.saved}/yr
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
+      {/* SUBSCRIPTION SHREDDER + LEADERBOARD */}
+      <section className="relative border-t border-[#1E1E1E] px-4 py-16 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/5 to-transparent" />
+        <div className="relative mx-auto max-w-5xl">
+          <motion.h2
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mb-8 text-center text-2xl font-bold md:text-3xl"
+          >
+            <Flame className="mr-2 inline h-6 w-6 text-[#FF3131]" />
+            Shred Your Subscriptions
+          </motion.h2>
+          <div className="grid gap-6 md:grid-cols-2">
+            <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}>
+              <SubscriptionShredder />
+            </motion.div>
+            <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}>
+              <RageLeaderboard />
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* RAGE BADGES */}
+      <section className="relative border-t border-[#1E1E1E] px-4 py-16 overflow-hidden">
+        <div className="relative mx-auto max-w-5xl">
+          <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="mb-8 text-center">
+            <h2 className="mb-2 text-2xl font-bold md:text-3xl">
+              <Trophy className="mr-2 inline h-6 w-6 text-[#FFD700]" />
+              Collect Rage Badges
+            </h2>
+            <p className="text-sm text-[#888888]">Earn badges for your cancellation achievements. Share them with the world.</p>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <RageBadges />
+          </motion.div>
+        </div>
+      </section>
+
+      {/* UNIQUE FEATURES SHOWCASE */}
+      <section className="relative border-t border-[#1E1E1E] px-4 py-16 overflow-hidden">
+        <div className="relative mx-auto max-w-5xl">
+          <motion.h2 initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} className="mb-8 text-center text-2xl font-bold md:text-3xl">
+            <Swords className="mr-2 inline h-6 w-6 text-[#FF3131]" />
+            Features Nobody Else Has
+          </motion.h2>
+          <motion.div variants={container} initial="hidden" whileInView="show" viewport={{ once: true }} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[
+              { icon: Swords, title: "Boss Battle Mode", desc: "Cancel tough subscriptions in RPG boss fight style. Attack with complaints, legal threats, and RAGE QUIT.", color: "#FF3131" },
+              { icon: Timer, title: "Speedrun Timer", desc: "Time your cancellations. Compete on the global leaderboard. How fast can you rage quit?", color: "#FFD700" },
+              { icon: Trophy, title: "Rage Leaderboard", desc: "See who saved the most, cancelled the most, and has the longest streak.", color: "#00FF88" },
+              { icon: Flame, title: "Subscription Shredder", desc: "Click your subscriptions to shred them. Watch them get destroyed with satisfying animations.", color: "#FF6B35" },
+              { icon: Shield, title: "Dark Pattern Museum", desc: "Interactive gallery exposing the 15 worst manipulation tactics companies use.", color: "#9B59B6" },
+              { icon: Star, title: "Collectible Badges", desc: "Earn rage badges for achievements. Phone Hostage, Speed Demon, Corporate Crusher.", color: "#FFD700" },
+            ].map((feat) => (
+              <motion.div key={feat.title} variants={item} whileHover={{ y: -5, borderColor: `${feat.color}50` }} className="border border-[#1E1E1E] bg-[#141414] p-5 transition-all">
+                <feat.icon className="mb-3 h-8 w-8" style={{ color: feat.color }} />
+                <h3 className="mb-1 font-bold">{feat.title}</h3>
+                <p className="text-xs text-[#888888]">{feat.desc}</p>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* UPGRADE TO PRO */}
       <section className="relative border-t border-[#1E1E1E] px-4 py-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#FF3131]/5 to-transparent" />
         <div className="relative mx-auto max-w-5xl">

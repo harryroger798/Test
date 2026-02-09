@@ -25,6 +25,9 @@ import {
   Scale,
 } from "lucide-react";
 import confetti from "canvas-confetti";
+import BossBattle from "@/components/BossBattle";
+import SpeedrunTimer from "@/components/SpeedrunTimer";
+import RageCard from "@/components/RageCard";
 
 interface CancellationStep {
   step: number;
@@ -396,6 +399,20 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
           </section>
         )}
 
+        {company.difficultyScore >= 3.5 && (
+          <section className="mb-8">
+            <BossBattle
+              companyName={company.name}
+              difficulty={company.difficultyScore}
+              onVictory={handleCancelled}
+            />
+          </section>
+        )}
+
+        <section className="mb-8">
+          <SpeedrunTimer companyName={company.name} />
+        </section>
+
         <div className="mb-8 flex justify-center">
           <button
             onClick={handleCancelled}
@@ -435,6 +452,17 @@ export default function CancelGuidePage({ params }: { params: Promise<{ slug: st
               {checklist.filter(Boolean).length}/{POST_CANCEL_CHECKLIST.length} completed
             </div>
           </motion.section>
+        )}
+
+        {cancelled && company.avgMonthlyPrice && (
+          <section className="mb-8">
+            <RageCard
+              companyName={company.name}
+              monthlyCost={company.avgMonthlyPrice}
+              currency={CURRENCY_SYMBOLS[cur] || "$"}
+              darkPatternScore={company.darkPatternScore}
+            />
+          </section>
         )}
 
         <div className="flex flex-wrap gap-3 text-sm">

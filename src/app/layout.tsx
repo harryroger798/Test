@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Providers from "@/components/Providers";
+import GlobalOverlays from "@/components/GlobalOverlays";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-heading",
@@ -63,6 +64,7 @@ export default function RootLayout({
           <Navbar />
           <main className="min-h-screen pt-16 pb-16 md:pb-0">{children}</main>
           <Footer />
+          <GlobalOverlays />
         </Providers>
       </body>
     </html>
