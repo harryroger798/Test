@@ -13,16 +13,5 @@ Disallow: /verify-email
 Disallow: /verify-email-pending
 Disallow: /reset-password
 
-# Allow search engines to index public pages
-Allow: /
-Allow: /features
-Allow: /pricing
-Allow: /api-docs
-Allow: /login
-Allow: /register
-
 # Sitemap location
 Sitemap: https://textshift.org/sitemap.xml
-
-# Crawl delay (optional)
-Crawl-delay: 1

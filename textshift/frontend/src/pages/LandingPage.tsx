@@ -191,6 +191,7 @@ export default function LandingPage() {
             <a href="#demo" className="px-4 py-2 text-sm text-gray-300 hover:text-white transition">Demo</a>
             <a href="#pricing" className="px-4 py-2 text-sm text-gray-300 hover:text-white transition">Pricing</a>
             <a href="#faq" className="px-4 py-2 text-sm text-gray-300 hover:text-white transition">FAQ</a>
+            <a href="https://textshift.blog" target="_blank" rel="noopener" className="px-4 py-2 text-sm text-gray-300 hover:text-white transition">Blog</a>
             <a href="#contact" className="px-4 py-2 text-sm text-gray-300 hover:text-white transition flex items-center gap-1">
               Contact <ArrowRight className="w-3 h-3" />
             </a>
@@ -245,6 +246,7 @@ export default function LandingPage() {
               <a href="#demo" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>Demo</a>
               <a href="#pricing" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>Pricing</a>
               <a href="#faq" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
+              <a href="https://textshift.blog" target="_blank" rel="noopener" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>Blog</a>
               <a href="#contact" className="text-gray-300 hover:text-white transition" onClick={() => setMobileMenuOpen(false)}>Contact</a>
               <div className="flex flex-col gap-2 pt-4 border-t border-white/10">
                 {isAuthenticated ? (
@@ -1140,6 +1142,7 @@ export default function LandingPage() {
             <div className="flex items-center justify-center md:justify-end gap-6 text-gray-500 text-sm">
               <Link to="/pricing" className="hover:text-white transition">Pricing</Link>
               <a href="#faq" className="hover:text-white transition">FAQ</a>
+              <a href="https://textshift.blog" target="_blank" rel="noopener" className="hover:text-white transition">Blog</a>
               <a href="https://twitter.com/textshift" className="hover:text-white transition">Twitter</a>
               <a href="https://linkedin.com/company/textshift" className="hover:text-white transition">LinkedIn</a>
             </div>
