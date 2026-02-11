@@ -252,7 +252,8 @@ function sendToGA4(name: string, value: number): void {
 // Web Vitals reporting (Speed Optimization #46-50)
 export function reportWebVitals(): void {
   if ('web-vital' in window) return;
-  
+  (window as Window & { 'web-vital'?: boolean })['web-vital'] = true;
+
   // LCP (Largest Contentful Paint)
   new PerformanceObserver((entryList) => {
     const entries = entryList.getEntries();
