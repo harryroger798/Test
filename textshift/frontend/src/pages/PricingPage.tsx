@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { 
   CheckCircle, 
@@ -165,12 +166,6 @@ export default function PricingPage() {
   ];
 
   useEffect(() => {
-    document.title = 'Pricing - TextShift | AI Detection & Humanization Plans';
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute('content', 'Choose the perfect TextShift plan. Free tier with 5,000 words/month. Starter at $9.99, Pro at $24.99, Enterprise at $49.99. AI detection, humanization, plagiarism checking.');
-    }
-    
     const faqSchema = {
       "@context": "https://schema.org",
       "@type": "FAQPage",
@@ -249,6 +244,17 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <Helmet>
+        <title>Pricing - TextShift | AI Detection & Humanization Plans</title>
+        <meta name="description" content="Choose the perfect TextShift plan. Free tier with 5,000 words/month. Starter at $9.99, Pro at $24.99, Enterprise at $49.99. AI detection, humanization, plagiarism checking." />
+        <link rel="canonical" href="https://textshift.org/pricing" />
+        <meta property="og:title" content="TextShift Pricing - AI Detection & Humanization Plans" />
+        <meta property="og:description" content="Choose the perfect TextShift plan. Free to Enterprise. AI detection, humanization, plagiarism checking." />
+        <meta property="og:url" content="https://textshift.org/pricing" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:title" content="TextShift Pricing - AI Detection & Humanization Plans" />
+        <meta name="twitter:description" content="Choose the perfect TextShift plan. Free to Enterprise. AI detection, humanization, plagiarism checking." />
+      </Helmet>
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-b from-emerald-500/20 via-emerald-500/5 to-transparent rounded-full blur-3xl" />
       </div>

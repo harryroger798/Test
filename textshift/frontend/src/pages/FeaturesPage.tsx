@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { 
   CheckCircle, 
@@ -25,14 +25,6 @@ import { useAuthStore } from '@/store/authStore';
 
 export default function FeaturesPage() {
   const { isAuthenticated } = useAuthStore();
-
-  useEffect(() => {
-    document.title = 'Features - TextShift | AI Detection, Humanizer & 14 Writing Tools';
-    const metaDescription = document.querySelector('meta[name="description"]');
-    if (metaDescription) {
-      metaDescription.setAttribute('content', 'Explore TextShift features: AI detection with 99% accuracy, text humanizer, plagiarism checker, grammar checker, tone adjuster, summarizer, paraphraser, and 14 more writing tools.');
-    }
-  }, []);
 
   const coreTools = [
     {
@@ -174,6 +166,17 @@ export default function FeaturesPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <Helmet>
+        <title>Features - TextShift | AI Detection, Humanizer & 14 Writing Tools</title>
+        <meta name="description" content="Explore TextShift features: AI detection with 99% accuracy, text humanizer, plagiarism checker, grammar checker, tone adjuster, summarizer, paraphraser, and 14 more writing tools." />
+        <link rel="canonical" href="https://textshift.org/features" />
+        <meta property="og:title" content="TextShift Features - AI Detection, Humanizer & Writing Tools" />
+        <meta property="og:description" content="Explore TextShift features: AI detection with 99% accuracy, text humanizer, plagiarism checker, and 14 writing tools." />
+        <meta property="og:url" content="https://textshift.org/features" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:title" content="TextShift Features - AI Detection, Humanizer & Writing Tools" />
+        <meta name="twitter:description" content="Explore TextShift features: AI detection with 99% accuracy, text humanizer, plagiarism checker, and 14 writing tools." />
+      </Helmet>
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-b from-emerald-500/20 via-emerald-500/5 to-transparent rounded-full blur-3xl" />
       </div>

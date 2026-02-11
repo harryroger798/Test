@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { TypeAnimation } from 'react-type-animation';
 import { Button } from '@/components/ui/button';
@@ -162,6 +163,17 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
+      <Helmet>
+        <title>TextShift - AI Content Detection & Humanization Tool | 99% Accuracy</title>
+        <meta name="description" content="Detect AI-generated content with 99.18% accuracy. Humanize AI text to bypass detection. Free plagiarism checker. 14 writing tools. Trusted by 10,000+ users. Start free today!" />
+        <link rel="canonical" href="https://textshift.org/" />
+        <meta property="og:title" content="TextShift - AI Content Detection & Humanization Tool" />
+        <meta property="og:description" content="Detect AI-generated content with 99.18% accuracy. Humanize AI text instantly. Free plagiarism checker. Start with 5,000 free credits today!" />
+        <meta property="og:url" content="https://textshift.org/" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:title" content="TextShift - AI Content Detection & Humanization Tool" />
+        <meta name="twitter:description" content="Detect AI-generated content with 99.18% accuracy. Humanize AI text instantly. Free plagiarism checker." />
+      </Helmet>
       <ParticlesBackground />
       <GradientBackground />
       <NoiseOverlay />

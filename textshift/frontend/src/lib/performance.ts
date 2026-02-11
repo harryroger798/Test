@@ -237,6 +237,18 @@ export function useImageLazyLoad(src: string): {
   return { isLoaded, imageSrc };
 }
 
+// Send metric to GA4 if gtag is available
+function sendToGA4(name: string, value: number): void {
+  const w = window as Window & { gtag?: (...args: unknown[]) => void };
+  if (w.gtag) {
+    w.gtag('event', name, {
+      value: Math.round(name === 'CLS' ? value * 1000 : value),
+      event_category: 'Web Vitals',
+      non_interaction: true,
+    });
+  }
+}
+
 // Web Vitals reporting (Speed Optimization #46-50)
 export function reportWebVitals(): void {
   if ('web-vital' in window) return;
@@ -248,15 +260,18 @@ export function reportWebVitals(): void {
     if (import.meta.env.DEV) {
       console.log('[Web Vitals] LCP:', lastEntry.startTime);
     }
+    sendToGA4('LCP', lastEntry.startTime);
   }).observe({ type: 'largest-contentful-paint', buffered: true });
 
   // FID (First Input Delay)
   new PerformanceObserver((entryList) => {
     const entries = entryList.getEntries();
     entries.forEach((entry) => {
+      const fidValue = (entry as PerformanceEventTiming).processingStart - entry.startTime;
       if (import.meta.env.DEV) {
-        console.log('[Web Vitals] FID:', (entry as PerformanceEventTiming).processingStart - entry.startTime);
+        console.log('[Web Vitals] FID:', fidValue);
       }
+      sendToGA4('FID', fidValue);
     });
   }).observe({ type: 'first-input', buffered: true });
 
@@ -270,6 +285,7 @@ export function reportWebVitals(): void {
         if (import.meta.env.DEV) {
           console.log('[Web Vitals] CLS:', clsValue);
         }
+        sendToGA4('CLS', clsValue);
       }
     });
   }).observe({ type: 'layout-shift', buffered: true });

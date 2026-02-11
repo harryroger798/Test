@@ -25,10 +25,8 @@ const setVH = () => {
 setVH();
 window.addEventListener('resize', setVH, { passive: true });
 
-// Report Web Vitals in development (Speed Optimization #46-50)
-if (import.meta.env.DEV) {
-  reportWebVitals();
-}
+// Report Web Vitals (Speed Optimization #46-50)
+reportWebVitals();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

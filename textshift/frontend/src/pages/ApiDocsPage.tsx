@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { Copy, CheckCircle2, ArrowLeft, Key, Zap, Shield, BookOpen } from 'lucide-react';
 
@@ -370,6 +371,17 @@ export default function ApiDocsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
+      <Helmet>
+        <title>API Documentation - TextShift | REST API for AI Detection & Writing Tools</title>
+        <meta name="description" content="TextShift REST API documentation. Access AI detection, humanization, plagiarism checking, and 14 writing tools programmatically. Full API reference with examples." />
+        <link rel="canonical" href="https://textshift.org/api-docs" />
+        <meta property="og:title" content="TextShift API Documentation" />
+        <meta property="og:description" content="Access AI detection, humanization, and 14 writing tools via REST API. Full documentation with examples." />
+        <meta property="og:url" content="https://textshift.org/api-docs" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:title" content="TextShift API Documentation" />
+        <meta name="twitter:description" content="Access AI detection, humanization, and 14 writing tools via REST API." />
+      </Helmet>
       {/* Header */}
       <header className="border-b border-white/10 bg-black/20 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
