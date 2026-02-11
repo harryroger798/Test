@@ -398,13 +398,14 @@ class StealthwriterPostProcessor:
         result = re.sub(r'([.,!?])([A-Za-z])', r'\1 \2', result)
         return result
     
-    def process(self, text: str, intensity: str = 'high') -> Dict[str, Any]:
+    def process(self, text: str, intensity: str = 'high', mode: str = 'casual') -> Dict[str, Any]:
         """
         Apply all Stealthwriter-style post-processing transformations.
         
         Args:
             text: Input text to process (typically output from Final Humanizer)
             intensity: 'low', 'medium', or 'high'
+            mode: 'academic', 'professional', or 'casual'
         
         Returns:
             Dict with processed_text and transformations_applied
@@ -418,40 +419,47 @@ class StealthwriterPostProcessor:
         result = text
         transformations = []
         
-        # Always apply these
         result = self._expand_contractions(result)
         transformations.append("expand_contractions")
         
-        result = self._apply_informal_subs(result)
-        transformations.append("informal_substitutions")
+        if mode != 'academic':
+            result = self._apply_informal_subs(result)
+            transformations.append("informal_substitutions")
         
         result = self._remove_commas(result)
         transformations.append("remove_commas")
         
-        # Intensity-based transformations
-        if intensity in ['medium', 'high']:
-            prob = 0.15 if intensity == 'medium' else 0.25
-            result = self._apply_progressive_tense(result, probability=prob)
+        if mode == 'casual':
+            if intensity in ['medium', 'high']:
+                prob = 0.15 if intensity == 'medium' else 0.25
+                result = self._apply_progressive_tense(result, probability=prob)
+                transformations.append("progressive_tense")
+                
+                result = self._insert_that(result, probability=prob)
+                transformations.append("insert_that")
+            
+            if intensity == 'high':
+                result = self._add_filler_words(result, probability=0.12)
+                transformations.append("filler_words")
+                
+                result = self._add_sentence_starters(result, probability=0.15)
+                transformations.append("sentence_starters")
+                
+                result = self._restructure_sentences(result)
+                transformations.append("restructure_sentences")
+        elif mode == 'professional':
+            result = self._apply_progressive_tense(result, probability=0.10)
             transformations.append("progressive_tense")
             
-            result = self._insert_that(result, probability=prob)
+            result = self._insert_that(result, probability=0.10)
             transformations.append("insert_that")
-        
-        if intensity == 'high':
-            result = self._add_filler_words(result, probability=0.12)
-            transformations.append("filler_words")
-            
-            result = self._add_sentence_starters(result, probability=0.15)
-            transformations.append("sentence_starters")
-            
-            result = self._restructure_sentences(result)
-            transformations.append("restructure_sentences")
         
         result = self._clean_text(result)
         
         return {
             "processed_text": result,
-            "transformations_applied": transformations
+            "transformations_applied": transformations,
+            "mode": mode
         }
     
     def get_info(self) -> Dict[str, str]:

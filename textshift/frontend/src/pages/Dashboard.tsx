@@ -272,6 +272,7 @@ export default function Dashboard() {
   // Separate text state for each tool to prevent cross-contamination
   const [detectText, setDetectText] = useState('');
   const [humanizeText, setHumanizeText] = useState('');
+  const [humanizeMode, setHumanizeMode] = useState<'academic' | 'professional' | 'casual'>('casual');
     const [plagiarismText, setPlagiarismText] = useState('');
       const [result, setResult] = useState<any>(null);
       const [copied, setCopied] = useState(false);
@@ -397,7 +398,7 @@ export default function Dashboard() {
   });
 
   const humanizeMutation = useMutation({
-    mutationFn: scanApi.humanize,
+    mutationFn: (text: string) => scanApi.humanize(text, humanizeMode),
     onSuccess: (data) => {
       setResult(data);
       refetchCredits();
@@ -682,6 +683,27 @@ export default function Dashboard() {
                             )}
                           </div>
               
+                          {activeTab === 'humanize' && (
+                            <div className="flex items-center gap-2 mb-4">
+                              <span className="text-gray-400 text-sm">Mode:</span>
+                              {(['academic', 'professional', 'casual'] as const).map((m) => (
+                                <button
+                                  key={m}
+                                  onClick={() => setHumanizeMode(m)}
+                                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                                    humanizeMode === m
+                                      ? m === 'academic' ? 'bg-blue-500 text-white'
+                                        : m === 'professional' ? 'bg-amber-500 text-black'
+                                        : 'bg-purple-500 text-white'
+                                      : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                                  }`}
+                                >
+                                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
                           <Textarea
                             placeholder="Paste your text here..."
                             className="min-h-[250px] bg-black/30 border-white/10 text-white placeholder:text-gray-600 rounded-2xl resize-none focus:border-emerald-500/50 focus:ring-emerald-500/20 mb-4"

@@ -149,10 +149,11 @@ export const scanApi = {
     return response.data;
   },
 
-  humanize: async (text: string) => {
+  humanize: async (text: string, mode: string = 'casual') => {
     const response = await api.post('/api/scan/humanize', {
       text,
       scan_type: 'humanize',
+      mode,
     });
     return response.data;
   },

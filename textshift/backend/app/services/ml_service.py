@@ -816,7 +816,7 @@ class MLModelService:
             result = result[0].upper() + result[1:]
         return result.strip()
     
-    def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 2) -> str:
+    def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 2, mode: str = 'casual') -> str:
         result = text
         # First remove meta-commentary
         result = self._remove_meta_commentary(result)
@@ -898,7 +898,7 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, use_two_stage: bool = True, intensity: str = 'high') -> Dict[str, Any]:
+    def humanize(self, text: str, use_two_stage: bool = True, intensity: str = 'high', mode: str = 'casual') -> Dict[str, Any]:
         """Humanize AI-generated text using two-stage pipeline to bypass BOTH Originality.ai AND Stealthwriter.
         
         Two-Stage Pipeline:
@@ -909,10 +909,17 @@ class MLModelService:
             text: Text to humanize
             use_two_stage: If True, apply both stages. If False, only Stage 1.
             intensity: Post-processor intensity ('low', 'medium', 'high')
+            mode: Humanizer mode ('academic', 'professional', 'casual')
         
         Returns:
             Dict with original_text, humanized_text, stages_applied, etc.
         """
+        mode_config = {
+            'academic': {'temperature': 0.7, 'top_p': 0.9},
+            'professional': {'temperature': 0.75, 'top_p': 0.92},
+            'casual': {'temperature': 0.85, 'top_p': 0.93},
+        }
+        config = mode_config.get(mode, mode_config['casual'])
         stages_applied = []
         stage1_output = None
         stage2_output = None
@@ -941,8 +948,8 @@ class MLModelService:
                         max_length=512,
                         num_beams=4,
                         do_sample=True,
-                        temperature=0.8,
-                        top_p=0.9,
+                        temperature=config['temperature'],
+                        top_p=config['top_p'],
                         repetition_penalty=2.5,
                         no_repeat_ngram_size=3
                     )
@@ -959,7 +966,7 @@ class MLModelService:
         final_output = stage1_output
         if use_two_stage and self._load_stealthwriter_postprocessor():
             try:
-                result = self._stealthwriter_postprocessor.process(stage1_output, intensity=intensity)
+                result = self._stealthwriter_postprocessor.process(stage1_output, intensity=intensity, mode=mode)
                 stage2_output = result["processed_text"]
                 final_output = stage2_output
                 stages_applied.append("stealthwriter_postprocessor_v7")
@@ -985,6 +992,7 @@ class MLModelService:
             "humanizer_model": "two_stage_pipeline" if len(stages_applied) >= 2 else stages_applied[0] if stages_applied else "none",
             "used_fallback": use_fallback,
             "intensity": intensity,
+            "mode": mode,
             "expected_results": {
                 "originality_ai": "<3% AI detection (Stage 1)",
                 "stealthwriter": "<10% AI detection (Stage 2)",

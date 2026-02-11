@@ -85,7 +85,7 @@ def process_scan(scan_id: int, db: Session):
             scan.results = result
             
         elif scan.scan_type == ScanType.HUMANIZE:
-            result = ml_service.humanize(scan.input_text)
+            result = ml_service.humanize(scan.input_text, mode='casual')
             scan.output_text = result["humanized_text"]
             scan.results = result
             
@@ -260,7 +260,7 @@ async def humanize_text(
             db_session=db
         )
         
-        result = ml_service.humanize(scan.input_text)
+        result = ml_service.humanize(scan.input_text, mode=scan_data.mode or 'casual')
         scan.output_text = result["humanized_text"]
         
         # Add model version info to results
