@@ -267,6 +267,7 @@ export default function PricingPage() {
                           <span className="text-white font-medium tracking-wide">TextShift</span>
                         </Link>
             <div className="flex items-center gap-4">
+              <a href="https://textshift.blog" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-300 hover:text-white transition">Blog</a>
               {isAuthenticated ? (
                 <Link to="/dashboard">
                                     <Button variant="outline" className="bg-transparent border-white/20 text-white hover:bg-white/5 rounded-full">
