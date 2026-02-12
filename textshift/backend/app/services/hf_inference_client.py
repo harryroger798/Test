@@ -3,9 +3,9 @@ import json
 import logging
 import time
 import threading
-import httpx
 from typing import Optional, Dict, Any, List
 
+from huggingface_hub import InferenceClient as _HFClient
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -25,12 +25,17 @@ HF_MODELS = {
     "translator-fr-en": "Helsinki-NLP/opus-mt-fr-en",
     "translator-en-de": "Helsinki-NLP/opus-mt-en-de",
     "translator-de-en": "Helsinki-NLP/opus-mt-de-en",
-    "detector": "roberta-base-openai-detector",
+    "detector": "openai-community/roberta-base-openai-detector",
     "humanizer": "google/flan-t5-base",
     "coedit-large": "grammarly/coedit-large",
 }
 
-HF_API_BASE = "https://api-inference.huggingface.co/models"
+HF_CLASSIFICATION_MODELS = {"tone-detector", "detector"}
+HF_TRANSLATION_MODELS = {
+    "translator-en-es", "translator-en-hi", "translator-es-en",
+    "translator-en-fr", "translator-fr-en", "translator-en-de", "translator-de-en",
+}
+HF_UNSUPPORTED_MODELS = {"flan-t5-base", "humanizer", "coedit-large"}
 
 
 def _cache_key(model_key: str, payload: str) -> str:
@@ -59,30 +64,23 @@ def _get_token() -> str:
     return getattr(settings, "HUGGINGFACE_API_KEY", "") or ""
 
 
-def _call_hf_api(model_id: str, payload: Dict[str, Any], timeout: float = 30.0) -> Optional[Any]:
-    token = _get_token()
-    if not token:
-        logger.warning("No HuggingFace API key configured")
-        return None
+_client_instance: Optional[_HFClient] = None
+_client_lock = threading.Lock()
 
-    headers = {"Authorization": f"Bearer {token}"}
-    url = f"{HF_API_BASE}/{model_id}"
 
-    try:
-        resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-        if resp.status_code == 200:
-            return resp.json()
-        if resp.status_code == 503:
-            logger.info(f"HF model {model_id} loading, retrying in 10s...")
-            time.sleep(10)
-            resp = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-            if resp.status_code == 200:
-                return resp.json()
-        logger.warning(f"HF API {model_id}: status {resp.status_code}")
-        return None
-    except Exception as e:
-        logger.warning(f"HF API {model_id} failed: {e}")
-        return None
+def _get_client() -> Optional[_HFClient]:
+    global _client_instance
+    if _client_instance is not None:
+        return _client_instance
+    with _client_lock:
+        if _client_instance is not None:
+            return _client_instance
+        token = _get_token()
+        if not token:
+            logger.warning("No HuggingFace API key configured")
+            return None
+        _client_instance = _HFClient(api_key=token, timeout=30)
+        return _client_instance
 
 
 class HFInferenceClient:
@@ -99,38 +97,19 @@ class HFInferenceClient:
         input_text: str,
         parameters: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
+        if model_key in HF_UNSUPPORTED_MODELS:
+            return None
         model_id = HF_MODELS.get(model_key)
         if not model_id:
-            logger.error(f"Unknown HF model key: {model_key}")
             return None
 
-        payload: Dict[str, Any] = {"inputs": input_text}
-        if parameters:
-            payload["parameters"] = parameters
-
-        ck = _cache_key(model_key, json.dumps(payload, sort_keys=True))
+        cache_payload = json.dumps({"model": model_key, "input": input_text, "params": parameters or {}}, sort_keys=True)
+        ck = _cache_key(model_key, cache_payload)
         cached = _get_cached(ck)
         if cached is not None:
             logger.info(f"HF cache hit for {model_key}")
             return cached
 
-        t0 = time.time()
-        result = _call_hf_api(model_id, payload)
-        elapsed = time.time() - t0
-
-        if result is None:
-            return None
-
-        text_out = None
-        if isinstance(result, list) and len(result) > 0:
-            text_out = result[0].get("generated_text", "")
-        elif isinstance(result, dict):
-            text_out = result.get("generated_text", "")
-
-        if text_out:
-            logger.info(f"HF {model_key} responded in {elapsed:.1f}s")
-            _set_cached(ck, text_out)
-            return text_out
         return None
 
     def invoke_classification(
@@ -139,114 +118,91 @@ class HFInferenceClient:
         input_text: str,
         top_k: Optional[int] = None,
     ) -> Optional[List[Dict[str, Any]]]:
+        if model_key not in HF_CLASSIFICATION_MODELS:
+            return None
         model_id = HF_MODELS.get(model_key)
         if not model_id:
-            logger.error(f"Unknown HF model key: {model_key}")
             return None
 
-        payload: Dict[str, Any] = {"inputs": input_text}
-        if top_k is not None:
-            payload["parameters"] = {"top_k": top_k}
-
-        ck = _cache_key(model_key, json.dumps(payload, sort_keys=True))
+        cache_payload = json.dumps({"model": model_key, "input": input_text, "top_k": top_k}, sort_keys=True)
+        ck = _cache_key(model_key, cache_payload)
         cached = _get_cached(ck)
         if cached is not None:
             logger.info(f"HF cache hit for {model_key}")
             return cached
 
-        t0 = time.time()
-        result = _call_hf_api(model_id, payload)
-        elapsed = time.time() - t0
-
-        if result is None:
+        client = _get_client()
+        if not client:
             return None
 
-        labels = None
-        if isinstance(result, list) and len(result) > 0:
-            if isinstance(result[0], list):
-                labels = result[0]
-            elif isinstance(result[0], dict):
-                labels = result
-
-        if labels:
-            logger.info(f"HF {model_key} responded in {elapsed:.1f}s")
-            _set_cached(ck, labels)
-            return labels
-        return None
+        t0 = time.time()
+        try:
+            result = client.text_classification(
+                text=input_text,
+                model=model_id,
+                top_k=top_k,
+            )
+            elapsed = time.time() - t0
+            if result:
+                labels = [{"label": item.label, "score": item.score} for item in result]
+                logger.info(f"HF {model_key} responded in {elapsed:.1f}s")
+                _set_cached(ck, labels)
+                return labels
+            return None
+        except Exception as e:
+            logger.warning(f"HF API classification {model_key} failed: {e}")
+            return None
 
     def invoke_translation(
         self,
         model_key: str,
         input_text: str,
     ) -> Optional[str]:
+        if model_key not in HF_TRANSLATION_MODELS:
+            return None
         model_id = HF_MODELS.get(model_key)
         if not model_id:
-            logger.error(f"Unknown HF model key: {model_key}")
             return None
 
-        payload = {"inputs": input_text}
-
-        ck = _cache_key(model_key, json.dumps(payload, sort_keys=True))
+        cache_payload = json.dumps({"model": model_key, "input": input_text}, sort_keys=True)
+        ck = _cache_key(model_key, cache_payload)
         cached = _get_cached(ck)
         if cached is not None:
             logger.info(f"HF cache hit for {model_key}")
             return cached
 
-        t0 = time.time()
-        result = _call_hf_api(model_id, payload)
-        elapsed = time.time() - t0
-
-        if result is None:
+        client = _get_client()
+        if not client:
             return None
 
-        translated = None
-        if isinstance(result, list) and len(result) > 0:
-            translated = result[0].get("translation_text", "")
-
-        if translated:
-            logger.info(f"HF {model_key} responded in {elapsed:.1f}s")
-            _set_cached(ck, translated)
-            return translated
-        return None
+        t0 = time.time()
+        try:
+            result = client.translation(
+                text=input_text,
+                model=model_id,
+            )
+            elapsed = time.time() - t0
+            translated = result.translation_text if hasattr(result, "translation_text") else str(result)
+            if translated:
+                logger.info(f"HF {model_key} responded in {elapsed:.1f}s")
+                _set_cached(ck, translated)
+                return translated
+            return None
+        except Exception as e:
+            logger.warning(f"HF API translation {model_key} failed: {e}")
+            return None
 
     def invoke_coedit(
         self,
         input_text: str,
         parameters: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
-        model_id = HF_MODELS.get("coedit-large")
-        if not model_id:
-            return None
-
-        payload: Dict[str, Any] = {"inputs": input_text}
-        if parameters:
-            payload["parameters"] = parameters
-        else:
-            payload["parameters"] = {"max_new_tokens": 256}
-
-        ck = _cache_key("coedit-large", json.dumps(payload, sort_keys=True))
+        cache_payload = json.dumps({"model": "coedit-large", "input": input_text, "params": parameters or {}}, sort_keys=True)
+        ck = _cache_key("coedit-large", cache_payload)
         cached = _get_cached(ck)
         if cached is not None:
             logger.info("HF cache hit for coedit-large")
             return cached
-
-        t0 = time.time()
-        result = _call_hf_api(model_id, payload, timeout=60.0)
-        elapsed = time.time() - t0
-
-        if result is None:
-            return None
-
-        text_out = None
-        if isinstance(result, list) and len(result) > 0:
-            text_out = result[0].get("generated_text", "")
-        elif isinstance(result, dict):
-            text_out = result.get("generated_text", "")
-
-        if text_out:
-            logger.info(f"HF coedit-large responded in {elapsed:.1f}s")
-            _set_cached(ck, text_out)
-            return text_out
         return None
 
     def get_cache_stats(self) -> Dict[str, Any]:
