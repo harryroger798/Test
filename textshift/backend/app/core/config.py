@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     IDRIVE_ACCESS_KEY: str = ""
     IDRIVE_SECRET_KEY: str = ""
 
+    # AWS SageMaker
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_DEFAULT_REGION: str = "us-east-1"
+
     # Frontend URL for email links
     FRONTEND_URL: str = "https://textshift.org"
     
