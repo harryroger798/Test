@@ -39,6 +39,8 @@ from transformers import (
     MarianTokenizer
 )
 from app.core.config import settings
+from app.services.sagemaker_client import sagemaker_client
+from app.services.hf_inference_client import hf_client
 
 logger = logging.getLogger(__name__)
 
@@ -228,36 +230,109 @@ class WritingToolsService:
             return False
     
     def _load_grammar_model(self):
-        """Load T5 grammar correction model from iDrive e2."""
+        """Load CoEdIT-large grammar correction model from iDrive e2."""
         if self._grammar_model is not None:
             return True
         
         try:
-            model_dir = os.path.join(settings.MODELS_DIR, 't5-grammar-correction')
+            model_dir = os.path.join(settings.MODELS_DIR, 'coedit-large')
             
-            # Download from iDrive if not present
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
-                success = self._download_model_from_s3('grammar-checker/t5-base-grammar-correction/', model_dir)
+                success = self._download_model_from_s3('grammar-checker/coedit-large/', model_dir)
                 if not success:
-                    # Fallback to HuggingFace
-                    logger.info("Downloading t5-base-grammar-correction from HuggingFace...")
-                    self._grammar_tokenizer = T5Tokenizer.from_pretrained("vennify/t5-base-grammar-correction")
-                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("vennify/t5-base-grammar-correction")
+                    logger.info("Downloading coedit-large from HuggingFace...")
+                    self._grammar_tokenizer = AutoTokenizer.from_pretrained("grammarly/coedit-large")
+                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("grammarly/coedit-large", torch_dtype=torch.float16)
                     self._grammar_model.eval()
-                    logger.info("Grammar T5 model loaded from HuggingFace")
+                    logger.info("CoEdIT-large model loaded from HuggingFace")
                     return True
             
-            self._grammar_tokenizer = T5Tokenizer.from_pretrained(model_dir)
-            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir)
+            self._grammar_tokenizer = AutoTokenizer.from_pretrained(model_dir)
+            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=torch.float16)
             self._grammar_model.eval()
-            logger.info("Grammar T5 model loaded successfully from local storage")
+            logger.info("CoEdIT-large model loaded successfully from local storage")
             return True
         except Exception as e:
-            logger.error(f"Failed to load Grammar T5 model: {e}")
+            logger.error(f"Failed to load CoEdIT-large model: {e}")
             return False
     
+    def _correct_grammar_chunk(self, chunk: str) -> str:
+        """Correct grammar for a single chunk using instruction-tuned model."""
+        input_text = f"Fix grammatical errors in this sentence: {chunk}"
+        inputs = self._grammar_tokenizer(
+            input_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
+        input_length = inputs["input_ids"].shape[1]
+        with torch.no_grad():
+            outputs = self._grammar_model.generate(
+                **inputs,
+                max_length=max(512, input_length + 128),
+                num_beams=5,
+                early_stopping=True
+            )
+        corrected = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return corrected.strip() if corrected else chunk
+
+    def _edit_text_with_coedit(self, text: str, instruction: str, max_chunk_tokens: int = 200) -> str:
+        """Edit text using HF API coedit-large (primary) → local model (fallback).
+        Chunks by sentences to avoid truncation."""
+        try:
+            hf_result = hf_client.invoke_coedit(
+                f"{instruction}: {text}",
+                parameters={"max_new_tokens": 256}
+            )
+            if hf_result and len(hf_result.strip()) > 5 and hf_result.strip() != text.strip():
+                logger.info("CoEdIT edit via HF API successful")
+                return hf_result.strip()
+        except Exception as e:
+            logger.warning(f"HF API coedit failed: {e}")
+
+        if not self._load_grammar_model():
+            return text
+        if self._grammar_model is None or self._grammar_tokenizer is None:
+            return text
+
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        chunks: list[str] = []
+        current_chunk: list[str] = []
+        current_tokens = 0
+
+        for sentence in sentences:
+            sentence_tokens = len(self._grammar_tokenizer.encode(sentence))
+            if current_tokens + sentence_tokens > max_chunk_tokens and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_tokens = sentence_tokens
+            else:
+                current_chunk.append(sentence)
+                current_tokens += sentence_tokens
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        results: list[str] = []
+        for chunk in chunks:
+            input_text = f"{instruction}: {chunk}"
+            inputs = self._grammar_tokenizer(
+                input_text, return_tensors="pt", truncation=True, max_length=512
+            )
+            input_length = inputs["input_ids"].shape[1]
+            with torch.no_grad():
+                outputs = self._grammar_model.generate(
+                    **inputs,
+                    max_length=max(512, input_length + 128),
+                    num_beams=4,
+                    early_stopping=True
+                )
+            result = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            results.append(result.strip() if result else chunk)
+
+        return ' '.join(results)
+
     def _correct_grammar_with_t5(self, text: str) -> Optional[str]:
-        """Correct grammar using T5 model."""
+        """Correct grammar using T5 model, always processing in sentence chunks to avoid truncation."""
         try:
             if not self._load_grammar_model():
                 return None
@@ -265,32 +340,58 @@ class WritingToolsService:
             if self._grammar_model is None or self._grammar_tokenizer is None:
                 return None
             
-            # T5 grammar model expects "grammar: " prefix
-            input_text = f"grammar: {text}"
-            
-            inputs = self._grammar_tokenizer(
-                input_text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=512
-            )
-            
-            with torch.no_grad():
-                outputs = self._grammar_model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=5,
-                    early_stopping=True
-                )
-            
-            corrected_text = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            return corrected_text.strip() if corrected_text else None
+            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+            if len(sentences) <= 1:
+                return self._correct_grammar_chunk(text)
+
+            corrected_chunks: list[str] = []
+            current_chunk: list[str] = []
+            current_tokens = 0
+
+            for sentence in sentences:
+                sentence_tokens = len(self._grammar_tokenizer.encode(sentence))
+                if current_tokens + sentence_tokens > 200 and current_chunk:
+                    chunk_text = ' '.join(current_chunk)
+                    corrected_chunks.append(self._correct_grammar_chunk(chunk_text))
+                    current_chunk = [sentence]
+                    current_tokens = sentence_tokens
+                else:
+                    current_chunk.append(sentence)
+                    current_tokens += sentence_tokens
+
+            if current_chunk:
+                chunk_text = ' '.join(current_chunk)
+                corrected_chunks.append(self._correct_grammar_chunk(chunk_text))
+
+            return ' '.join(corrected_chunks)
         except Exception as e:
             logger.error(f"T5 grammar correction failed: {e}")
             return None
     
     def _generate_with_t5(self, prompt: str, max_length: int = 256, min_length: int = 10) -> Optional[str]:
-        """Generate text using Flan-T5 model with error handling."""
+        """Generate text using HF API (primary) → SageMaker (fallback) → local model (last resort)."""
+        try:
+            hf_result = hf_client.invoke_text2text(
+                "flan-t5-base", prompt,
+                parameters={"max_new_tokens": max_length, "min_length": min_length}
+            )
+            if hf_result and len(hf_result.strip()) >= 5 and hf_result.strip().lower() != prompt.strip().lower():
+                logger.info("Flan-T5 generation via HF API successful")
+                return hf_result.strip()
+        except Exception as e:
+            logger.warning(f"HF API flan-t5 failed: {e}")
+
+        try:
+            sm_result = sagemaker_client.invoke_text2text(
+                "flan-t5-base", prompt,
+                parameters={"max_length": max_length, "min_length": min_length}
+            )
+            if sm_result and len(sm_result.strip()) >= 5 and sm_result.strip().lower() != prompt.strip().lower():
+                logger.info("Flan-T5 generation via SageMaker successful")
+                return sm_result.strip()
+        except Exception as e:
+            logger.warning(f"SageMaker flan-t5 failed, falling back to local: {e}")
+
         try:
             if not self._load_general_t5_model():
                 return None
@@ -318,7 +419,6 @@ class WritingToolsService:
             
             generated_text = self._general_t5_tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Validate output - should not be empty or just the prompt
             if not generated_text or len(generated_text.strip()) < 5:
                 return None
             if generated_text.strip().lower() == prompt.strip().lower():
@@ -342,6 +442,10 @@ class WritingToolsService:
         
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag == 'replace':
+                orig_word_count = i2 - i1
+                corr_word_count = j2 - j1
+                if orig_word_count > 4 and corr_word_count < orig_word_count // 2:
+                    continue
                 original_segment = ' '.join(original_words[i1:i2])
                 corrected_segment = ' '.join(corrected_words[j1:j2])
                 errors.append({
@@ -353,6 +457,8 @@ class WritingToolsService:
                     "replacements": [corrected_segment]
                 })
             elif tag == 'delete':
+                if (i2 - i1) > 4:
+                    continue
                 original_segment = ' '.join(original_words[i1:i2])
                 errors.append({
                     "message": f"Remove '{original_segment}'",
@@ -363,6 +469,8 @@ class WritingToolsService:
                     "replacements": [""]
                 })
             elif tag == 'insert':
+                if (j2 - j1) > 4:
+                    continue
                 corrected_segment = ' '.join(corrected_words[j1:j2])
                 errors.append({
                     "message": f"Insert '{corrected_segment}'",
@@ -376,21 +484,24 @@ class WritingToolsService:
         return errors
     
     async def check_grammar(self, text: str) -> Dict[str, Any]:
-        """Check grammar using T5 model (primary) + LanguageTool API (supplementary)."""
+        """Check grammar using T5 model (primary) + LanguageTool API (supplementary).
+        
+        Builds corrected_text by applying individual replacements to the original
+        text instead of using T5 raw output, which avoids seq2seq truncation.
+        Returns a corrections array with offset/length/replacement for each fix
+        so the frontend can render a precise diff view.
+        """
         try:
             errors = []
-            corrected_text = text
             
-            # Step 1: Use T5 grammar model for correction (primary)
+            # Step 1: Use T5 grammar model for error detection
             t5_corrected = self._correct_grammar_with_t5(text)
             
             if t5_corrected and t5_corrected != text:
-                corrected_text = t5_corrected
-                # Find differences between original and T5 corrected
                 t5_errors = self._find_differences(text, t5_corrected)
                 errors.extend(t5_errors)
             
-            # Step 2: Also run LanguageTool for additional error explanations
+            # Step 2: Run LanguageTool for errors with exact positions
             lt_errors = []
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -408,11 +519,14 @@ class WritingToolsService:
                         matches = data.get("matches", [])
                         
                         for match in matches:
+                            offset = match.get("offset", 0)
+                            length = match.get("length", 0)
                             lt_error = {
                                 "message": match.get("message", ""),
                                 "short_message": match.get("shortMessage", ""),
-                                "offset": match.get("offset", 0),
-                                "length": match.get("length", 0),
+                                "offset": offset,
+                                "length": length,
+                                "original": text[offset:offset + length] if length > 0 else "",
                                 "context": match.get("context", {}).get("text", ""),
                                 "rule_id": match.get("rule", {}).get("id", ""),
                                 "rule_category": match.get("rule", {}).get("category", {}).get("name", ""),
@@ -422,19 +536,97 @@ class WritingToolsService:
             except Exception as lt_e:
                 logger.warning(f"LanguageTool API failed (using T5 only): {lt_e}")
             
-            # Merge errors - avoid duplicates by checking if correction already exists
-            existing_corrections = {e.get("replacement", "").lower() for e in errors}
+            # Merge errors - avoid duplicates by (offset, length) pairs
+            existing_spans = set()
+            for e in errors:
+                o = e.get("offset")
+                l = e.get("length")
+                if o is not None and l:
+                    existing_spans.add((o, l))
             for lt_error in lt_errors:
-                if lt_error["replacements"]:
-                    replacement = lt_error["replacements"][0].lower()
-                    if replacement not in existing_corrections:
-                        errors.append(lt_error)
-                        existing_corrections.add(replacement)
+                o = lt_error.get("offset")
+                l = lt_error.get("length")
+                if o is not None and l and (o, l) not in existing_spans:
+                    errors.append(lt_error)
+                    existing_spans.add((o, l))
+            
+            # Step 3: Build corrected_text by applying replacements to original text
+            # This avoids T5 seq2seq truncation by starting from the full original
+            replacement_ops: list[dict] = []
+            
+            for error in errors:
+                offset = error.get("offset")
+                length = error.get("length")
+                original_str = error.get("original", "")
+                replacements = error.get("replacements", [])
+                
+                if not replacements or replacements[0] == "":
+                    continue
+                
+                replacement_val = replacements[0]
+                
+                if offset is not None and length and length > 0:
+                    start = offset
+                    end = offset + length
+                    before_ok = (start == 0 or not text[start - 1].isalnum())
+                    after_ok = (end >= len(text) or not text[end].isalnum())
+                    if before_ok and after_ok:
+                        replacement_ops.append({
+                            "offset": offset,
+                            "length": length,
+                            "original": text[offset:offset + length],
+                            "replacement": replacement_val
+                        })
+                elif original_str:
+                    import re
+                    pattern = re.compile(r'(?<![\w])' + re.escape(original_str) + r'(?![\w])')
+                    m = pattern.search(text)
+                    if m:
+                        idx = m.start()
+                        new_end = idx + len(original_str)
+                        overlap = any(
+                            not (new_end <= op["offset"] or idx >= op["offset"] + op["length"])
+                            for op in replacement_ops
+                        )
+                        if not overlap:
+                            replacement_ops.append({
+                                "offset": idx,
+                                "length": len(original_str),
+                                "original": original_str,
+                                "replacement": replacement_val
+                            })
+            
+            # De-duplicate overlapping ops: keep the one with the earlier offset
+            replacement_ops.sort(key=lambda x: x["offset"])
+            deduped_ops: list[dict] = []
+            for op in replacement_ops:
+                if deduped_ops:
+                    prev = deduped_ops[-1]
+                    if op["offset"] < prev["offset"] + prev["length"]:
+                        continue
+                deduped_ops.append(op)
+            
+            # Apply replacements right-to-left to preserve offsets
+            corrected_text = text
+            for op in reversed(deduped_ops):
+                corrected_text = (
+                    corrected_text[:op["offset"]]
+                    + op["replacement"]
+                    + corrected_text[op["offset"] + op["length"]:]
+                )
+            
+            # Build corrections array for frontend diff rendering
+            corrections = [
+                {"offset": op["offset"], "length": op["length"],
+                 "original": op["original"], "replacement": op["replacement"]}
+                for op in deduped_ops
+            ]
             
             return {
                 "success": True,
                 "original_text": text,
                 "corrected_text": corrected_text,
+                "corrections": corrections,
                 "error_count": len(errors),
                 "errors": errors,
                 "language": "en-US",
@@ -446,7 +638,35 @@ class WritingToolsService:
     
     # ==================== Feature 2: Tone Detector ====================
     def detect_tone(self, text: str) -> Dict[str, Any]:
-        """Detect emotional tone using RoBERTa model."""
+        """Detect emotional tone using HF API (primary) → SageMaker (fallback) → local model (last resort)."""
+        for backend_name, invoke_fn in [
+            ("HF API", lambda: hf_client.invoke_classification("tone-detector", text, top_k=len(self.TONE_LABELS))),
+            ("SageMaker", lambda: sagemaker_client.invoke_classification("tone-detector", text, top_k=len(self.TONE_LABELS))),
+        ]:
+            try:
+                results = invoke_fn()
+                if results:
+                    tones = []
+                    for item in results:
+                        label = item.get("label", "")
+                        score = item.get("score", 0)
+                        confidence = round(score * 100, 2)
+                        if confidence > 5:
+                            tones.append({"tone": label, "confidence": confidence})
+                    if tones:
+                        tones = tones[:5]
+                        primary_tone = tones[0]
+                        logger.info(f"Tone detection via {backend_name} successful")
+                        return {
+                            "success": True,
+                            "primary_tone": primary_tone["tone"],
+                            "primary_confidence": primary_tone["confidence"],
+                            "all_tones": tones,
+                            "text_preview": text[:100] + "..." if len(text) > 100 else text
+                        }
+            except Exception as e:
+                logger.warning(f"{backend_name} tone detection failed: {e}")
+
         try:
             self._load_tone_model()
             
@@ -464,13 +684,12 @@ class WritingToolsService:
                 outputs = self._tone_model(**inputs)
                 probs = torch.sigmoid(outputs.logits)[0]
             
-            # Get top 5 tones
             top_indices = torch.argsort(probs, descending=True)[:5]
             tones = []
             for idx in top_indices:
                 tone_name = self.TONE_LABELS[idx.item()]
                 confidence = round(probs[idx].item() * 100, 2)
-                if confidence > 5:  # Only include if > 5%
+                if confidence > 5:
                     tones.append({
                         "tone": tone_name,
                         "confidence": confidence
@@ -994,13 +1213,45 @@ class WritingToolsService:
     
     # ==================== Feature 6: Paraphraser ====================
     def paraphrase(self, text: str, mode: str = "standard") -> Dict[str, Any]:
-        """Paraphrase text using comprehensive rule-based approach."""
+        """Paraphrase text using CoEdIT-large instruction-tuned model."""
+        try:
+            logger.info(f"Paraphrasing text in mode: {mode}")
+
+            mode_lower = mode.lower()
+            instruction_map = {
+                "standard": "Paraphrase this sentence",
+                "simple": "Simplify this sentence",
+                "formal": "Write this more formally",
+                "creative": "Paraphrase this sentence",
+                "fluency": "Make this text coherent",
+            }
+            instruction = instruction_map.get(mode_lower, "Paraphrase this sentence")
+
+            paraphrased = self._edit_text_with_coedit(text, instruction)
+
+            if not paraphrased or paraphrased == text:
+                paraphrased = self._edit_text_with_coedit(text, "Paraphrase this sentence")
+
+            changes_made = sum(1 for a, b in zip(text.split(), paraphrased.split()) if a != b)
+
+            return {
+                "success": True,
+                "original_text": text,
+                "paraphrased_text": paraphrased,
+                "mode": mode,
+                "original_word_count": len(text.split()),
+                "paraphrased_word_count": len(paraphrased.split()),
+                "changes_made": changes_made,
+                "used_t5": True
+            }
+        except Exception as e:
+            logger.error(f"Paraphrasing failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _paraphrase_rule_based_legacy(self, text: str, mode: str = "standard") -> Dict[str, Any]:
+        """Legacy rule-based paraphraser kept as fallback."""
         try:
             import random
-            
-            logger.info(f"Paraphrasing text in mode: {mode}")
-            
-            # Comprehensive synonym dictionary - expanded with more common words
             synonyms = {
                 # Common verbs
                 "use": ["utilize", "employ", "apply", "leverage"],
@@ -1491,7 +1742,7 @@ class WritingToolsService:
     
     # ==================== Feature 9: Translator ====================
     def translate(self, text: str, source_lang: str, target_lang: str) -> Dict[str, Any]:
-        """Translate text using Helsinki-NLP models."""
+        """Translate text using HF API (primary) → SageMaker (fallback) → local model (last resort)."""
         try:
             lang_pair = f"{source_lang}-{target_lang}"
             
@@ -1501,26 +1752,38 @@ class WritingToolsService:
                     "error": f"Language pair {lang_pair} not supported. Supported: {list(self.SUPPORTED_LANGUAGES.keys())}"
                 }
             
-            self._load_translator_model(lang_pair)
-            
-            if lang_pair not in self._translator_models:
-                return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
-            
-            tokenizer, model = self._translator_models[lang_pair]
-            
-            # Split into sentences for better translation
+            endpoint_key = f"translator-{lang_pair}"
             sentences = re.split(r'(?<=[.!?])\s+', text)
             translated_sentences = []
-            
+            active_backend = "hf"
+
             for sentence in sentences:
                 if not sentence.strip():
                     continue
-                    
+                if active_backend == "hf":
+                    hf_result = hf_client.invoke_translation(endpoint_key, sentence)
+                    if hf_result:
+                        translated_sentences.append(hf_result)
+                        continue
+                    else:
+                        active_backend = "sagemaker"
+                        logger.info(f"HF API translator {lang_pair} unavailable, trying SageMaker")
+                if active_backend == "sagemaker":
+                    sm_result = sagemaker_client.invoke_translation(endpoint_key, sentence)
+                    if sm_result:
+                        translated_sentences.append(sm_result)
+                        continue
+                    else:
+                        active_backend = "local"
+                        logger.info(f"SageMaker translator {lang_pair} unavailable, falling back to local")
+
+                self._load_translator_model(lang_pair)
+                if lang_pair not in self._translator_models:
+                    return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
+                tokenizer, model = self._translator_models[lang_pair]
                 inputs = tokenizer(sentence, return_tensors="pt", truncation=True, max_length=512)
-                
                 with torch.no_grad():
                     outputs = model.generate(**inputs, max_length=512, num_beams=4)
-                
                 translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
                 translated_sentences.append(translated)
             
@@ -1775,15 +2038,57 @@ class WritingToolsService:
     
     # ==================== Feature 14: Content Improver ====================
     def improve_content(self, text: str, focus: str = "clarity") -> Dict[str, Any]:
-        """Improve content using comprehensive rule-based approach."""
+        """Improve content using CoEdIT-large instruction-tuned model."""
+        try:
+            logger.info(f"Improving content with focus: {focus}")
+
+            focus_lower = focus.lower()
+            instruction_map = {
+                "clarity": "Simplify this sentence",
+                "conciseness": "Simplify this sentence",
+                "engagement": "Make this text coherent",
+                "professionalism": "Write this more formally",
+                "seo": "Simplify this sentence",
+            }
+            instruction = instruction_map.get(focus_lower, "Make this text coherent")
+
+            improved_text = self._edit_text_with_coedit(text, instruction)
+
+            if not improved_text or improved_text == text:
+                improved_text = self._edit_text_with_coedit(text, "Make this text coherent")
+
+            suggestions = [f"Text improved for {focus} using advanced language model"]
+            changes_made = sum(1 for a, b in zip(text.split(), improved_text.split()) if a != b)
+
+            original_readability = self.analyze_readability(text)
+            improved_readability = self.analyze_readability(improved_text)
+
+            return {
+                "success": True,
+                "original_text": text,
+                "improved_text": improved_text,
+                "focus": focus,
+                "suggestions": suggestions,
+                "original_word_count": len(text.split()),
+                "improved_word_count": len(improved_text.split()),
+                "changes_made": changes_made,
+                "readability_change": {
+                    "original_score": original_readability.get("flesch_reading_ease", 0),
+                    "improved_score": improved_readability.get("flesch_reading_ease", 0)
+                },
+                "used_t5": True
+            }
+        except Exception as e:
+            logger.error(f"Content improvement failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _improve_content_rule_based_legacy(self, text: str, focus: str = "clarity") -> Dict[str, Any]:
+        """Legacy rule-based content improver kept as fallback."""
         try:
             import random
-            
-            logger.info(f"Improving content with focus: {focus}")
             improved_text = text
             suggestions = []
             changes_made = 0
-            
             focus_lower = focus.lower()
             
             # Extended clarity replacements including business clichés
