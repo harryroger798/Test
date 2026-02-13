@@ -7,6 +7,7 @@ import { Loader2, ArrowRight } from 'lucide-react';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { usePageSEO } from '@/hooks/usePageSEO';
+import { useMTCaptcha } from '@/hooks/useMTCaptcha';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 
 export default function LoginPage() {
@@ -23,9 +24,18 @@ export default function LoginPage() {
     noIndex: true,
   });
 
+  const { getToken, reset: resetCaptcha } = useMTCaptcha('mtcaptcha-login');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const captchaToken = getToken();
+    if (!captchaToken) {
+      setError('Please complete the CAPTCHA verification.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -34,6 +44,7 @@ export default function LoginPage() {
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -99,7 +110,8 @@ export default function LoginPage() {
                             className="bg-black/30 border-white/10 text-white placeholder:text-gray-600 rounded-xl h-12 focus:border-emerald-500/50 focus:ring-emerald-500/20"
                           />
                         </div>
-                        <Button
+            <div id="mtcaptcha-login" className="mt-1 mb-1" />
+            <Button
               type="submit"
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-medium rounded-full h-12"
               disabled={loading}

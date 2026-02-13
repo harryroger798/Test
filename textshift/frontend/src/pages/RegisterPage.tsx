@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/authStore';
 import { triggerConfetti } from '@/components/animations/ConfettiEffect';
 import { ParticlesBackground, GradientBackground, NoiseOverlay } from '@/components/animations';
 import { usePageSEO } from '@/hooks/usePageSEO';
+import { useMTCaptcha } from '@/hooks/useMTCaptcha';
 import SocialLoginButtons from '@/components/SocialLoginButtons';
 
 export default function RegisterPage() {
@@ -26,9 +27,18 @@ export default function RegisterPage() {
     keywords: 'TextShift signup, free AI detector, create account, AI writing tools free',
   });
 
+  const { getToken, reset: resetCaptcha } = useMTCaptcha('mtcaptcha-register');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const captchaToken = getToken();
+    if (!captchaToken) {
+      setError('Please complete the CAPTCHA verification.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -37,8 +47,9 @@ export default function RegisterPage() {
       triggerConfetti();
       // Redirect to verification pending page instead of dashboard
       setTimeout(() => navigate('/verify-email-pending', { state: { email } }), 1500);
-    }catch (err: any) {
+    } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -111,6 +122,7 @@ export default function RegisterPage() {
                 className="bg-black/30 border-white/10 text-white placeholder:text-gray-600 rounded-xl h-12 focus:border-emerald-500/50 focus:ring-emerald-500/20"
               />
             </div>
+            <div id="mtcaptcha-register" className="mt-1 mb-1" />
             <Button
               type="submit"
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-medium rounded-full h-12"

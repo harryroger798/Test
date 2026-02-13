@@ -69,6 +69,11 @@ const queryClient= new QueryClient({
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  
+  if (!hasHydrated) {
+    return <PageLoader />;
+  }
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -83,6 +88,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  
+  if (!hasHydrated) {
+    return <PageLoader />;
+  }
   
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
