@@ -120,7 +120,7 @@ export default function RefundPolicyPage() {
               <li>Refunds will be credited to the original payment method used during purchase.</li>
               <li>Processing time depends on your bank or payment provider (typically 5-10 business days).</li>
               <li>You will receive an email confirmation once the refund has been initiated.</li>
-              <li>All payments are processed through Razorpay, and refunds follow their standard processing times.</li>
+              <li>All payments are processed through PayPal, and refunds follow their standard processing times.</li>
             </ul>
           </section>
 

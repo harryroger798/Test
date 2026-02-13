@@ -95,7 +95,7 @@ export default function TermsPage() {
               <li><strong className="text-white">Starter Plan ($9/month):</strong> 50,000 words/month for all tools.</li>
               <li><strong className="text-white">Pro Plan ($19/month):</strong> Unlimited words for all tools.</li>
               <li><strong className="text-white">Enterprise Plan ($49/month):</strong> Unlimited words plus API access and priority support.</li>
-              <li>All payments are processed securely through Razorpay.</li>
+              <li>All payments are processed securely through PayPal.</li>
               <li>Prices are in USD and may be subject to applicable taxes.</li>
               <li>Credits purchased never expire.</li>
             </ul>
