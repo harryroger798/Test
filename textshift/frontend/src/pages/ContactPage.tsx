@@ -4,6 +4,7 @@ import { ArrowLeft, Mail, MapPin, Phone, Send, Loader2, CheckCircle, Building } 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useMTCaptcha } from '@/hooks/useMTCaptcha';
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:8000');
 
@@ -18,10 +19,19 @@ export default function ContactPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  const { getToken, reset: resetCaptcha } = useMTCaptcha('mtcaptcha-contact');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+
+    const captchaToken = getToken();
+    if (!captchaToken) {
+      setError('Please complete the CAPTCHA verification.');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const response = await fetch(`${API_URL}/api/contact/support`, {
@@ -41,6 +51,7 @@ export default function ContactPage() {
       }
     } catch {
       setError('Failed to send message. Please email us directly at support@mail.textshift.org');
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -201,6 +212,7 @@ export default function ContactPage() {
                   </div>
                 )}
 
+                <div id="mtcaptcha-contact" className="mt-1 mb-1" />
                 <Button
                   type="submit"
                   disabled={loading}
