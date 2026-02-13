@@ -27,8 +27,7 @@ const FeaturesPage = lazy(() => import('@/pages/FeaturesPage'));
 
 const ShippingPolicyPage = lazy(() => import('@/pages/ShippingPolicyPage'));
 const ContactPage = lazy(() => import('@/pages/ContactPage'));
-const PricingDetailsPage = lazy(() => import('@/pages/PricingDetailsPage'));
-const TermsPage = lazy(() => import('@/pages/TermsPage'));
+const TermsPage= lazy(() => import('@/pages/TermsPage'));
 const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicyPage'));
 const RefundPolicyPage = lazy(() => import('@/pages/RefundPolicyPage'));
 const Auth0Callback = lazy(() => import('@/pages/Auth0Callback'));
@@ -112,10 +111,9 @@ function App() {
                         <Route path="/api-docs" element={<ApiDocsPage />} />
                         <Route path="/features" element={<FeaturesPage />} />
             
-                        {/* Policy pages for Razorpay compliance */}
+                        {/* Policy & info pages */}
                         <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
                         <Route path="/contact" element={<ContactPage />} />
-                        <Route path="/pricing-details" element={<PricingDetailsPage />} />
                         <Route path="/terms" element={<TermsPage />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                         <Route path="/refund-policy" element={<RefundPolicyPage />} />
