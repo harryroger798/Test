@@ -22,12 +22,25 @@ export function useMTCaptcha(domId: string) {
   useEffect(() => {
     if (rendered.current) return;
 
+    const applyDarkTheme = () => {
+      const el = document.getElementById(domId);
+      if (!el) return;
+      const iframe = el.querySelector('iframe');
+      if (iframe) {
+        iframe.style.filter = 'invert(0.88) hue-rotate(180deg)';
+        iframe.style.borderRadius = '8px';
+      }
+    };
+
     const render = () => {
       if (window.mtcaptcha && typeof window.mtcaptcha.renderUI === 'function') {
         const el = document.getElementById(domId);
         if (el && !el.hasChildNodes()) {
           window.mtcaptcha.renderUI(domId);
           rendered.current = true;
+          setTimeout(applyDarkTheme, 300);
+        } else if (el && el.querySelector('iframe')) {
+          applyDarkTheme();
         }
       }
     };

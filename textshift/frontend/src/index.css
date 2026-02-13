@@ -564,6 +564,12 @@
   }
 }
 
+/* MTCaptcha dark theme styling - invert white widget to dark for dark mode */
+[id^="mtcaptcha-"] iframe {
+  border-radius: 8px;
+  filter: invert(0.85) hue-rotate(180deg);
+}
+
 /* Coarse pointer (touch) optimizations */
 @media (pointer: coarse) {
   button,
