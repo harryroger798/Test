@@ -27,7 +27,6 @@ const FeaturesPage = lazy(() => import('@/pages/FeaturesPage'));
 
 const ShippingPolicyPage = lazy(() => import('@/pages/ShippingPolicyPage'));
 const ContactPage = lazy(() => import('@/pages/ContactPage'));
-const PricingDetailsPage = lazy(() => import('@/pages/PricingDetailsPage'));
 const TermsPage = lazy(() => import('@/pages/TermsPage'));
 const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicyPage'));
 const RefundPolicyPage = lazy(() => import('@/pages/RefundPolicyPage'));
@@ -70,6 +69,11 @@ const queryClient= new QueryClient({
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  
+  if (!hasHydrated) {
+    return <PageLoader />;
+  }
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -84,6 +88,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  
+  if (!hasHydrated) {
+    return <PageLoader />;
+  }
   
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
@@ -115,7 +124,6 @@ function App() {
                         {/* Policy pages for Razorpay compliance */}
                         <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
                         <Route path="/contact" element={<ContactPage />} />
-                        <Route path="/pricing-details" element={<PricingDetailsPage />} />
                         <Route path="/terms" element={<TermsPage />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                         <Route path="/refund-policy" element={<RefundPolicyPage />} />

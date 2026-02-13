@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     IDRIVE_ACCESS_KEY: str = ""
     IDRIVE_SECRET_KEY: str = ""
 
+    # MTCaptcha
+    MTCAPTCHA_PRIVATE_KEY: str = ""  # Set via environment variable
+
     # Frontend URL for email links
     FRONTEND_URL: str = "https://textshift.org"
     

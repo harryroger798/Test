@@ -80,24 +80,21 @@ export const clearApiCache = () => {
 
 // Auth API
 export const authApi = {
-  register: async (email: string, password: string, fullName?: string) => {
+  register: async (email: string, password: string, fullName?: string, captchaToken?: string) => {
     const response = await api.post('/api/auth/register', {
       email,
       password,
       full_name: fullName,
+      captcha_token: captchaToken,
     });
     return response.data;
   },
 
-  login: async (email: string, password: string) => {
-    const formData = new URLSearchParams();
-    formData.append('username', email);
-    formData.append('password', password);
-    
-    const response = await api.post('/api/auth/login', formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+  login: async (email: string, password: string, captchaToken?: string) => {
+    const response = await api.post('/api/auth/token', {
+      email,
+      password,
+      captcha_token: captchaToken,
     });
     return response.data;
   },
@@ -248,6 +245,7 @@ export const contactApi = {
     phone?: string;
     message: string;
     plan_interest?: string;
+    captcha_token?: string;
   }) => {
     const response = await api.post('/api/contact/sales', data);
     return response.data;
