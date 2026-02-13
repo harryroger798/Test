@@ -1,0 +1,12 @@
+init_config:
+
+instances:
+  - host: localhost
+    port: 5432
+    username: datadog
+    dbname: textshift
+    tags:
+      - env:production
+      - service:textshift-db
+    collect_activity_metrics: true
+    collect_database_size_metrics: true

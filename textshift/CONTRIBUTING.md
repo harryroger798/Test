@@ -108,6 +108,30 @@ Models are stored on the droplet at `/opt/textshift/models/` and backed up to iD
 5. Add inference code to `ml_service.py` or `writing_tools_service.py`
 6. Add HuggingFace Inference API support in `hf_inference_client.py`
 
+## Monitoring and Observability
+
+TextShift uses Datadog for full-stack observability. See [DATADOG.md](DATADOG.md) for complete details.
+
+### Key Components
+- **Datadog Agent** runs on the droplet collecting system metrics, logs, and database stats
+- **APM** via `ddtrace-run` wrapping gunicorn (zero application code changes)
+- **RUM** via browser SDK in `index.html` for frontend performance
+- **Synthetic monitors** check uptime every 5 minutes
+- **Alerts** fire for disk/CPU/memory/latency/error thresholds
+
+### After Deploying Changes
+1. Check APM traces at [app.datadoghq.com/apm/traces](https://app.datadoghq.com/apm/traces)
+2. Check logs at [app.datadoghq.com/logs](https://app.datadoghq.com/logs)
+3. Verify no new errors in monitors at [app.datadoghq.com/monitors/manage](https://app.datadoghq.com/monitors/manage)
+
+### Datadog Config Files
+Configuration references are in `backend/datadog/`:
+- `agent-config.yaml` - Main agent config
+- `journald.yaml` - Log collection
+- `postgres.yaml` - Database monitoring
+- `nginx.yaml` - Web server monitoring
+- `textshift-backend.service` - systemd service with ddtrace
+
 ## Environment Variables
 
 Required environment variables are documented in the README. Store them in `/opt/textshift/backend/.env` on the droplet. Never commit `.env` files to the repository.

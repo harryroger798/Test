@@ -144,6 +144,32 @@ scp -r dist/* root@143.110.183.71:/opt/textshift/frontend/dist/
 | Pro | Unlimited | + Bulk processing |
 | Enterprise | Unlimited | + API access |
 
+## Monitoring with Datadog
+
+Full observability via Datadog (Startup Plan, $100K credits). See [DATADOG.md](DATADOG.md) for complete setup details.
+
+| Component | What It Monitors |
+|-----------|-----------------|
+| Infrastructure | CPU, memory, disk, network (Datadog Agent) |
+| APM | Request traces, latency, errors (`ddtrace-run` wrapper) |
+| Logs | systemd journal (backend, nginx, PostgreSQL) |
+| Database | PostgreSQL queries, connections, table sizes |
+| RUM | Frontend page loads, JS errors, user sessions |
+| Session Replay | Full user interaction recordings |
+| Synthetics | Homepage, API, Grammar Tool uptime + SSL expiry |
+| Alerts | Disk >80%, CPU >90%, Memory >90%, Latency >10s, Errors >5% |
+| Profiler | Continuous CPU/memory profiling |
+| ASM | Application security / attack detection |
+
+**Dashboard:** [app.datadoghq.com](https://app.datadoghq.com)
+
+Configuration files in `backend/datadog/`:
+- `agent-config.yaml` - Datadog Agent main config
+- `journald.yaml` - Log collection from systemd
+- `postgres.yaml` - PostgreSQL monitoring
+- `nginx.yaml` - Nginx monitoring
+- `textshift-backend.service` - systemd service with ddtrace
+
 ## External Services
 - **Mailgun** - transactional email (verification, password reset)
 - **PayPal** - subscription payments
@@ -152,6 +178,7 @@ scp -r dist/* root@143.110.183.71:/opt/textshift/frontend/dist/
 - **HuggingFace** - inference API + model hosting
 - **iDrive e2** - S3-compatible storage for model backups
 - **Google Analytics 4** - cross-domain tracking (textshift.org + textshift.blog)
+- **Datadog** - infrastructure monitoring, APM, RUM, synthetics, alerts
 
 ## Related
 - **TextShift Blog:** [textshift.blog](https://textshift.blog) (separate repo, Sanity CMS + Next.js)

@@ -1,0 +1,16 @@
+api_key: <DD_API_KEY>
+site: datadoghq.com
+hostname: textshift-production
+tags:
+  - env:production
+  - service:textshift
+  - project:textshift
+
+apm_config:
+  enabled: true
+
+logs_enabled: true
+
+process_config:
+  process_collection:
+    enabled: true

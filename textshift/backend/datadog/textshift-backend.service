@@ -1,0 +1,22 @@
+[Unit]
+Description=TextShift FastAPI Backend
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/textshift/backend
+Environment=PATH=/opt/textshift/backend/venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=DD_SERVICE=textshift-backend
+Environment=DD_ENV=production
+Environment=DD_VERSION=1.0.0
+Environment=DD_TRACE_ENABLED=true
+Environment=DD_LOGS_INJECTION=true
+Environment=DD_PROFILING_ENABLED=true
+Environment=DD_APPSEC_ENABLED=true
+ExecStart=/opt/textshift/backend/venv/bin/ddtrace-run /opt/textshift/backend/venv/bin/gunicorn app.main:app -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 --timeout 300
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

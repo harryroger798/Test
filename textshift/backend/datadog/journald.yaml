@@ -1,0 +1,9 @@
+logs:
+  - type: journald
+    container_mode: true
+    include_units:
+      - textshift-backend.service
+      - nginx.service
+      - postgresql@14-main.service
+    service: textshift
+    source: journald
