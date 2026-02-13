@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# harryroger798/Test
 
-## Getting Started
+This repository contains two separate projects:
 
-First, run the development server:
+## Projects
+
+### 1. VedicStarAstro
+Multilingual Vedic astrology platform supporting 10 languages.
+
+- **Live:** [https://vedicstarastro.com](https://vedicstarastro.com)
+- **Stack:** Next.js + TypeScript + Tailwind CSS + Express.js
+- **Branch:** `setup-main` (default)
+- **Code:** Root directory (`src/`, `server/`, `backend/vedicstarastro-api/`)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install && npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. TextShift
+AI-powered content platform with 14 writing tools, AI detection, humanization, and plagiarism checking.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Live:** [https://textshift.org](https://textshift.org)
+- **Stack:** React/Vite + FastAPI + PyTorch/ONNX
+- **Branch:** `textshift/main`
+- **Code:** `textshift/` directory (`textshift/backend/`, `textshift/frontend/`)
+- **Docs:** [textshift/README.md](textshift/README.md) | [textshift/CHANGELOG.md](textshift/CHANGELOG.md)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Repository Structure
 
-## Learn More
+```
+/                              # VedicStarAstro (Next.js)
+  src/app/                     #   Pages and routes
+  src/components/              #   React components
+  src/lib/                     #   Utilities and i18n
+  server/                      #   Express.js backend
+  backend/vedicstarastro-api/  #   Python API
+  .github/                     #   CI/CD, issue templates, contributing guide
 
-To learn more about Next.js, take a look at the following resources:
+textshift/                     # TextShift (separate project)
+  backend/app/                 #   FastAPI backend + ML services
+  frontend/src/                #   React/Vite frontend
+  README.md                    #   TextShift documentation
+  CHANGELOG.md                 #   TextShift changes
+  CONTRIBUTING.md              #   TextShift dev guide
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Contributing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) for setup, deployment, and branch guidelines for both projects.
