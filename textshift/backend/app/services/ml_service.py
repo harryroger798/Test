@@ -1824,6 +1824,7 @@ class MLModelService:
                 "total_models": 10  # 1 RoBERTa + 9 TriBoost (3 versions x 3 algorithms)
             },
             "level_analysis": self._perform_10_level_analysis(text, final_ai_prob),
+            "sentence_analysis": self._analyze_sentences(text),
             "model_used": "super_ensemble"
         }
         
