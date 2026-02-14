@@ -2,12 +2,12 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-export default function ShippingPolicyPage() {
+export default function CookiePolicyPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (containerRef.current) {
-      containerRef.current.innerHTML = '<div name="termly-embed" data-id="7d65b8f7-1e9c-4999-bbe7-42fdcbb0c6d0"></div>';
+      containerRef.current.innerHTML = '<div name="termly-embed" data-id="49f1e56d-5b6c-4750-89d6-2b001c3e7571"></div>';
     }
     const existing = document.getElementById('termly-jssdk');
     if (existing) existing.remove();
@@ -47,7 +47,7 @@ export default function ShippingPolicyPage() {
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
             <Link to="/privacy-policy" className="hover:text-white transition">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-white transition">Terms & Conditions</Link>
-            <Link to="/cookie-policy" className="hover:text-white transition">Cookie Policy</Link>
+            <Link to="/shipping-policy" className="hover:text-white transition">Shipping Policy</Link>
             <Link to="/refund-policy" className="hover:text-white transition">Refund Policy</Link>
             <Link to="/contact" className="hover:text-white transition">Contact Us</Link>
           </div>

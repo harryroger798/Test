@@ -1153,6 +1153,7 @@ export default function LandingPage() {
                 <Link to="/privacy-policy" className="hover:text-white transition">Privacy Policy</Link>
                 <Link to="/refund-policy" className="hover:text-white transition">Refund Policy</Link>
                 <Link to="/shipping-policy" className="hover:text-white transition">Shipping Policy</Link>
+                <Link to="/cookie-policy" className="hover:text-white transition">Cookie Policy</Link>
               </div>
             </div>
             <div className="text-center md:text-left">
