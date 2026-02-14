@@ -14,6 +14,7 @@ import pickle
 from botocore.config import Config
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, T5Tokenizer, T5ForConditionalGeneration
 from optimum.onnxruntime import ORTModelForSeq2SeqLM
 from sentence_transformers import SentenceTransformer
@@ -1505,6 +1506,29 @@ class MLModelService:
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
         return result.strip()
 
+    def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
+        """Humanize a single chunk via SageMaker serverless endpoint."""
+        try:
+            input_text = f"humanize: {chunk}"
+            word_count = len(chunk.split())
+            max_new = min(int(word_count * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": 1.0,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            result = sagemaker_client.invoke_text2text("humanizer", input_text, parameters)
+            if result and len(result) > 20:
+                return self._clean_model_output(result)
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker humanize chunk failed: {e}")
+            return None
+
     def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
         """Humanize a single sentence using ONNX INT8 or PyTorch T5 model."""
         try:
@@ -2145,11 +2169,46 @@ class MLModelService:
             chunks = self._build_chunks(text)
             logger.info(f"Text has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks for humanization")
 
-            result_chunks: List[str] = []
-            for idx, chunk in enumerate(chunks):
-                logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
-                humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
-                result_chunks.append(humanized)
+            use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+            result_chunks: List[str] = [None] * len(chunks)
+            sagemaker_used = False
+
+            if use_sagemaker:
+                logger.info(f"Attempting parallel SageMaker inference for {len(chunks)} chunks (max_workers=4)")
+                failed_indices: List[int] = []
+                try:
+                    with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                        future_to_idx = {
+                            executor.submit(self._humanize_chunk_via_sagemaker, chunk): idx
+                            for idx, chunk in enumerate(chunks)
+                        }
+                        for future in as_completed(future_to_idx):
+                            idx = future_to_idx[future]
+                            try:
+                                result = future.result()
+                                if result:
+                                    result_chunks[idx] = result
+                                    logger.info(f"SageMaker chunk {idx + 1}/{len(chunks)} done ({len(result.split())} words)")
+                                else:
+                                    failed_indices.append(idx)
+                            except Exception:
+                                failed_indices.append(idx)
+
+                    if failed_indices:
+                        logger.info(f"SageMaker failed for {len(failed_indices)} chunks, falling back to local ONNX")
+                        for idx in failed_indices:
+                            result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
+                    sagemaker_used = not failed_indices
+                except Exception as e:
+                    logger.warning(f"SageMaker parallel processing failed: {e}, falling back to local ONNX")
+                    for idx, chunk in enumerate(chunks):
+                        if result_chunks[idx] is None:
+                            result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+            else:
+                for idx, chunk in enumerate(chunks):
+                    logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
+                    humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+                    result_chunks[idx] = humanized
 
             model_output = ' '.join(result_chunks)
             model_output = self._clean_model_output(model_output)
@@ -2174,6 +2233,7 @@ class MLModelService:
                 "spelling_pass_applied": final_output != before_spelling,
                 "chunked": True,
                 "chunk_count": len(chunks),
+                "sagemaker_used": sagemaker_used,
             }
 
         model_output = self._humanize_single(text, use_post_processor=False, passes=passes, mode=mode)
