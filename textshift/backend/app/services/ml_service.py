@@ -2084,7 +2084,28 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    _SENTENCE_LEVEL_WORD_THRESHOLD = 200
+    _CHUNK_WORD_LIMIT = 400
+
+    def _build_chunks(self, text: str) -> List[str]:
+        """Split text into chunks of roughly _CHUNK_WORD_LIMIT words, breaking at sentence boundaries."""
+        sentences = self._split_sentences_preserve(text)
+        chunks: List[str] = []
+        current_chunk: List[str] = []
+        current_words = 0
+
+        for sentence in sentences:
+            sentence_words = len(sentence.split())
+            if current_words + sentence_words > self._CHUNK_WORD_LIMIT and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_words = sentence_words
+            else:
+                current_chunk.append(sentence)
+                current_words += sentence_words
+
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        return chunks
 
     def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
         """Humanize AI text using Stealthwriter T5 Chaos model.
@@ -2093,10 +2114,9 @@ class MLModelService:
         Preserved sentences are kept exactly as-is in the output.
         Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
         
-        Long texts (>200 words) are automatically split into individual
-        sentences and each sentence is humanized separately, because the T5
-        model was fine-tuned for sentence-level paraphrasing and produces
-        truncated output on paragraph-level input.
+        Long texts (>400 words) are automatically split into chunks of ~400 words
+        at sentence boundaries. Each chunk is humanized separately to avoid the
+        T5 tokenizer's 1024-token truncation limit.
         """
         mode_config = {
             'academic': {'temperature': 0.7, 'top_p': 0.9},
@@ -2108,18 +2128,18 @@ class MLModelService:
             return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
 
         word_count = len(text.split())
-        if word_count > self._SENTENCE_LEVEL_WORD_THRESHOLD:
-            logger.info(f"Text has {word_count} words (>{self._SENTENCE_LEVEL_WORD_THRESHOLD}), using sentence-level humanization")
-            sentences = self._split_sentences_preserve(text)
-            logger.info(f"Split into {len(sentences)} sentences for humanization")
+        if word_count > self._CHUNK_WORD_LIMIT:
+            chunks = self._build_chunks(text)
+            logger.info(f"Text has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks for humanization")
 
-            result_sentences: List[str] = []
-            for idx, sentence in enumerate(sentences):
-                logger.info(f"Humanizing sentence {idx + 1}/{len(sentences)}")
-                humanized = self._humanize_single(sentence, use_post_processor=False, passes=passes, mode=mode)
-                result_sentences.append(humanized)
+            result_chunks: List[str] = []
+            for idx, chunk in enumerate(chunks):
+                logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
+                humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+                result_chunks.append(humanized)
 
-            model_output = ' '.join(result_sentences)
+            model_output = ' '.join(result_chunks)
+            model_output = self._clean_model_output(model_output)
             if use_post_processor:
                 model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode)
             before_spelling = model_output
@@ -2139,8 +2159,8 @@ class MLModelService:
                 "used_fallback": False,
                 "mode": mode,
                 "spelling_pass_applied": final_output != before_spelling,
-                "sentence_level": True,
-                "sentence_count": len(sentences),
+                "chunked": True,
+                "chunk_count": len(chunks),
             }
 
         model_output = None
