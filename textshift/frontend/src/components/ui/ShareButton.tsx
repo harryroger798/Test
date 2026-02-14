@@ -56,9 +56,9 @@ export function ShareButton({
 
   const shareLinks = [
     {
-      name: 'Twitter',
+      name: 'X',
       icon: Twitter,
-      url: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
+      url: `https://x.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
     },
     {
       name: 'LinkedIn',

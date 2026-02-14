@@ -1161,8 +1161,8 @@ export default function LandingPage() {
               <div className="flex flex-col gap-2 text-gray-400 text-sm">
                 <Link to="/contact" className="hover:text-white transition">Contact Us</Link>
                 <a href="#faq" className="hover:text-white transition">FAQ</a>
-                <a href="https://twitter.com/textshift" className="hover:text-white transition">Twitter</a>
-                <a href="https://linkedin.com/company/textshift" className="hover:text-white transition">LinkedIn</a>
+                <a href="https://x.com/TextShift" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">X (Twitter)</a>
+                <a href="https://www.linkedin.com/company/textshift-ai/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">LinkedIn</a>
               </div>
             </div>
           </div>
