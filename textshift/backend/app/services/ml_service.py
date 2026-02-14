@@ -1438,25 +1438,33 @@ class MLModelService:
             return False
     
     def _load_humanizer(self):
-        """Load Stealthwriter T5 Chaos humanizer (fine-tuned model only)."""
+        """Load Stealthwriter T5 Chaos humanizer (ONNX INT8 preferred, PyTorch fallback)."""
         if self._current_model != "humanizer":
             self._unload_all_models()
 
+            onnx_path = settings.HUMANIZER_ONNX_MODEL_PATH
             model_path = settings.HUMANIZER_MODEL_PATH
-            if not os.path.exists(os.path.join(model_path, "model.safetensors")):
-                self._download_humanizer_from_idrive()
-            
-            logger.info("Loading Stealthwriter T5 Chaos humanizer...")
             self._is_onnx_humanizer = False
-            if os.path.exists(os.path.join(model_path, "model.safetensors")):
+
+            if os.path.exists(os.path.join(onnx_path, "encoder_model.onnx")):
+                logger.info("Loading Stealthwriter T5 Chaos ONNX INT8 humanizer...")
+                self._humanizer_tokenizer = T5Tokenizer.from_pretrained(onnx_path)
+                self._humanizer_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_path)
+                self._is_onnx_humanizer = True
+                logger.info(f"Loaded ONNX INT8 humanizer from {onnx_path}")
+            elif os.path.exists(os.path.join(model_path, "model.safetensors")):
+                logger.info("Loading Stealthwriter T5 Chaos PyTorch humanizer...")
                 self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
                 self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
                 self._humanizer_model.eval()
-                logger.info(f"Loaded Stealthwriter T5 Chaos model from {model_path}")
+                logger.info(f"Loaded PyTorch humanizer from {model_path}")
             else:
-                logger.warning(f"Local model not found at {model_path}, using base T5")
-                self._humanizer_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-                self._humanizer_model = T5ForConditionalGeneration.from_pretrained("t5-base")
+                if not os.path.exists(os.path.join(model_path, "model.safetensors")):
+                    self._download_humanizer_from_idrive()
+                self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
+                self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
+                self._humanizer_model.eval()
+                logger.info(f"Loaded PyTorch humanizer from {model_path} (after download)")
             self._current_model = "humanizer"
     
     def _load_plagiarism(self):
@@ -1498,24 +1506,27 @@ class MLModelService:
         return result.strip()
 
     def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
-        """Humanize a single sentence using the local T5 model."""
+        """Humanize a single sentence using ONNX INT8 or PyTorch T5 model."""
         try:
             self._load_humanizer()
             input_text = f"humanize: {sentence}"
             inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
             input_token_count = inputs['input_ids'].shape[1]
             max_new = min(int(input_token_count * 1.3), 512)
-            with torch.no_grad():
-                outputs = self._humanizer_model.generate(
-                    **inputs,
-                    max_new_tokens=max_new,
-                    num_beams=1,
-                    do_sample=True,
-                    temperature=1.0,
-                    top_p=0.95,
-                    repetition_penalty=2.5,
-                    no_repeat_ngram_size=3
-                )
+            gen_kwargs = dict(
+                max_new_tokens=max_new,
+                num_beams=1,
+                do_sample=True,
+                temperature=1.0,
+                top_p=0.95,
+                repetition_penalty=2.5,
+                no_repeat_ngram_size=3,
+            )
+            if self._is_onnx_humanizer:
+                outputs = self._humanizer_model.generate(**inputs, **gen_kwargs)
+            else:
+                with torch.no_grad():
+                    outputs = self._humanizer_model.generate(**inputs, **gen_kwargs)
             model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
             model_output = self._clean_model_output(model_output)
         except Exception as e:
