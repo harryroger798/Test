@@ -1776,60 +1776,120 @@ class MLModelService:
             'ai_prob': ai_prob,
             'human_prob': human_prob
         }
+
+    def _get_roberta_chunked_prediction(self, text: str) -> Dict[str, Any]:
+        """Get chunked RoBERTa prediction for long texts.
+        
+        Splits text into overlapping chunks of ~400 tokens, runs RoBERTa on each,
+        and returns both single-pass and chunked averages plus the blended score.
+        """
+        self._load_detector()
+        
+        single_pass = self._get_roberta_prediction(text)
+        single_ai = single_pass['ai_prob']
+        
+        tokens = self._detector_tokenizer.encode(text, add_special_tokens=False)
+        if len(tokens) <= 512:
+            return {
+                'single_ai': single_ai,
+                'chunked_ai': single_ai,
+                'blended_ai': single_ai,
+                'num_chunks': 1,
+                'chunk_scores': [single_ai],
+            }
+        
+        max_tokens = 400
+        overlap = 50
+        chunks = []
+        start = 0
+        while start < len(tokens):
+            end = min(start + max_tokens, len(tokens))
+            chunk_tokens = tokens[start:end]
+            chunk_text = self._detector_tokenizer.decode(chunk_tokens, skip_special_tokens=True)
+            chunks.append(chunk_text)
+            if end >= len(tokens):
+                break
+            start = end - overlap
+        
+        chunk_scores = []
+        for chunk in chunks:
+            inputs = self._detector_tokenizer(chunk, return_tensors="pt", truncation=True, max_length=512, padding=True)
+            with torch.no_grad():
+                outputs = self._detector_model(**inputs)
+                probs = torch.softmax(outputs.logits, dim=-1)
+            chunk_scores.append(probs[0][1].item())
+        
+        chunked_ai = float(np.mean(chunk_scores))
+        blended_ai = (single_ai + chunked_ai) / 2.0
+        
+        logger.info(f"RoBERTa chunked: single={single_ai*100:.1f}%, chunked_avg={chunked_ai*100:.1f}% ({len(chunks)} chunks), blended={blended_ai*100:.1f}%")
+        
+        return {
+            'single_ai': single_ai,
+            'chunked_ai': chunked_ai,
+            'blended_ai': blended_ai,
+            'num_chunks': len(chunks),
+            'chunk_scores': chunk_scores,
+        }
     
     def detect_ai(self, text: str) -> Dict[str, Any]:
         """
         Detect AI-generated text using Super-Ensemble (RoBERTa + TriBoost Original + V3 + V4).
         
         The super-ensemble combines:
-        - RoBERTa: Fine-tuned transformer (355M params)
+        - RoBERTa: Fine-tuned transformer (355M params) with chunked prediction for long texts
         - TriBoost Original: XGBoost + LightGBM + CatBoost (99.85% accuracy)
         - TriBoost V3: Enhanced with humanized samples (99.86% accuracy)
         - TriBoost V4: Weighted humanized training (99.82% accuracy)
         
-        Strategy: Hybrid with TriBoost priority
-        - If ANY TriBoost version detects AI (>50%), use TriBoost average
-        - Otherwise, use RoBERTa's judgment
-        - This gives highest confidence while maintaining accuracy
+        Strategy: Dynamic RoBERTa-primary weighting
+        - RoBERTa is the primary signal (transformer understands language context)
+        - TriBoost provides secondary signal (statistical features)
+        - Weighting is confidence-based: when RoBERTa is confident, trust it more
+        - Chunked RoBERTa processes full text (no 512-token truncation loss)
         """
         with ThreadPoolExecutor(max_workers=2) as executor:
             triboost_future = executor.submit(self._get_triboost_predictions, text)
-            roberta_future = executor.submit(self._get_roberta_prediction, text)
+            roberta_chunked_future = executor.submit(self._get_roberta_chunked_prediction, text)
             triboost_results = triboost_future.result()
-            roberta_result = roberta_future.result()
+            roberta_chunked = roberta_chunked_future.result()
         
-        # Log individual model results
-        logger.info(f"RoBERTa: {roberta_result['ai_prob']*100:.1f}% AI")
+        roberta_blended = roberta_chunked['blended_ai']
+        roberta_single = roberta_chunked['single_ai']
+        
+        logger.info(f"RoBERTa: single={roberta_single*100:.1f}%, blended={roberta_blended*100:.1f}% ({roberta_chunked['num_chunks']} chunks)")
         for version, result in triboost_results.items():
             logger.info(f"TriBoost {version}: {result['ai_prob']*100:.1f}% AI")
         
-        # Calculate TriBoost average
         triboost_ai_probs = [r['ai_prob'] for r in triboost_results.values()]
         triboost_avg = float(np.mean(triboost_ai_probs))
         
-        # Hybrid strategy: TriBoost priority
-        any_triboost_detects_ai = any(p > 0.5 for p in triboost_ai_probs)
-        
-        if any_triboost_detects_ai:
-            # Use TriBoost average when any version detects AI
-            final_ai_prob = triboost_avg
-            strategy_used = "triboost_priority"
-            logger.info(f"Super-Ensemble using TriBoost (detected AI): {final_ai_prob*100:.1f}% AI")
+        if roberta_blended < 0.10:
+            w_roberta, w_triboost = 0.98, 0.02
+            strategy_used = "roberta_primary_confident_human"
+        elif roberta_blended < 0.30:
+            w_roberta, w_triboost = 0.85, 0.15
+            strategy_used = "roberta_primary_lean_human"
+        elif roberta_blended < 0.70:
+            w_roberta, w_triboost = 0.70, 0.30
+            strategy_used = "roberta_primary_uncertain"
         else:
-            # Use simple average of all 4 model groups when no AI detected
-            all_probs = triboost_ai_probs + [roberta_result['ai_prob']]
-            final_ai_prob = float(np.mean(all_probs))
-            strategy_used = "full_average"
-            logger.info(f"Super-Ensemble using full average: {final_ai_prob*100:.1f}% AI")
+            w_roberta, w_triboost = 0.60, 0.40
+            strategy_used = "roberta_primary_confident_ai"
+        
+        final_ai_prob = w_roberta * roberta_blended + w_triboost * triboost_avg
+        final_ai_prob = max(0.0, min(1.0, final_ai_prob))
+        
+        logger.info(f"Super-Ensemble [{strategy_used}]: w_r={w_roberta}, w_t={w_triboost}, "
+                    f"roberta_blended={roberta_blended*100:.1f}%, triboost_avg={triboost_avg*100:.1f}%, "
+                    f"final={final_ai_prob*100:.1f}%")
         
         final_human_prob = 1.0 - final_ai_prob
         
-        # Calculate confidence score
         confidence_score = self._calculate_confidence_score(final_ai_prob)
         
-        # Count votes (how many model groups say AI)
         votes_ai = sum([
-            1 if roberta_result['ai_prob'] > 0.5 else 0,
+            1 if roberta_blended > 0.5 else 0,
             1 if triboost_results['original']['ai_prob'] > 0.5 else 0,
             1 if triboost_results['v3']['ai_prob'] > 0.5 else 0,
             1 if triboost_results['v4']['ai_prob'] > 0.5 else 0
@@ -1852,7 +1912,9 @@ class MLModelService:
             "reliability": reliability,
             "warning": "Short text (<50 words) — result may be less reliable" if reliability == "low" else None,
             "model_breakdown": {
-                "roberta": round(roberta_result['ai_prob'] * 100, 2),
+                "roberta": round(roberta_single * 100, 2),
+                "roberta_chunked": round(roberta_chunked['chunked_ai'] * 100, 2),
+                "roberta_blended": round(roberta_blended * 100, 2),
                 "triboost_original": round(triboost_results['original']['ai_prob'] * 100, 2),
                 "triboost_v3": round(triboost_results['v3']['ai_prob'] * 100, 2),
                 "triboost_v4": round(triboost_results['v4']['ai_prob'] * 100, 2),
@@ -1862,7 +1924,10 @@ class MLModelService:
                 "votes_ai": votes_ai,
                 "votes_human": 4 - votes_ai,
                 "strategy_used": strategy_used,
-                "total_models": 10  # 1 RoBERTa + 9 TriBoost (3 versions x 3 algorithms)
+                "roberta_weight": w_roberta,
+                "triboost_weight": w_triboost,
+                "num_chunks": roberta_chunked['num_chunks'],
+                "total_models": 10
             },
             "level_analysis": self._perform_10_level_analysis(text, final_ai_prob),
             "sentence_analysis": self._analyze_sentences(text),
