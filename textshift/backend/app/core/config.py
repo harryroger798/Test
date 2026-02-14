@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     MODELS_DIR: str = "/opt/textshift/models"
     DETECTOR_MODEL_PATH: str = "/opt/textshift/models/detector"
     HUMANIZER_MODEL_PATH: str = "/opt/textshift/models/humanizer"
+    HUMANIZER_ONNX_MODEL_PATH: str = "/opt/textshift/models/humanizer_onnx"
     PLAGIARISM_MODEL_PATH: str = "/opt/textshift/models/plagiarism"
     TONE_DETECTOR_MODEL_PATH: str = "/opt/textshift/models/tone-detector"
     TRANSLATOR_MODELS_DIR: str = "/opt/textshift/models/translators"
