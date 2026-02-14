@@ -1507,46 +1507,26 @@ class MLModelService:
         return result.strip()
 
     def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
-        """Humanize a single sentence using HF API (primary) → SageMaker → ONNX local (fallback)."""
-        model_output = None
+        """Humanize a single sentence using the local T5 model."""
         try:
-            hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {sentence}")
-            if hf_result and len(hf_result) > 10:
-                model_output = self._clean_model_output(hf_result)
-                logger.info("Humanizer via HF API successful")
+            self._load_humanizer()
+            input_text = f"humanize: {sentence}"
+            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
+            with torch.no_grad():
+                outputs = self._humanizer_model.generate(
+                    **inputs,
+                    max_length=1024,
+                    num_beams=1,
+                    do_sample=True,
+                    temperature=1.0,
+                    top_p=0.95,
+                    repetition_penalty=2.5,
+                    no_repeat_ngram_size=3
+                )
+            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            model_output = self._clean_model_output(model_output)
         except Exception as e:
-            logger.warning(f"HF API humanize_single failed: {e}")
-
-        if not model_output:
-            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {sentence}")
-            if sm_result and len(sm_result) > 10:
-                model_output = self._clean_model_output(sm_result)
-                logger.info("Humanizer via SageMaker successful")
-
-        if not model_output:
-            try:
-                self._load_humanizer()
-                input_text = f"humanize: {sentence}"
-                inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
-                with torch.no_grad():
-                    outputs = self._humanizer_model.generate(
-                        **inputs,
-                        max_length=1024,
-                        num_beams=1,
-                        do_sample=True,
-                        temperature=1.0,
-                        top_p=0.95,
-                        repetition_penalty=2.5,
-                        no_repeat_ngram_size=3
-                    )
-                local_result = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-                if local_result and len(local_result) > 10:
-                    model_output = self._clean_model_output(local_result)
-                    logger.info("Humanizer via ONNX local successful")
-            except Exception as e:
-                logger.warning(f"ONNX local humanize failed: {e}")
-
-        if not model_output:
+            logger.warning(f"Single sentence humanize failed: {e}, using HF API fallback")
             model_output = self._humanize_with_hf_api(sentence)
             model_output = self._clean_model_output(model_output)
         
@@ -2176,40 +2156,25 @@ class MLModelService:
         use_fallback = False
         
         try:
-            hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {text}")
-            if hf_result and len(hf_result) > 10:
-                model_output = hf_result
-                logger.info("Humanizer via HF API successful")
+            self._load_humanizer()
+            input_text = f"humanize: {text}"
+            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
+            with torch.no_grad():
+                outputs = self._humanizer_model.generate(
+                    **inputs,
+                    max_length=1024,
+                    num_beams=1,
+                    do_sample=True,
+                    temperature=1.0,
+                    top_p=0.95,
+                    repetition_penalty=2.5,
+                    no_repeat_ngram_size=3
+                )
+            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
         except Exception as e:
-            logger.warning(f"HF API humanizer failed: {e}")
-
-        if not model_output:
-            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {text}")
-            if sm_result and len(sm_result) > 10:
-                model_output = sm_result
-                logger.info("Humanizer via SageMaker successful")
-
-        if not model_output:
-            try:
-                self._load_humanizer()
-                input_text = f"humanize: {text}"
-                inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
-                with torch.no_grad():
-                    outputs = self._humanizer_model.generate(
-                        **inputs,
-                        max_length=1024,
-                        num_beams=1,
-                        do_sample=True,
-                        temperature=1.0,
-                        top_p=0.95,
-                        repetition_penalty=2.5,
-                        no_repeat_ngram_size=3
-                    )
-                model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            except Exception as e:
-                logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-                use_fallback = True
-                model_output = self._humanize_with_hf_api(text)
+            logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
+            use_fallback = True
+            model_output = self._humanize_with_hf_api(text)
         
         final_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode) if use_post_processor else model_output
         before_spelling = final_output
