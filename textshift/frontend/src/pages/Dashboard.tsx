@@ -324,17 +324,6 @@ export default function Dashboard() {
         { id: 'bulk', name: 'Bulk Process', icon: Layers, color: 'violet', description: 'Process multiple files' },
       ];
     
-    // Buy Credits modal state
-    const [showBuyCreditsModal, setShowBuyCreditsModal] = useState(false);
-    const [buyCreditsLoading, setBuyCreditsLoading] = useState<string | null>(null);
-    const [buyCreditsMessage, setBuyCreditsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-    
-    const creditPackages = [
-      { id: '10k', name: '10,000 Words', price: 4.99, credits: 10000 },
-      { id: '25k', name: '25,000 Words', price: 9.99, credits: 25000 },
-      { id: '50k', name: '50,000 Words', price: 17.99, credits: 50000 },
-      { id: '100k', name: '100,000 Words', price: 29.99, credits: 100000 },
-    ];
 
   // Get current text based on active tab
   const getCurrentText = () => {
@@ -462,78 +451,7 @@ export default function Dashboard() {
       }
     };
 
-    const handleBuyCredits = async (packageId: string) => {
-      // Check if user is on a paid plan
-      if (user?.subscription_tier === 'free') {
-        setBuyCreditsMessage({ type: 'error', text: 'Credit top-ups are only available for paid plan users. Please upgrade to Starter, Pro, or Enterprise.' });
-        return;
-      }
-      
-      setBuyCreditsLoading(packageId);
-      setBuyCreditsMessage(null);
-      
-      try {
-        // Create PayPal order for credit top-up
-        const orderResult = await creditsApi.createTopupOrder(packageId);
-        
-        if (orderResult.approval_url) {
-          // Redirect to PayPal for payment
-          window.location.href = orderResult.approval_url;
-        } else {
-          setBuyCreditsMessage({ type: 'error', text: 'Failed to create payment order' });
-        }
-      } catch (error: any) {
-        const errorMessage = error?.response?.data?.detail || 'Failed to initiate payment';
-        setBuyCreditsMessage({ type: 'error', text: errorMessage });
-      } finally {
-        setBuyCreditsLoading(null);
-      }
-    };
 
-    // Handle PayPal return from credit top-up
-    useEffect(() => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const topupStatus = urlParams.get('topup');
-      const packageId = urlParams.get('package');
-      const token = urlParams.get('token'); // PayPal order ID
-      
-      if (topupStatus === 'success' && packageId && token) {
-        // Capture the PayPal order
-        const captureOrder = async () => {
-          try {
-            const result = await creditsApi.captureTopupOrder(token, packageId);
-            setBuyCreditsMessage({ 
-              type: 'success', 
-              text: result.message || `Successfully added ${result.credits_added?.toLocaleString()} credits!` 
-            });
-            // Refresh user data and credits
-            const userData = await authApi.getMe();
-            updateUser(userData);
-            refetchCredits();
-            // Clean up URL
-            window.history.replaceState({}, '', '/dashboard');
-          } catch (error: any) {
-            const errorMessage = error?.response?.data?.detail || 'Failed to complete payment';
-            setBuyCreditsMessage({ type: 'error', text: errorMessage });
-            window.history.replaceState({}, '', '/dashboard');
-          }
-        };
-        captureOrder();
-      } else if (topupStatus === 'cancelled') {
-        setBuyCreditsMessage({ type: 'error', text: 'Payment was cancelled' });
-        window.history.replaceState({}, '', '/dashboard');
-      }
-    }, []);
-
-    const handleOpenBuyCredits = () => {
-      if (user?.subscription_tier === 'free') {
-        // Redirect free users to pricing page
-        navigate('/pricing');
-      } else {
-        setShowBuyCreditsModal(true);
-        setBuyCreditsMessage(null);
-      }
-    };
 
   const splitIntoSentences = (text: string): string[] => {
     const parts = text.trim().split(/(?<=[.!?])\s+/);
