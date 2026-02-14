@@ -30,6 +30,7 @@ import torch
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from transformers import (
     AutoTokenizer, 
     AutoModelForSequenceClassification,
@@ -39,6 +40,7 @@ from transformers import (
     MarianTokenizer
 )
 from app.core.config import settings
+from app.services.sagemaker_client import sagemaker_client
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,8 @@ class WritingToolsService:
     
     _instance = None
     _tone_model = None
+    _is_onnx_grammar = False
+    _is_onnx_flan_t5 = False
     _tone_tokenizer = None
     _translator_models: Dict[str, Tuple[Any, Any]] = {}
     _t5_model = None
@@ -199,18 +203,26 @@ class WritingToolsService:
             logger.error(f"Failed to load T5 model: {e}")
     
     def _load_general_t5_model(self):
-        """Load general-purpose Flan-T5 model for writing tasks (summarization, paraphrasing, etc.)."""
+        """Load general-purpose Flan-T5 model (ONNX INT8 preferred, PyTorch fallback)."""
         if self._general_t5_model is not None:
             return True
         
         try:
+            onnx_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base-onnx')
             model_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base')
             
-            # Download from iDrive if not present
+            if os.path.exists(onnx_dir) and os.path.exists(os.path.join(onnx_dir, 'encoder_model.onnx')):
+                from optimum.onnxruntime import ORTModelForSeq2SeqLM
+                logger.info("Loading Flan-T5-base ONNX INT8 model...")
+                self._general_t5_tokenizer = T5Tokenizer.from_pretrained(onnx_dir)
+                self._general_t5_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
+                self._is_onnx_flan_t5 = True
+                logger.info(f"Loaded Flan-T5-base ONNX INT8 from {onnx_dir}")
+                return True
+            
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
                 success = self._download_model_from_s3('textshift-models/flan-t5-base/', model_dir)
                 if not success:
-                    # Fallback to HuggingFace
                     logger.info("Downloading flan-t5-base from HuggingFace...")
                     self._general_t5_tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-base")
                     self._general_t5_model = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
@@ -221,19 +233,29 @@ class WritingToolsService:
             self._general_t5_tokenizer = T5Tokenizer.from_pretrained(model_dir)
             self._general_t5_model = T5ForConditionalGeneration.from_pretrained(model_dir)
             self._general_t5_model.eval()
-            logger.info("Flan-T5 model loaded successfully from local storage")
+            logger.info("Flan-T5 model loaded (PyTorch) from local storage")
             return True
         except Exception as e:
             logger.error(f"Failed to load Flan-T5 model: {e}")
             return False
     
     def _load_grammar_model(self):
-        """Load CoEdIT-large grammar correction model from iDrive e2."""
+        """Load CoEdIT-large grammar model (ONNX INT8 preferred, PyTorch fallback)."""
         if self._grammar_model is not None:
             return True
         
         try:
+            onnx_dir = os.path.join(settings.MODELS_DIR, 'coedit-large-onnx')
             model_dir = os.path.join(settings.MODELS_DIR, 'coedit-large')
+            
+            if os.path.exists(onnx_dir) and os.path.exists(os.path.join(onnx_dir, 'encoder_model.onnx')):
+                from optimum.onnxruntime import ORTModelForSeq2SeqLM
+                logger.info("Loading CoEdIT-large ONNX INT8 model...")
+                self._grammar_tokenizer = AutoTokenizer.from_pretrained(onnx_dir)
+                self._grammar_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
+                self._is_onnx_grammar = True
+                logger.info(f"Loaded CoEdIT-large ONNX INT8 from {onnx_dir}")
+                return True
             
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
                 success = self._download_model_from_s3('grammar-checker/coedit-large/', model_dir)
@@ -248,7 +270,7 @@ class WritingToolsService:
             self._grammar_tokenizer = AutoTokenizer.from_pretrained(model_dir)
             self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=torch.float16)
             self._grammar_model.eval()
-            logger.info("CoEdIT-large model loaded successfully from local storage")
+            logger.info("CoEdIT-large model loaded (PyTorch) from local storage")
             return True
         except Exception as e:
             logger.error(f"Failed to load CoEdIT-large model: {e}")
@@ -274,9 +296,45 @@ class WritingToolsService:
         corrected = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
         return corrected.strip() if corrected else chunk
 
+    def _coedit_chunk_via_sagemaker(self, instruction: str, chunk: str) -> Optional[str]:
+        """Process a single CoEdIT chunk via SageMaker serverless endpoint."""
+        try:
+            input_text = f"{instruction}: {chunk}"
+            word_count = len(chunk.split())
+            parameters = {
+                "max_new_tokens": min(int(word_count * 2), 512),
+                "num_beams": 4,
+                "early_stopping": True,
+            }
+            result = sagemaker_client.invoke_text2text("coedit-large", input_text, parameters)
+            if result and len(result.strip()) > 5:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker CoEdIT chunk failed: {e}")
+            return None
+
+    def _flan_t5_via_sagemaker(self, prompt: str, max_length: int = 256) -> Optional[str]:
+        """Generate text via SageMaker Flan-T5-base endpoint."""
+        try:
+            parameters = {
+                "max_new_tokens": max_length,
+                "num_beams": 4,
+                "early_stopping": True,
+                "do_sample": False,
+            }
+            result = sagemaker_client.invoke_text2text("flan-t5-base", prompt, parameters)
+            if result and len(result.strip()) > 5:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker Flan-T5 failed: {e}")
+            return None
+
     def _edit_text_with_coedit(self, text: str, instruction: str, max_chunk_tokens: int = 200) -> str:
         """Edit text using CoEdIT-large with the given instruction prompt.
-        Chunks by sentences to avoid truncation. Reuses the grammar model."""
+        Chunks by sentences to avoid truncation. Uses ONNX INT8 local model
+        with SageMaker parallel fallback for multiple chunks."""
         if not self._load_grammar_model():
             return text
         if self._grammar_model is None or self._grammar_tokenizer is None:
@@ -299,8 +357,40 @@ class WritingToolsService:
         if current_chunk:
             chunks.append(' '.join(current_chunk))
 
-        results: list[str] = []
-        for chunk in chunks:
+        results: list[str] = [None] * len(chunks)
+
+        if len(chunks) > 2 and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            try:
+                failed_indices = []
+                with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                    future_to_idx = {
+                        executor.submit(self._coedit_chunk_via_sagemaker, instruction, chunk): idx
+                        for idx, chunk in enumerate(chunks)
+                    }
+                    from concurrent.futures import as_completed
+                    for future in as_completed(future_to_idx):
+                        idx = future_to_idx[future]
+                        try:
+                            result = future.result()
+                            if result:
+                                results[idx] = result
+                            else:
+                                failed_indices.append(idx)
+                        except Exception:
+                            failed_indices.append(idx)
+
+                if not failed_indices:
+                    logger.info(f"SageMaker CoEdIT processed {len(chunks)} chunks in parallel")
+                    return ' '.join(results)
+
+                for idx in failed_indices:
+                    results[idx] = None
+            except Exception as e:
+                logger.warning(f"SageMaker CoEdIT parallel failed: {e}")
+
+        for idx, chunk in enumerate(chunks):
+            if results[idx] is not None:
+                continue
             input_text = f"{instruction}: {chunk}"
             inputs = self._grammar_tokenizer(
                 input_text, return_tensors="pt", truncation=True, max_length=512
@@ -314,7 +404,7 @@ class WritingToolsService:
                     early_stopping=True
                 )
             result = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            results.append(result.strip() if result else chunk)
+            results[idx] = result.strip() if result else chunk
 
         return ' '.join(results)
 
@@ -356,12 +446,18 @@ class WritingToolsService:
             return None
     
     def _generate_with_t5(self, prompt: str, max_length: int = 256, min_length: int = 10) -> Optional[str]:
-        """Generate text using Flan-T5 model with error handling."""
+        """Generate text using Flan-T5 model (ONNX INT8 local → SageMaker fallback)."""
         try:
             if not self._load_general_t5_model():
+                sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
+                if sm_result:
+                    return sm_result
                 return None
             
             if self._general_t5_model is None or self._general_t5_tokenizer is None:
+                sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
+                if sm_result:
+                    return sm_result
                 return None
             
             inputs = self._general_t5_tokenizer(
@@ -384,7 +480,6 @@ class WritingToolsService:
             
             generated_text = self._general_t5_tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Validate output - should not be empty or just the prompt
             if not generated_text or len(generated_text.strip()) < 5:
                 return None
             if generated_text.strip().lower() == prompt.strip().lower():
@@ -393,6 +488,9 @@ class WritingToolsService:
             return generated_text.strip()
         except Exception as e:
             logger.error(f"T5 generation failed: {e}")
+            sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
+            if sm_result:
+                return sm_result
             return None
     
     # ==================== Feature 1: Grammar Checker ====================
@@ -673,15 +771,35 @@ class WritingToolsService:
             sentence_tones = []
             sentence_primary_tones = []
             if len(sentences) > 1:
-                for sent in sentences[:20]:
-                    sent_result = self._analyze_tone_for_text(sent)
-                    if sent_result:
-                        sentence_primary_tones.append(sent_result[0]["tone"])
+                batch_sents = sentences[:20]
+                batch_inputs = self._tone_tokenizer(
+                    batch_sents, return_tensors="pt", truncation=True,
+                    max_length=512, padding=True
+                )
+                with torch.no_grad():
+                    batch_outputs = self._tone_model(**batch_inputs)
+                    batch_probs = torch.sigmoid(batch_outputs.logits)
+
+                for si, sent in enumerate(batch_sents):
+                    probs = batch_probs[si]
+                    top_indices = torch.argsort(probs, descending=True)[:5]
+                    sent_tones = []
+                    for idx in top_indices:
+                        tone_name = self.TONE_LABELS[idx.item()]
+                        confidence = round(probs[idx].item() * 100, 2)
+                        if confidence > 10:
+                            sent_tones.append({
+                                "tone": tone_name,
+                                "confidence": confidence,
+                                "category": self._classify_tone_category(tone_name)
+                            })
+                    if sent_tones:
+                        sentence_primary_tones.append(sent_tones[0]["tone"])
                         sentence_tones.append({
                             "sentence": sent[:80] + "..." if len(sent) > 80 else sent,
-                            "primary_tone": sent_result[0]["tone"],
-                            "confidence": sent_result[0]["confidence"],
-                            "category": sent_result[0]["category"]
+                            "primary_tone": sent_tones[0]["tone"],
+                            "confidence": sent_tones[0]["confidence"],
+                            "category": sent_tones[0]["category"]
                         })
                     else:
                         sentence_primary_tones.append("neutral")

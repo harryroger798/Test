@@ -18,11 +18,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/scan", tags=["Scanning"]) 
 
 # Simple low-content detector: proportion of >=3-letter alphabetic tokens
+COMMON_SHORT_WORDS = {"i", "a", "an", "am", "as", "at", "be", "by", "do", "go",
+                      "he", "if", "in", "is", "it", "me", "my", "no", "of", "on",
+                      "or", "so", "to", "up", "us", "we", "ok"}
+
 def _is_low_content(text: str, min_ratio: float = 0.7) -> bool:
     tokens = re.findall(r"[A-Za-z]+", text)
     if not tokens:
         return True
-    real = [t for t in tokens if len(t) >= 3]
+    real = [t for t in tokens if len(t) >= 3 or t.lower() in COMMON_SHORT_WORDS]
     ratio = len(real) / max(1, len(tokens))
     return ratio < min_ratio
 

@@ -14,6 +14,7 @@ import pickle
 from botocore.config import Config
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, T5Tokenizer, T5ForConditionalGeneration
 from optimum.onnxruntime import ORTModelForSeq2SeqLM
 from sentence_transformers import SentenceTransformer
@@ -368,39 +369,48 @@ class WebSearchService:
         return ""
     
     @staticmethod
+    async def _search_sentence(sentence: str) -> List[Dict[str, Any]]:
+        """Search for a single sentence with DuckDuckGo + Serper fallback."""
+        results = await WebSearchService.search_duckduckgo(sentence)
+        if len(results) < 2:
+            serper_results = await WebSearchService.search_serper(sentence)
+            results.extend(serper_results)
+        for result in results:
+            snippet = result.get("snippet", "")
+            jaccard_score = WebSearchService._calculate_jaccard_similarity(sentence, snippet)
+            result["jaccard_similarity"] = round(jaccard_score * 100, 2)
+            result["matched_sentence"] = sentence
+        return results
+
+    @staticmethod
     async def search_for_plagiarism(text: str) -> List[Dict[str, Any]]:
         """Search the web for potential plagiarism sources using DuckDuckGo + Serper fallback.
-        Fetches actual page content for top results to improve accuracy."""
+        Searches all key sentences in parallel, then fetches page content in parallel."""
         sentences = WebSearchService._extract_key_sentences(text)
+
+        search_tasks = [WebSearchService._search_sentence(s) for s in sentences]
+        all_sentence_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
         all_results = []
         seen_urls = set()
-        
-        for sentence in sentences:
-            results = await WebSearchService.search_duckduckgo(sentence)
-            
-            if len(results) < 2:
-                serper_results = await WebSearchService.search_serper(sentence)
-                results.extend(serper_results)
-            
-            for result in results:
+        for batch in all_sentence_results:
+            if isinstance(batch, Exception):
+                continue
+            for result in batch:
                 url = result.get("url", "")
                 if url and url not in seen_urls:
                     seen_urls.add(url)
-                    snippet = result.get("snippet", "")
-                    jaccard_score = WebSearchService._calculate_jaccard_similarity(sentence, snippet)
-                    result["jaccard_similarity"] = round(jaccard_score * 100, 2)
-                    result["matched_sentence"] = sentence
                     all_results.append(result)
-        
+
         all_results.sort(key=lambda x: x.get("jaccard_similarity", 0), reverse=True)
         top_results = all_results[:10]
-        
+
         fetch_tasks = []
         for result in top_results[:5]:
             url = result.get("url", "")
             if url:
                 fetch_tasks.append(WebSearchService.fetch_page_content(url, timeout=8.0))
-        
+
         if fetch_tasks:
             page_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
             for i, page_content in enumerate(page_contents):
@@ -413,7 +423,7 @@ class WebSearchService:
                     best_jaccard = max(snippet_jaccard, round(page_jaccard * 100, 2))
                     top_results[i]["jaccard_similarity"] = best_jaccard
                     top_results[i]["page_content_fetched"] = True
-        
+
         top_results.sort(key=lambda x: x.get("jaccard_similarity", 0), reverse=True)
         return top_results
 
@@ -1438,34 +1448,33 @@ class MLModelService:
             return False
     
     def _load_humanizer(self):
-        """Load Stealthwriter T5 Chaos humanizer (ONNX quantized if available)."""
+        """Load Stealthwriter T5 Chaos humanizer (ONNX INT8 preferred, PyTorch fallback)."""
         if self._current_model != "humanizer":
             self._unload_all_models()
-            
-            onnx_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base-onnx')
-            if os.path.exists(onnx_dir) and any(f.endswith('.onnx') for f in os.listdir(onnx_dir)):
-                self._humanizer_tokenizer = AutoTokenizer.from_pretrained(onnx_dir)
-                self._humanizer_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
-                self._is_onnx_humanizer = True
-                logger.info("Loaded humanizer ONNX quantized model")
-                self._current_model = "humanizer"
-                return
 
+            onnx_path = settings.HUMANIZER_ONNX_MODEL_PATH
             model_path = settings.HUMANIZER_MODEL_PATH
-            if not os.path.exists(os.path.join(model_path, "model.safetensors")):
-                self._download_humanizer_from_idrive()
-            
-            logger.info("Loading Stealthwriter T5 Chaos humanizer...")
             self._is_onnx_humanizer = False
-            if os.path.exists(os.path.join(model_path, "model.safetensors")):
+
+            if os.path.exists(os.path.join(onnx_path, "encoder_model.onnx")):
+                logger.info("Loading Stealthwriter T5 Chaos ONNX INT8 humanizer...")
+                self._humanizer_tokenizer = T5Tokenizer.from_pretrained(onnx_path)
+                self._humanizer_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_path)
+                self._is_onnx_humanizer = True
+                logger.info(f"Loaded ONNX INT8 humanizer from {onnx_path}")
+            elif os.path.exists(os.path.join(model_path, "model.safetensors")):
+                logger.info("Loading Stealthwriter T5 Chaos PyTorch humanizer...")
                 self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
                 self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
                 self._humanizer_model.eval()
-                logger.info(f"Loaded Stealthwriter T5 Chaos model from {model_path}")
+                logger.info(f"Loaded PyTorch humanizer from {model_path}")
             else:
-                logger.warning(f"Local model not found at {model_path}, using base T5")
-                self._humanizer_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-                self._humanizer_model = T5ForConditionalGeneration.from_pretrained("t5-base")
+                if not os.path.exists(os.path.join(model_path, "model.safetensors")):
+                    self._download_humanizer_from_idrive()
+                self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
+                self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
+                self._humanizer_model.eval()
+                logger.info(f"Loaded PyTorch humanizer from {model_path} (after download)")
             self._current_model = "humanizer"
     
     def _load_plagiarism(self):
@@ -1494,47 +1503,69 @@ class MLModelService:
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         return [s.strip() for s in sentences if s.strip()]
     
-    def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
-        """Humanize a single sentence using HF API (primary) → ONNX local (fast) → SageMaker (fallback)."""
-        model_output = None
+    @staticmethod
+    def _clean_model_output(text: str) -> str:
+        """Strip task-prefix leakage and clean up raw model output."""
+        result = text.strip()
+        prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
+        for prefix in prefixes:
+            if result.startswith(prefix):
+                result = result[len(prefix):].strip()
+            result = result.replace(f" {prefix} ", " ")
+        result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        return result.strip()
+
+    def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
+        """Humanize a single chunk via SageMaker serverless endpoint."""
         try:
-            hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {sentence}")
-            if hf_result and len(hf_result) > 10:
-                model_output = hf_result
+            input_text = f"humanize: {chunk}"
+            word_count = len(chunk.split())
+            max_new = min(int(word_count * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": 1.0,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            result = sagemaker_client.invoke_text2text("humanizer", input_text, parameters)
+            if result and len(result) > 20:
+                return self._clean_model_output(result)
+            return None
         except Exception as e:
-            logger.warning(f"HF API humanize_single failed: {e}")
+            logger.warning(f"SageMaker humanize chunk failed: {e}")
+            return None
 
-        if not model_output:
-            try:
-                self._load_humanizer()
-                input_text = f"humanize: {sentence}"
-                inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
+    def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
+        """Humanize a single sentence using ONNX INT8 or PyTorch T5 model."""
+        try:
+            self._load_humanizer()
+            input_text = f"humanize: {sentence}"
+            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+            input_token_count = inputs['input_ids'].shape[1]
+            max_new = min(int(input_token_count * 1.3), 512)
+            gen_kwargs = dict(
+                max_new_tokens=max_new,
+                num_beams=1,
+                do_sample=True,
+                temperature=1.0,
+                top_p=0.95,
+                repetition_penalty=2.5,
+                no_repeat_ngram_size=3,
+            )
+            if self._is_onnx_humanizer:
+                outputs = self._humanizer_model.generate(**inputs, **gen_kwargs)
+            else:
                 with torch.no_grad():
-                    outputs = self._humanizer_model.generate(
-                        **inputs,
-                        max_length=1024,
-                        num_beams=1,
-                        do_sample=True,
-                        temperature=1.0,
-                        top_p=0.95,
-                        repetition_penalty=2.5,
-                        no_repeat_ngram_size=3
-                    )
-                local_result = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-                if local_result and len(local_result) > 10:
-                    model_output = local_result
-                    logger.info("Humanizer via ONNX local successful")
-            except Exception as e:
-                logger.warning(f"ONNX local humanize failed: {e}")
-
-        if not model_output:
-            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {sentence}")
-            if sm_result and len(sm_result) > 10:
-                model_output = sm_result
-                logger.info("Humanizer via SageMaker fallback")
-
-        if not model_output:
+                    outputs = self._humanizer_model.generate(**inputs, **gen_kwargs)
+            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            model_output = self._clean_model_output(model_output)
+        except Exception as e:
+            logger.warning(f"Single sentence humanize failed: {e}, using HF API fallback")
             model_output = self._humanize_with_hf_api(sentence)
+            model_output = self._clean_model_output(model_output)
         
         if use_post_processor:
             model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
@@ -1582,15 +1613,22 @@ class MLModelService:
     
     def _analyze_sentences(self, text: str) -> List[Dict[str, Any]]:
         sentences = [s for s in self._split_sentences(text) if len(s) > 10]
+        selected = sentences[:10]
+        if not selected:
+            return []
+        self._load_detector()
+        batch_inputs = self._detector_tokenizer(
+            selected, return_tensors="pt", truncation=True,
+            max_length=512, padding=True
+        )
+        with torch.no_grad():
+            outputs = self._detector_model(**batch_inputs)
+            probs = torch.softmax(outputs.logits, dim=-1)
         results = []
-        for sentence in sentences[:10]:
-            inputs = self._detector_tokenizer(sentence, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._detector_model(**inputs)
-                probs = torch.softmax(outputs.logits, dim=-1)
+        for i, sentence in enumerate(selected):
             results.append({
                 "text": sentence[:100] + "..." if len(sentence) > 100 else sentence,
-                "ai_probability": round(probs[0][1].item() * 100, 2)
+                "ai_probability": round(probs[i][1].item() * 100, 2)
             })
         return results
     
@@ -1754,9 +1792,11 @@ class MLModelService:
         - Otherwise, use RoBERTa's judgment
         - This gives highest confidence while maintaining accuracy
         """
-        # Get predictions from all models
-        triboost_results = self._get_triboost_predictions(text)
-        roberta_result = self._get_roberta_prediction(text)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            triboost_future = executor.submit(self._get_triboost_predictions, text)
+            roberta_future = executor.submit(self._get_roberta_prediction, text)
+            triboost_results = triboost_future.result()
+            roberta_result = roberta_future.result()
         
         # Log individual model results
         logger.info(f"RoBERTa: {roberta_result['ai_prob']*100:.1f}% AI")
@@ -2099,12 +2139,39 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
+    _CHUNK_WORD_LIMIT = 350
+
+    def _build_chunks(self, text: str) -> List[str]:
+        """Split text into chunks of roughly _CHUNK_WORD_LIMIT words, breaking at sentence boundaries."""
+        sentences = self._split_sentences_preserve(text)
+        chunks: List[str] = []
+        current_chunk: List[str] = []
+        current_words = 0
+
+        for sentence in sentences:
+            sentence_words = len(sentence.split())
+            if current_words + sentence_words > self._CHUNK_WORD_LIMIT and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_words = sentence_words
+            else:
+                current_chunk.append(sentence)
+                current_words += sentence_words
+
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        return chunks
+
     def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
         """Humanize AI text using Stealthwriter T5 Chaos model.
         
         If preserved_indices is provided, only humanize sentences NOT in the list.
         Preserved sentences are kept exactly as-is in the output.
         Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
+        
+        Long texts (>400 words) are automatically split into chunks of ~400 words
+        at sentence boundaries. Each chunk is humanized separately to avoid the
+        T5 tokenizer's 1024-token truncation limit.
         """
         mode_config = {
             'academic': {'temperature': 0.7, 'top_p': 0.9},
@@ -2114,45 +2181,81 @@ class MLModelService:
         config = mode_config.get(mode, mode_config['casual'])
         if preserved_indices is not None:
             return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
-        
-        model_output = None
+
+        word_count = len(text.split())
+        if word_count > self._CHUNK_WORD_LIMIT:
+            chunks = self._build_chunks(text)
+            logger.info(f"Text has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks for humanization")
+
+            use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+            result_chunks: List[str] = [None] * len(chunks)
+            sagemaker_used = False
+
+            if use_sagemaker:
+                logger.info(f"Attempting parallel SageMaker inference for {len(chunks)} chunks (max_workers=4)")
+                failed_indices: List[int] = []
+                try:
+                    with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                        future_to_idx = {
+                            executor.submit(self._humanize_chunk_via_sagemaker, chunk): idx
+                            for idx, chunk in enumerate(chunks)
+                        }
+                        for future in as_completed(future_to_idx):
+                            idx = future_to_idx[future]
+                            try:
+                                result = future.result()
+                                if result:
+                                    result_chunks[idx] = result
+                                    logger.info(f"SageMaker chunk {idx + 1}/{len(chunks)} done ({len(result.split())} words)")
+                                else:
+                                    failed_indices.append(idx)
+                            except Exception:
+                                failed_indices.append(idx)
+
+                    if failed_indices:
+                        logger.info(f"SageMaker failed for {len(failed_indices)} chunks, falling back to local ONNX")
+                        for idx in failed_indices:
+                            result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
+                    sagemaker_used = not failed_indices
+                except Exception as e:
+                    logger.warning(f"SageMaker parallel processing failed: {e}, falling back to local ONNX")
+                    for idx, chunk in enumerate(chunks):
+                        if result_chunks[idx] is None:
+                            result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+            else:
+                for idx, chunk in enumerate(chunks):
+                    logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
+                    humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+                    result_chunks[idx] = humanized
+
+            model_output = ' '.join(result_chunks)
+            model_output = self._clean_model_output(model_output)
+            if use_post_processor:
+                model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode)
+            before_spelling = model_output
+            final_output = self._apply_spelling_only_pass(model_output)
+            original_words = text.lower().split()
+            final_words = final_output.lower().split()
+            changes = len(set(original_words).symmetric_difference(set(final_words)))
+            return {
+                "original_text": text,
+                "model_output": model_output,
+                "humanized_text": final_output,
+                "changes_made": changes,
+                "original_length": len(text),
+                "humanized_length": len(final_output),
+                "post_processor_used": use_post_processor,
+                "passes": passes,
+                "used_fallback": False,
+                "mode": mode,
+                "spelling_pass_applied": final_output != before_spelling,
+                "chunked": True,
+                "chunk_count": len(chunks),
+                "sagemaker_used": sagemaker_used,
+            }
+
+        model_output = self._humanize_single(text, use_post_processor=False, passes=passes, mode=mode)
         use_fallback = False
-        
-        try:
-            hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {text}")
-            if hf_result and len(hf_result) > 10:
-                model_output = hf_result
-                logger.info("Humanizer via HF API successful")
-        except Exception as e:
-            logger.warning(f"HF API humanizer failed: {e}")
-
-        if not model_output:
-            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {text}")
-            if sm_result and len(sm_result) > 10:
-                model_output = sm_result
-                logger.info("Humanizer via SageMaker successful")
-
-        if not model_output:
-            try:
-                self._load_humanizer()
-                input_text = f"humanize: {text}"
-                inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
-                with torch.no_grad():
-                    outputs = self._humanizer_model.generate(
-                        **inputs,
-                        max_length=1024,
-                        num_beams=1,
-                        do_sample=True,
-                        temperature=1.0,
-                        top_p=0.95,
-                        repetition_penalty=2.5,
-                        no_repeat_ngram_size=3
-                    )
-                model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            except Exception as e:
-                logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-                use_fallback = True
-                model_output = self._humanize_with_hf_api(text)
         
         final_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode) if use_post_processor else model_output
         before_spelling = final_output
@@ -2282,34 +2385,48 @@ class MLModelService:
                 "message": "No matching sources found on the web"
             }
         
-        sources_with_scores = []
-        max_similarity = 0.0
-        
+        valid_results = []
         for result in web_results:
             snippet = result.get("snippet", "")
-            if len(snippet) < 20:
-                continue
-            
+            if len(snippet) >= 20:
+                valid_results.append(result)
+
+        matched_sentences = []
+        snippets = []
+        for result in valid_results:
+            ms = result.get("matched_sentence", "")
+            sn = result.get("snippet", "")
+            matched_sentences.append(ms if ms else "")
+            snippets.append(sn if sn else "")
+
+        semantic_scores = [0.0] * len(valid_results)
+        encode_pairs = [(i, matched_sentences[i], snippets[i])
+                        for i in range(len(valid_results))
+                        if matched_sentences[i] and snippets[i]]
+        if encode_pairs:
+            ms_texts = [p[1] for p in encode_pairs]
+            sn_texts = [p[2] for p in encode_pairs]
+            ms_embs = self._plagiarism_encoder.encode(ms_texts, convert_to_tensor=True, batch_size=len(ms_texts))
+            sn_embs = self._plagiarism_encoder.encode(sn_texts, convert_to_tensor=True, batch_size=len(sn_texts))
+            sims = torch.nn.functional.cosine_similarity(ms_embs, sn_embs)
+            for j, (idx, _, _) in enumerate(encode_pairs):
+                semantic_scores[idx] = max(0.0, sims[j].item()) * 100
+
+        sources_with_scores = []
+        max_similarity = 0.0
+
+        for i, result in enumerate(valid_results):
             jaccard_score = result.get("jaccard_similarity", 0)
-            
-            matched_sentence = result.get("matched_sentence", "")
-            if matched_sentence and snippet:
-                text_embedding = self._plagiarism_encoder.encode([matched_sentence], convert_to_tensor=True)
-                snippet_embedding = self._plagiarism_encoder.encode([snippet], convert_to_tensor=True)
-                semantic_similarity = torch.nn.functional.cosine_similarity(text_embedding, snippet_embedding).item()
-                semantic_score = max(0, semantic_similarity) * 100
-            else:
-                semantic_score = 0
-            
-            combined_score = (jaccard_score * 0.6) + (semantic_score * 0.4)
-            
+            combined_score = (jaccard_score * 0.6) + (semantic_scores[i] * 0.4)
+
             if combined_score >= 30:
+                snippet = result.get("snippet", "")
                 sources_with_scores.append({
                     "url": result.get("url", ""),
                     "title": result.get("title", "Unknown Source"),
                     "similarity_score": round(combined_score, 2),
                     "jaccard_score": round(jaccard_score, 2),
-                    "semantic_score": round(semantic_score, 2),
+                    "semantic_score": round(semantic_scores[i], 2),
                     "matched_text": snippet[:200] + "..." if len(snippet) > 200 else snippet,
                     "source_api": result.get("source", "unknown")
                 })
