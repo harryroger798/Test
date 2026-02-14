@@ -1438,18 +1438,9 @@ class MLModelService:
             return False
     
     def _load_humanizer(self):
-        """Load Stealthwriter T5 Chaos humanizer (ONNX quantized if available)."""
+        """Load Stealthwriter T5 Chaos humanizer (fine-tuned model only)."""
         if self._current_model != "humanizer":
             self._unload_all_models()
-            
-            onnx_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base-onnx')
-            if os.path.exists(onnx_dir) and any(f.endswith('.onnx') for f in os.listdir(onnx_dir)):
-                self._humanizer_tokenizer = AutoTokenizer.from_pretrained(onnx_dir)
-                self._humanizer_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
-                self._is_onnx_humanizer = True
-                logger.info("Loaded humanizer ONNX quantized model")
-                self._current_model = "humanizer"
-                return
 
             model_path = settings.HUMANIZER_MODEL_PATH
             if not os.path.exists(os.path.join(model_path, "model.safetensors")):
