@@ -407,11 +407,13 @@ export default function PricingPage() {
         <div className="text-center py-12 border-t border-white/10">
           <h2 className="text-2xl md:text-3xl font-light text-white mb-4">Still have questions?</h2>
           <p className="text-gray-400 mb-8">Contact our support team and we'll help you find the right plan.</p>
-          <a href="mailto:support@mail.textshift.org">
-                        <Button variant="outline" className="bg-transparent border-white/20 text-white hover:bg-white/5 rounded-full px-8">
-                          Contact Support <ArrowRight className="ml-2 w-4 h-4" />
-                        </Button>
-          </a>
+          <Button
+            variant="outline"
+            onClick={() => setShowContactModal(true)}
+            className="bg-transparent border-white/20 text-white hover:bg-white/5 rounded-full px-8"
+          >
+            Contact Support <ArrowRight className="ml-2 w-4 h-4" />
+          </Button>
         </div>
       </div>
 

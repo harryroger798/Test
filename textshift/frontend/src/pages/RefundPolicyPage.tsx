@@ -120,7 +120,7 @@ export default function RefundPolicyPage() {
               <li>Refunds will be credited to the original payment method used during purchase.</li>
               <li>Processing time depends on your bank or payment provider (typically 5-10 business days).</li>
               <li>You will receive an email confirmation once the refund has been initiated.</li>
-              <li>All payments are processed through Razorpay, and refunds follow their standard processing times.</li>
+              <li>All payments are processed through PayPal, and refunds follow their standard processing times.</li>
             </ul>
           </section>
 
@@ -178,6 +178,7 @@ export default function RefundPolicyPage() {
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
             <Link to="/privacy-policy" className="hover:text-white transition">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-white transition">Terms & Conditions</Link>
+            <Link to="/cookie-policy" className="hover:text-white transition">Cookie Policy</Link>
             <Link to="/shipping-policy" className="hover:text-white transition">Shipping Policy</Link>
             <Link to="/contact" className="hover:text-white transition">Contact Us</Link>
           </div>

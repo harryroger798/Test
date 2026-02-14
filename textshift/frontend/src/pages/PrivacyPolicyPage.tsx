@@ -59,7 +59,7 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc list-inside space-y-2 text-gray-400 mb-4">
               <li>Name and email address</li>
               <li>Account credentials (password is encrypted)</li>
-              <li>Payment information (processed securely by Razorpay)</li>
+              <li>Payment information (processed securely by PayPal)</li>
               <li>Usage data and preferences</li>
             </ul>
             <h3 className="text-lg font-medium text-white mt-4 mb-2">Content Data</h3>
@@ -109,7 +109,7 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc list-inside space-y-2 text-gray-400">
               <li>SSL/TLS encryption for all data transmission</li>
               <li>Encrypted password storage using industry-standard hashing</li>
-              <li>Secure payment processing through Razorpay (PCI-DSS compliant)</li>
+              <li>Secure payment processing through PayPal (PCI-DSS compliant)</li>
               <li>Regular security audits and updates</li>
               <li>Access controls and authentication measures</li>
             </ul>
@@ -127,7 +127,7 @@ export default function PrivacyPolicyPage() {
               the following circumstances:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-400">
-              <li><strong className="text-white">Service Providers:</strong> With trusted third parties who assist in operating our service (e.g., Razorpay for payments)</li>
+              <li><strong className="text-white">Service Providers:</strong> With trusted third parties who assist in operating our service (e.g., PayPal for payments)</li>
               <li><strong className="text-white">Legal Requirements:</strong> When required by law or to protect our rights</li>
               <li><strong className="text-white">Business Transfers:</strong> In connection with a merger, acquisition, or sale of assets</li>
               <li><strong className="text-white">With Your Consent:</strong> When you explicitly authorize us to share information</li>
@@ -215,6 +215,7 @@ export default function PrivacyPolicyPage() {
         <div className="mt-12 pt-8 border-t border-white/10">
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
             <Link to="/terms" className="hover:text-white transition">Terms & Conditions</Link>
+            <Link to="/cookie-policy" className="hover:text-white transition">Cookie Policy</Link>
             <Link to="/shipping-policy" className="hover:text-white transition">Shipping Policy</Link>
             <Link to="/refund-policy" className="hover:text-white transition">Refund Policy</Link>
             <Link to="/contact" className="hover:text-white transition">Contact Us</Link>

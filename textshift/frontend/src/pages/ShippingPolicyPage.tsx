@@ -108,6 +108,7 @@ export default function ShippingPolicyPage() {
           <div className="flex flex-wrap gap-4 text-sm text-gray-400">
             <Link to="/privacy-policy" className="hover:text-white transition">Privacy Policy</Link>
             <Link to="/terms" className="hover:text-white transition">Terms & Conditions</Link>
+            <Link to="/cookie-policy" className="hover:text-white transition">Cookie Policy</Link>
             <Link to="/refund-policy" className="hover:text-white transition">Refund Policy</Link>
             <Link to="/contact" className="hover:text-white transition">Contact Us</Link>
           </div>

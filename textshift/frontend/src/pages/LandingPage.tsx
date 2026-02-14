@@ -1142,7 +1142,7 @@ export default function LandingPage() {
               <div className="flex flex-col gap-2 text-gray-400 text-sm">
                 <Link to="/features" className="hover:text-white transition">Features</Link>
                 <Link to="/pricing" className="hover:text-white transition">Pricing</Link>
-                <Link to="/pricing-details" className="hover:text-white transition">Pricing Details</Link>
+                <Link to="/contact" className="hover:text-white transition">Contact Us</Link>
                 <Link to="/api-docs" className="hover:text-white transition">API Docs</Link>
               </div>
             </div>
@@ -1153,6 +1153,7 @@ export default function LandingPage() {
                 <Link to="/privacy-policy" className="hover:text-white transition">Privacy Policy</Link>
                 <Link to="/refund-policy" className="hover:text-white transition">Refund Policy</Link>
                 <Link to="/shipping-policy" className="hover:text-white transition">Shipping Policy</Link>
+                <Link to="/cookie-policy" className="hover:text-white transition">Cookie Policy</Link>
               </div>
             </div>
             <div className="text-center md:text-left">

@@ -27,10 +27,10 @@ const FeaturesPage = lazy(() => import('@/pages/FeaturesPage'));
 
 const ShippingPolicyPage = lazy(() => import('@/pages/ShippingPolicyPage'));
 const ContactPage = lazy(() => import('@/pages/ContactPage'));
-const PricingDetailsPage = lazy(() => import('@/pages/PricingDetailsPage'));
-const TermsPage = lazy(() => import('@/pages/TermsPage'));
+const TermsPage= lazy(() => import('@/pages/TermsPage'));
 const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicyPage'));
 const RefundPolicyPage = lazy(() => import('@/pages/RefundPolicyPage'));
+const CookiePolicyPage = lazy(() => import('@/pages/CookiePolicyPage'));
 const Auth0Callback = lazy(() => import('@/pages/Auth0Callback'));
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
@@ -70,6 +70,11 @@ const queryClient= new QueryClient({
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  
+  if (!hasHydrated) {
+    return <PageLoader />;
+  }
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -84,6 +89,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasHydrated = useAuthStore((state) => state._hasHydrated);
+  
+  if (!hasHydrated) {
+    return <PageLoader />;
+  }
   
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
@@ -112,13 +122,13 @@ function App() {
                         <Route path="/api-docs" element={<ApiDocsPage />} />
                         <Route path="/features" element={<FeaturesPage />} />
             
-                        {/* Policy pages for Razorpay compliance */}
+                        {/* Policy & info pages */}
                         <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
                         <Route path="/contact" element={<ContactPage />} />
-                        <Route path="/pricing-details" element={<PricingDetailsPage />} />
                         <Route path="/terms" element={<TermsPage />} />
                         <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
                         <Route path="/refund-policy" element={<RefundPolicyPage />} />
+                        <Route path="/cookie-policy" element={<CookiePolicyPage />} />
             
             {/* Auth0 callback */}
             <Route path="/auth/callback" element={<Auth0Callback />} />

@@ -1,9 +1,9 @@
 // Service Worker for TextShift PWA (Speed Optimization #23, Mobile Optimization #46)
 // Provides offline support and caching
 
-const CACHE_NAME = 'textshift-v7';
-const STATIC_CACHE = 'textshift-static-v7';
-const DYNAMIC_CACHE = 'textshift-dynamic-v7';
+const CACHE_NAME = 'textshift-v9';
+const STATIC_CACHE = 'textshift-static-v9';
+const DYNAMIC_CACHE = 'textshift-dynamic-v9';
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
