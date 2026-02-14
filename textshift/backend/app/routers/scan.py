@@ -190,7 +190,7 @@ async def detect_ai(
                 "human_probability": 100.0,
                 "confidence_score": 1.0,
                 "confidence_level": "high",
-                "analysis": {"text_length": len(scan.input_text), "word_count": len(scan.input_text.split())},
+                "analysis": {"text_length": len(scan.input_text), "word_count": count_words(scan.input_text)},
                 "reliability": "normal",
                 "warning": None,
                 "textshift_humanized": True,

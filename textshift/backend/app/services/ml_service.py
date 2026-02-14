@@ -1795,7 +1795,8 @@ class MLModelService:
             1 if triboost_results['v4']['ai_prob'] > 0.5 else 0
         ])
         
-        wc = len(text.split())
+        from app.services.credit_service import count_words
+        wc = count_words(text)
         min_words = 50
         reliability = "low" if wc < min_words else "normal"
         result = {

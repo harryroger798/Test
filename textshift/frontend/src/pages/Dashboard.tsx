@@ -312,12 +312,12 @@ export default function Dashboard() {
       const writingTools = [
         { id: 'grammar', name: 'Grammar Check', icon: FileCheck, color: 'emerald', description: 'Fix grammar errors' },
         { id: 'readability', name: 'Readability', icon: BookOpen, color: 'blue', description: 'Analyze readability' },
-        { id: 'tone', name: 'Tone Adjust', icon: Volume2, color: 'purple', description: 'Change writing tone' },
+        { id: 'tone-adjust', name: 'Tone Adjust', icon: Volume2, color: 'purple', description: 'Change writing tone' },
         { id: 'summarize', name: 'Summarize', icon: FileText, color: 'amber', description: 'Summarize content' },
         { id: 'paraphrase', name: 'Paraphrase', icon: Repeat, color: 'cyan', description: 'Rewrite content' },
         { id: 'translate', name: 'Translate', icon: Languages, color: 'rose', description: 'Translate text' },
-        { id: 'word_count', name: 'Word Count', icon: Type, color: 'gray', description: 'Count words & chars' },
-        { id: 'style', name: 'Style Analysis', icon: PenTool, color: 'indigo', description: 'Analyze writing style' },
+        { id: 'word-count', name: 'Word Count', icon: Type, color: 'gray', description: 'Count words & chars' },
+        { id: 'style-analysis', name: 'Style Analysis', icon: PenTool, color: 'indigo', description: 'Analyze writing style' },
         { id: 'improve', name: 'Content Improve', icon: Wand2, color: 'pink', description: 'Enhance content' },
         { id: 'citation', name: 'Citation Gen', icon: Quote, color: 'orange', description: 'Generate citations' },
         { id: 'export', name: 'Export', icon: FileDown, color: 'teal', description: 'Export to formats' },
@@ -1484,13 +1484,6 @@ export default function Dashboard() {
                         </div>
                         <ChevronRight className="w-4 h-4 text-gray-500" />
                       </Link>
-                      <button onClick={handleOpenBuyCredits} className="w-full flex items-center justify-between p-4 text-gray-300 hover:text-white hover:bg-white/5 transition border-b border-white/10">
-                        <div className="flex items-center gap-3">
-                          <CreditCard className="w-4 h-4" />
-                          <span>Buy Credits</span>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-gray-500" />
-                      </button>
                       <Link to="/settings" className="flex items-center justify-between p-4 text-gray-300 hover:text-white hover:bg-white/5 transition">
                         <div className="flex items-center gap-3">
                           <Settings className="w-4 h-4" />
@@ -1573,65 +1566,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-      {/* Buy Credits Modal */}
-      {showBuyCreditsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowBuyCreditsModal(false)} />
-          <div className="relative w-full max-w-lg bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
-            <button 
-              onClick={() => setShowBuyCreditsModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
-            >
-              <span className="text-2xl">&times;</span>
-            </button>
-
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CreditCard className="w-6 h-6 text-emerald-400" />
-              </div>
-              <h3 className="text-2xl font-medium text-white mb-2">Buy Credits</h3>
-              <p className="text-gray-400">
-                Current balance: <span className="text-emerald-400 font-medium">{credits?.balance === -1 || user?.credits_balance === -1 ? 'Unlimited' : (credits?.balance?.toLocaleString() || user?.credits_balance?.toLocaleString() || 0)}</span> words
-              </p>
-            </div>
-
-            {buyCreditsMessage && (
-              <div className={`mb-4 p-3 rounded-xl text-sm ${
-                buyCreditsMessage.type === 'success' 
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' 
-                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-              }`}>
-                {buyCreditsMessage.text}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {creditPackages.map((pkg) => (
-                <button
-                  key={pkg.id}
-                  onClick={() => handleBuyCredits(pkg.id)}
-                  disabled={buyCreditsLoading !== null}
-                  className={`p-4 rounded-xl border transition-all ${
-                    buyCreditsLoading === pkg.id
-                      ? 'bg-emerald-500/20 border-emerald-500/50'
-                      : 'bg-white/5 border-white/10 hover:border-emerald-500/50 hover:bg-emerald-500/10'
-                  }`}
-                >
-                  <div className="text-white font-medium">{pkg.name}</div>
-                  <div className="text-emerald-400 text-lg font-bold">${pkg.price.toFixed(2)}</div>
-                  {buyCreditsLoading === pkg.id && (
-                    <Loader2 className="w-4 h-4 animate-spin mx-auto mt-2 text-emerald-400" />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <p className="text-center text-gray-500 text-xs">
-              Credits are added instantly to your account. No expiration.
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

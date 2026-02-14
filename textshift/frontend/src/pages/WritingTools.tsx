@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -269,7 +269,28 @@ const getColorClasses = (color: string, _isActive?: boolean) => {
 export default function WritingTools() {
   const { user, logout, updateUser } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTool, setActiveTool] = useState<string>('grammar');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const toolParam = params.get('tool');
+    if (toolParam) {
+      const idMap: Record<string, string> = {
+        'word_count': 'word-count',
+        'style': 'style-analysis',
+        'tone': 'tone-adjust',
+      };
+      const mappedId = idMap[toolParam] || toolParam;
+      const found = tools.find(t => t.id === mappedId);
+      if (found) {
+        setActiveTool(mappedId);
+        if (found.options && found.options.length > 0) {
+          setOption(found.options[0].value);
+        }
+      }
+    }
+  }, [location.search]);
 
   usePageSEO({
     title: 'Writing Tools - Grammar, Tone, Summarizer & More',

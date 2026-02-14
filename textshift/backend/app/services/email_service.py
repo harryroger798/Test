@@ -321,7 +321,7 @@ If you didn't request this reset, please ignore this email.
                     Welcome to TextShift, {name}!
                 </h1>
                 <p style="margin: 0 0 32px 0; font-size: 16px; color: #9ca3af; text-align: center; line-height: 1.6;">
-                    You're all set! Your account is ready with <strong style="color: #10b981;">20,000 free credits</strong> to explore our powerful AI content tools.
+                    You're all set! Your account is ready with <strong style="color: #10b981;">5,000 free words</strong> to explore our powerful AI content tools.
                 </p>
                 
                 <!-- Features -->
@@ -402,7 +402,7 @@ If you didn't request this reset, please ignore this email.
         text_content = f"""
 Welcome to TextShift, {name}!
 
-You're all set! Your account is ready with 20,000 free credits to explore our powerful AI content tools.
+You're all set! Your account is ready with 5,000 free words to explore our powerful AI content tools.
 
 What you can do:
 - AI Detection: Detect AI-generated content with 99% accuracy
@@ -454,7 +454,7 @@ Need help? Reply to this email or visit our website.
                                 <p style="margin: 0 0 8px 0; font-size: 14px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px;">Your Plan</p>
                                 <p style="margin: 0 0 16px 0; font-size: 24px; font-weight: 700; color: #10b981;">{plan_name}</p>
                                 <p style="margin: 0; font-size: 14px; color: #9ca3af;">
-                                    <strong style="color: #ffffff; font-size: 20px;">{credits_display}</strong> credits added
+                                    <strong style="color: #ffffff; font-size: 20px;">{credits_display}</strong> words added
                                 </p>
                             </td>
                         </tr>
@@ -471,7 +471,7 @@ Need help? Reply to this email or visit our website.
                     </tr>
                 </table>
                 <p style="margin: 32px 0 0 0; font-size: 14px; color: #6b7280; text-align: center; line-height: 1.6;">
-                    Your credits never expire. Cancel or change your plan anytime.
+                    Your words never expire. Cancel or change your plan anytime.
                 </p>
             </td>
         </tr>
@@ -485,7 +485,7 @@ Subscription Confirmed!
 Thanks for upgrading, {name}! Your {plan_name} plan is now active.
 
 Plan: {plan_name}
-Credits Added: {credits_display}
+Words Added: {credits_display}
 
 Your credits never expire. Cancel or change your plan anytime.
 
@@ -610,10 +610,10 @@ You can change these preferences anytime at: {settings_url}
                     </tr>
                 </table>
                 <h1 style="margin: 0 0 16px 0; font-size: 28px; font-weight: 600; color: #ffffff; text-align: center; line-height: 1.3;">
-                    Credits Added Successfully!
+                    Words Added Successfully!
                 </h1>
                 <p style="margin: 0 0 32px 0; font-size: 16px; color: #9ca3af; text-align: center; line-height: 1.6;">
-                    Thanks for your purchase, {name}! Your credits have been added to your account.
+                    Thanks for your purchase, {name}! Your words have been added to your account.
                 </p>
                 
                 <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 16px; padding: 24px; margin-bottom: 32px;">
@@ -622,7 +622,7 @@ You can change these preferences anytime at: {settings_url}
                             <td style="padding: 8px 0; border-bottom: 1px solid rgba(16, 185, 129, 0.2);">
                                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                     <tr>
-                                        <td style="color: #9ca3af; font-size: 14px;">Credits Added</td>
+                                        <td style="color: #9ca3af; font-size: 14px;">Words Added</td>
                                         <td align="right" style="color: #10b981; font-size: 18px; font-weight: 700;">+{credits_added:,}</td>
                                     </tr>
                                 </table>
@@ -655,30 +655,30 @@ You can change these preferences anytime at: {settings_url}
                     <tr>
                         <td align="center">
                             <a href="{dashboard_url}" class="button" style="display: inline-block; background: linear-gradient(135deg, #10b981, #059669); color: #000000; font-size: 16px; font-weight: 600; text-decoration: none; padding: 16px 48px; border-radius: 50px; text-align: center;">
-                                Use Your Credits
+                                Use Your Words
                             </a>
                         </td>
                     </tr>
                 </table>
                 <p style="margin: 32px 0 0 0; font-size: 13px; color: #6b7280; text-align: center; line-height: 1.6;">
-                    Your credits never expire. Use them anytime!
+                    Your words never expire. Use them anytime!
                 </p>
             </td>
         </tr>
         """
         
-        html_content = get_base_email_template(content, f"You've added {credits_added:,} credits to your account!")
+        html_content = get_base_email_template(content, f"You've added {credits_added:,} words to your account!")
         
         text_content = f"""
-Credits Added Successfully!
+Words Added Successfully!
 
-Thanks for your purchase, {name}! Your credits have been added to your account.
+Thanks for your purchase, {name}! Your words have been added to your account.
 
-Credits Added: +{credits_added:,}
+Words Added: +{credits_added:,}
 Amount Paid: ${price:.2f}
 New Balance: {new_balance:,} words
 
-Your credits never expire. Use them anytime!
+Your words never expire. Use them anytime!
 
 Go to Dashboard: {dashboard_url}
 
@@ -687,7 +687,7 @@ Go to Dashboard: {dashboard_url}
         
         return self.send_email(
             to_email=to_email,
-            subject="Credits Added - TextShift",
+            subject="Words Added - TextShift",
             html_content=html_content,
             text_content=text_content
         )
