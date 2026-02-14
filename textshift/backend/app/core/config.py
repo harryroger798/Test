@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     INTERCOM_ACCESS_TOKEN: str = ""
     INTERCOM_IDENTITY_SECRET: str = ""
 
+    # AWS (for S3/SES services)
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_DEFAULT_REGION: str = "us-east-1"
+
     # iDrive e2 (alternate env var names)
     IDRIVE_ACCESS_KEY: str = ""
     IDRIVE_SECRET_KEY: str = ""
