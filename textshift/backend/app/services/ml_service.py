@@ -1502,11 +1502,13 @@ class MLModelService:
         try:
             self._load_humanizer()
             input_text = f"humanize: {sentence}"
-            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
+            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+            input_token_count = inputs['input_ids'].shape[1]
+            max_new = min(int(input_token_count * 1.3), 512)
             with torch.no_grad():
                 outputs = self._humanizer_model.generate(
                     **inputs,
-                    max_length=1024,
+                    max_new_tokens=max_new,
                     num_beams=1,
                     do_sample=True,
                     temperature=1.0,
@@ -2084,7 +2086,7 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    _CHUNK_WORD_LIMIT = 400
+    _CHUNK_WORD_LIMIT = 350
 
     def _build_chunks(self, text: str) -> List[str]:
         """Split text into chunks of roughly _CHUNK_WORD_LIMIT words, breaking at sentence boundaries."""
@@ -2163,29 +2165,8 @@ class MLModelService:
                 "chunk_count": len(chunks),
             }
 
-        model_output = None
+        model_output = self._humanize_single(text, use_post_processor=False, passes=passes, mode=mode)
         use_fallback = False
-        
-        try:
-            self._load_humanizer()
-            input_text = f"humanize: {text}"
-            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
-            with torch.no_grad():
-                outputs = self._humanizer_model.generate(
-                    **inputs,
-                    max_length=1024,
-                    num_beams=1,
-                    do_sample=True,
-                    temperature=1.0,
-                    top_p=0.95,
-                    repetition_penalty=2.5,
-                    no_repeat_ngram_size=3
-                )
-            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        except Exception as e:
-            logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-            use_fallback = True
-            model_output = self._humanize_with_hf_api(text)
         
         final_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode) if use_post_processor else model_output
         before_spelling = final_output
