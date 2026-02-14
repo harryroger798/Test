@@ -39,7 +39,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await authApi.login(email, password);
+      const response = await authApi.login(email, password, captchaToken);
       setAuth(response.access_token, response.user);
       navigate('/dashboard');
     } catch (err: any) {

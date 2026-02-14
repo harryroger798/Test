@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     MAILGUN_FROM_EMAIL: str = "noreply@mail.textshift.org"
     MAILGUN_FROM_NAME: str = "TextShift"
     
+    # MTCaptcha
+    MTCAPTCHA_PRIVATE_KEY: str = ""
+
     # Auth0
     AUTH0_DOMAIN: str = "textshift.us.auth0.com"
     AUTH0_CLIENT_ID: str = "7P4gnXh1bRHbGeIY0wWD8sC8IJ7zj8oO"

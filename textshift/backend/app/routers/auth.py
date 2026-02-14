@@ -26,6 +26,7 @@ from app.schemas.user import (
     ResendVerificationRequest
 )
 from app.services.email_service import email_service, generate_token
+from app.core.captcha import verify_captcha_token
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -148,10 +149,12 @@ async def login(
 
 
 from pydantic import BaseModel
+from typing import Optional
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+    captcha_token: Optional[str] = None
 
 @router.post("/token", response_model=TokenResponse)
 async def login_json(
@@ -159,6 +162,11 @@ async def login_json(
     db: Session = Depends(get_db)
 ):
     """Login with email and password (JSON body) - for API access."""
+    if not await verify_captcha_token(login_data.captcha_token or ""):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CAPTCHA verification failed. Please try again."
+        )
     _check_account_lockout(login_data.email)
     
     user = db.query(User).filter(User.email == login_data.email).first()

@@ -42,7 +42,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const response = await authApi.register(email, password, fullName);
+      const response = await authApi.register(email, password, fullName, captchaToken);
       setAuth(response.access_token, response.user);
       triggerConfetti();
       // Redirect to verification pending page instead of dashboard
