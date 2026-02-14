@@ -2099,43 +2099,51 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
-        """Humanize AI text using Stealthwriter T5 Chaos model.
-        
-        If preserved_indices is provided, only humanize sentences NOT in the list.
-        Preserved sentences are kept exactly as-is in the output.
-        Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
-        """
-        mode_config = {
-            'academic': {'temperature': 0.7, 'top_p': 0.9},
-            'professional': {'temperature': 0.75, 'top_p': 0.92},
-            'casual': {'temperature': 0.85, 'top_p': 0.93},
-        }
-        config = mode_config.get(mode, mode_config['casual'])
-        if preserved_indices is not None:
-            return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
-        
+    _CHUNK_WORD_THRESHOLD = 500
+
+    def _build_chunks(self, sentences: List[str], max_words: int = 400) -> List[str]:
+        """Group sentences into chunks that stay under *max_words* so each
+        chunk fits comfortably within the model's 1024-token context window."""
+        chunks: List[str] = []
+        current: List[str] = []
+        current_len = 0
+        for sentence in sentences:
+            sw = len(sentence.split())
+            if current and current_len + sw > max_words:
+                chunks.append(' '.join(current))
+                current = [sentence]
+                current_len = sw
+            else:
+                current.append(sentence)
+                current_len += sw
+        if current:
+            chunks.append(' '.join(current))
+        return chunks
+
+    def _humanize_chunk(self, chunk: str) -> tuple:
+        """Run a single chunk through HF API → SageMaker → local ONNX → HF fallback.
+        Returns (model_output, used_fallback)."""
         model_output = None
-        use_fallback = False
-        
+        used_fallback = False
+
         try:
-            hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {text}")
+            hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {chunk}")
             if hf_result and len(hf_result) > 10:
                 model_output = hf_result
-                logger.info("Humanizer via HF API successful")
+                logger.info("Humanizer chunk via HF API successful")
         except Exception as e:
-            logger.warning(f"HF API humanizer failed: {e}")
+            logger.warning(f"HF API humanizer chunk failed: {e}")
 
         if not model_output:
-            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {text}")
+            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {chunk}")
             if sm_result and len(sm_result) > 10:
                 model_output = sm_result
-                logger.info("Humanizer via SageMaker successful")
+                logger.info("Humanizer chunk via SageMaker successful")
 
         if not model_output:
             try:
                 self._load_humanizer()
-                input_text = f"humanize: {text}"
+                input_text = f"humanize: {chunk}"
                 inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=1024, padding=True)
                 with torch.no_grad():
                     outputs = self._humanizer_model.generate(
@@ -2150,9 +2158,74 @@ class MLModelService:
                     )
                 model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
             except Exception as e:
-                logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-                use_fallback = True
-                model_output = self._humanize_with_hf_api(text)
+                logger.warning(f"Local humanizer model chunk failed: {e}, using HuggingFace API fallback")
+                used_fallback = True
+                model_output = self._humanize_with_hf_api(chunk)
+
+        return model_output, used_fallback
+
+    def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
+        """Humanize AI text using Stealthwriter T5 Chaos model.
+        
+        If preserved_indices is provided, only humanize sentences NOT in the list.
+        Preserved sentences are kept exactly as-is in the output.
+        Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
+        
+        Long texts (>500 words) are automatically split into chunks so each
+        chunk fits within the model's 1024-token context window.
+        """
+        mode_config = {
+            'academic': {'temperature': 0.7, 'top_p': 0.9},
+            'professional': {'temperature': 0.75, 'top_p': 0.92},
+            'casual': {'temperature': 0.85, 'top_p': 0.93},
+        }
+        config = mode_config.get(mode, mode_config['casual'])
+        if preserved_indices is not None:
+            return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
+
+        word_count = len(text.split())
+        if word_count > self._CHUNK_WORD_THRESHOLD:
+            logger.info(f"Text has {word_count} words (>{self._CHUNK_WORD_THRESHOLD}), using chunked humanization")
+            sentences = self._split_sentences_preserve(text)
+            chunks = self._build_chunks(sentences)
+            logger.info(f"Split into {len(chunks)} chunks for humanization")
+
+            chunk_outputs: List[str] = []
+            any_fallback = False
+            for idx, chunk in enumerate(chunks):
+                logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
+                chunk_output, chunk_fallback = self._humanize_chunk(chunk)
+                if chunk_fallback:
+                    any_fallback = True
+                processed = self._apply_stealthwriter_postprocessor(
+                    chunk_output, passes, original_text=chunk, mode=mode
+                ) if use_post_processor else chunk_output
+                chunk_outputs.append(processed)
+
+            model_output = ' '.join(chunk_outputs)
+            final_output = self._apply_spelling_only_pass(model_output)
+            original_words = text.lower().split()
+            final_words = final_output.lower().split()
+            changes = len(set(original_words).symmetric_difference(set(final_words)))
+            return {
+                "original_text": text,
+                "model_output": model_output,
+                "humanized_text": final_output,
+                "changes_made": changes,
+                "original_length": len(text),
+                "humanized_length": len(final_output),
+                "post_processor_used": use_post_processor,
+                "passes": passes,
+                "used_fallback": any_fallback,
+                "mode": mode,
+                "spelling_pass_applied": final_output != model_output,
+                "chunked": True,
+                "chunk_count": len(chunks),
+            }
+
+        model_output = None
+        use_fallback = False
+        model_output, use_fallback = self._humanize_chunk(text)
         
         final_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode) if use_post_processor else model_output
         before_spelling = final_output
