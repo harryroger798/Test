@@ -1494,15 +1494,34 @@ class MLModelService:
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         return [s.strip() for s in sentences if s.strip()]
     
+    @staticmethod
+    def _clean_model_output(text: str) -> str:
+        """Strip task-prefix leakage and clean up raw model output."""
+        result = text.strip()
+        prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
+        for prefix in prefixes:
+            if result.startswith(prefix):
+                result = result[len(prefix):].strip()
+            result = result.replace(f" {prefix} ", " ")
+        result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        return result.strip()
+
     def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
-        """Humanize a single sentence using HF API (primary) → ONNX local (fast) → SageMaker (fallback)."""
+        """Humanize a single sentence using HF API (primary) → SageMaker → ONNX local (fallback)."""
         model_output = None
         try:
             hf_result = hf_client.invoke_text2text("humanizer", f"humanize: {sentence}")
             if hf_result and len(hf_result) > 10:
-                model_output = hf_result
+                model_output = self._clean_model_output(hf_result)
+                logger.info("Humanizer via HF API successful")
         except Exception as e:
             logger.warning(f"HF API humanize_single failed: {e}")
+
+        if not model_output:
+            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {sentence}")
+            if sm_result and len(sm_result) > 10:
+                model_output = self._clean_model_output(sm_result)
+                logger.info("Humanizer via SageMaker successful")
 
         if not model_output:
             try:
@@ -1522,19 +1541,14 @@ class MLModelService:
                     )
                 local_result = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
                 if local_result and len(local_result) > 10:
-                    model_output = local_result
+                    model_output = self._clean_model_output(local_result)
                     logger.info("Humanizer via ONNX local successful")
             except Exception as e:
                 logger.warning(f"ONNX local humanize failed: {e}")
 
         if not model_output:
-            sm_result = sagemaker_client.invoke_text2text("humanizer", f"humanize: {sentence}")
-            if sm_result and len(sm_result) > 10:
-                model_output = sm_result
-                logger.info("Humanizer via SageMaker fallback")
-
-        if not model_output:
             model_output = self._humanize_with_hf_api(sentence)
+            model_output = self._clean_model_output(model_output)
         
         if use_post_processor:
             model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
@@ -2131,10 +2145,12 @@ class MLModelService:
             result_sentences: List[str] = []
             for idx, sentence in enumerate(sentences):
                 logger.info(f"Humanizing sentence {idx + 1}/{len(sentences)}")
-                humanized = self._humanize_single(sentence, use_post_processor, passes, mode=mode)
+                humanized = self._humanize_single(sentence, use_post_processor=False, passes=passes, mode=mode)
                 result_sentences.append(humanized)
 
             model_output = ' '.join(result_sentences)
+            if use_post_processor:
+                model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode)
             before_spelling = model_output
             final_output = self._apply_spelling_only_pass(model_output)
             original_words = text.lower().split()
