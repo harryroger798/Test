@@ -18,3 +18,6 @@ from app.models.promo import Promo, PromoRedemption, PromoType
 
 # Email campaign system models
 from app.models.email_campaign import EmailCampaign, EmailSend, EmailType, CampaignStatus, TargetAudience
+
+# Humanized text hash tracking (for ensuring TextShift humanized outputs pass our detector)
+from app.models.humanized_hash import HumanizedTextHash
