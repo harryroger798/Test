@@ -1788,8 +1788,9 @@ class MLModelService:
     def _get_roberta_chunked_prediction(self, text: str) -> Dict[str, Any]:
         """Get chunked RoBERTa prediction for long texts.
         
-        Splits text into overlapping chunks of ~400 tokens, runs RoBERTa on each,
-        and returns both single-pass and chunked averages plus the blended score.
+        Splits text into overlapping chunks of ~400 tokens, scores each via
+        SageMaker GPU (parallel) with local CPU fallback, and returns both
+        single-pass and chunked averages plus the blended score.
         """
         self._load_detector()
         
@@ -1819,13 +1820,12 @@ class MLModelService:
                 break
             start = end - overlap
         
-        chunk_scores = []
-        for chunk in chunks:
-            inputs = self._detector_tokenizer(chunk, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._detector_model(**inputs)
-                probs = torch.softmax(outputs.logits, dim=-1)
-            chunk_scores.append(probs[0][1].item())
+        def _score_chunk(chunk_text: str) -> float:
+            pred = self._get_roberta_prediction(chunk_text)
+            return pred['ai_prob']
+        
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            chunk_scores = list(executor.map(_score_chunk, chunks))
         
         chunked_ai = float(np.mean(chunk_scores))
         if len(chunks) > 3:
@@ -1834,6 +1834,7 @@ class MLModelService:
             blended_ai = (single_ai + chunked_ai) / 2.0
         
         logger.info(f"RoBERTa chunked: single={single_ai*100:.1f}%, chunked_avg={chunked_ai*100:.1f}% ({len(chunks)} chunks), blended={blended_ai*100:.1f}%")
+        logger.info(f"Chunk scores: {[round(s*100, 1) for s in chunk_scores]}")
         
         return {
             'single_ai': single_ai,
@@ -1877,10 +1878,14 @@ class MLModelService:
         triboost_ai_probs = [r['ai_prob'] for r in triboost_results.values()]
         triboost_avg = float(np.mean(triboost_ai_probs))
         triboost_all_high = all(p > 0.90 for p in triboost_ai_probs)
+        chunk_gap = roberta_chunked_score - roberta_single
         
-        if triboost_all_high and roberta_chunked_score > 0.40 and roberta_single < 0.20:
+        if triboost_all_high and num_chunks > 3 and roberta_chunked_score > 0.30:
             w_roberta, w_triboost = 0.40, 0.60
-            strategy_used = "consensus_ai_low_intro_high_body"
+            strategy_used = "consensus_ai_strong_chunks"
+        elif triboost_all_high and num_chunks > 3 and chunk_gap > 0.03 and roberta_chunked_score > 0.05:
+            w_roberta, w_triboost = 0.30, 0.70
+            strategy_used = "consensus_ai_body_gap"
         elif roberta_blended < 0.10:
             w_roberta, w_triboost = 0.98, 0.02
             strategy_used = "roberta_primary_confident_human"
