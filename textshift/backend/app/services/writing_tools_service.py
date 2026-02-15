@@ -557,8 +557,8 @@ class WritingToolsService:
         try:
             errors = []
             
-            # Step 1: Use T5 grammar model for error detection
-            t5_corrected = self._correct_grammar_with_t5(text)
+            # Step 1: Use CoEdIT grammar model via SageMaker GPU (primary) with local fallback
+            t5_corrected = self._edit_text_with_coedit(text, "Fix grammatical errors in this sentence")
             
             if t5_corrected and t5_corrected != text:
                 t5_errors = self._find_differences(text, t5_corrected)
@@ -1981,8 +1981,20 @@ class WritingToolsService:
             return {"success": False, "error": str(e)}
     
     # ==================== Feature 9: Translator ====================
+    def _translate_chunk_via_sagemaker(self, lang_pair: str, chunk: str) -> Optional[str]:
+        """Translate a single chunk via SageMaker multi-model GPU endpoint."""
+        try:
+            endpoint_key = f"translator-{lang_pair}"
+            result = sagemaker_client.invoke_translation(endpoint_key, chunk)
+            if result and len(result.strip()) > 0:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker translator chunk failed: {e}")
+            return None
+
     def translate(self, text: str, source_lang: str, target_lang: str) -> Dict[str, Any]:
-        """Translate text using Helsinki-NLP models."""
+        """Translate text using SageMaker GPU (primary) with local Helsinki-NLP fallback."""
         try:
             lang_pair = f"{source_lang}-{target_lang}"
             
@@ -1992,30 +2004,78 @@ class WritingToolsService:
                     "error": f"Language pair {lang_pair} not supported. Supported: {list(self.SUPPORTED_LANGUAGES.keys())}"
                 }
             
-            self._load_translator_model(lang_pair)
-            
-            if lang_pair not in self._translator_models:
-                return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
-            
-            tokenizer, model = self._translator_models[lang_pair]
-            
-            # Split into sentences for better translation
             sentences = re.split(r'(?<=[.!?])\s+', text)
-            translated_sentences = []
+            sentences = [s for s in sentences if s.strip()]
             
+            chunks: list[str] = []
+            current_chunk: list[str] = []
+            current_len = 0
             for sentence in sentences:
-                if not sentence.strip():
-                    continue
-                    
-                inputs = tokenizer(sentence, return_tensors="pt", truncation=True, max_length=512)
-                
-                with torch.no_grad():
-                    outputs = model.generate(**inputs, max_length=512, num_beams=4)
-                
-                translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                translated_sentences.append(translated)
-            
-            translated_text = " ".join(translated_sentences)
+                slen = len(sentence)
+                if current_len + slen > 400 and current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                    current_chunk = [sentence]
+                    current_len = slen
+                else:
+                    current_chunk.append(sentence)
+                    current_len += slen
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+
+            translated_chunks: list[Optional[str]] = [None] * len(chunks)
+            used_gpu = False
+
+            if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                try:
+                    failed_indices = []
+                    with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                        future_to_idx = {
+                            executor.submit(self._translate_chunk_via_sagemaker, lang_pair, chunk): idx
+                            for idx, chunk in enumerate(chunks)
+                        }
+                        from concurrent.futures import as_completed
+                        for future in as_completed(future_to_idx):
+                            idx = future_to_idx[future]
+                            try:
+                                result = future.result()
+                                if result:
+                                    translated_chunks[idx] = result
+                                else:
+                                    failed_indices.append(idx)
+                            except Exception:
+                                failed_indices.append(idx)
+
+                    if not failed_indices:
+                        logger.info(f"SageMaker GPU translated {len(chunks)} chunks in parallel")
+                        used_gpu = True
+                    else:
+                        logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
+                        if len(failed_indices) < len(chunks):
+                            used_gpu = True
+                except Exception as e:
+                    logger.warning(f"SageMaker GPU translation failed, falling back to local: {e}")
+
+            local_needed = [i for i, t in enumerate(translated_chunks) if t is None]
+            if local_needed:
+                self._load_translator_model(lang_pair)
+                if lang_pair in self._translator_models:
+                    tokenizer, model = self._translator_models[lang_pair]
+                    for idx in local_needed:
+                        chunk = chunks[idx]
+                        chunk_sentences = re.split(r'(?<=[.!?])\s+', chunk)
+                        chunk_translated = []
+                        for sent in chunk_sentences:
+                            if not sent.strip():
+                                continue
+                            inputs = tokenizer(sent, return_tensors="pt", truncation=True, max_length=512)
+                            with torch.no_grad():
+                                outputs = model.generate(**inputs, max_length=512, num_beams=4)
+                            chunk_translated.append(tokenizer.decode(outputs[0], skip_special_tokens=True))
+                        translated_chunks[idx] = ' '.join(chunk_translated)
+                else:
+                    return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
+
+            translated_text = " ".join(t for t in translated_chunks if t)
             
             return {
                 "success": True,
@@ -2025,7 +2085,8 @@ class WritingToolsService:
                 "target_language": target_lang,
                 "language_pair": self.SUPPORTED_LANGUAGES[lang_pair],
                 "word_count_original": len(text.split()),
-                "word_count_translated": len(translated_text.split())
+                "word_count_translated": len(translated_text.split()),
+                "backend": "SageMaker GPU" if used_gpu else "Local CPU"
             }
         except Exception as e:
             logger.error(f"Translation failed: {e}")
