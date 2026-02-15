@@ -36,7 +36,7 @@ class GrammarCheckResponse(BaseModel):
     error: Optional[str] = None
 
 class ToneDetectRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000)
+    text: str = Field(..., min_length=1, max_length=50000)
 
 class ToneDetectResponse(BaseModel):
     success: bool
@@ -51,7 +51,7 @@ class ToneDetectResponse(BaseModel):
     error: Optional[str] = None
 
 class ToneAdjustRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000)
+    text: str = Field(..., min_length=1, max_length=50000)
     target_tone: str = Field(..., description="Target tone: formal, casual, persuasive, academic, confident, empathetic")
 
 class ToneAdjustResponse(BaseModel):
@@ -109,7 +109,7 @@ class SummarizeResponse(BaseModel):
     error: Optional[str] = None
 
 class ParaphraseRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000)
+    text: str = Field(..., min_length=1, max_length=50000)
     mode: str = Field(default="standard", description="Mode: standard, fluency, creative, formal, simple")
 
 class ParaphraseResponse(BaseModel):
@@ -162,7 +162,7 @@ class WordCountResponse(BaseModel):
     error: Optional[str] = None
 
 class TranslateRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000)
+    text: str = Field(..., min_length=1, max_length=50000)
     source_lang: str = Field(..., description="Source language code: en, es, fr, de")
     target_lang: str = Field(..., description="Target language code: en, es, fr, de")
 
@@ -218,7 +218,7 @@ class StyleAnalysisResponse(BaseModel):
     error: Optional[str] = None
 
 class ContentImproveRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10000)
+    text: str = Field(..., min_length=1, max_length=50000)
     focus: str = Field(default="clarity", description="Focus: clarity, conciseness, engagement, professionalism, seo")
 
 class ContentImproveResponse(BaseModel):

@@ -333,8 +333,8 @@ class WritingToolsService:
 
     def _edit_text_with_coedit(self, text: str, instruction: str, max_chunk_tokens: int = 200) -> str:
         """Edit text using CoEdIT-large with the given instruction prompt.
-        Chunks by sentences to avoid truncation. Uses ONNX INT8 local model
-        with SageMaker parallel fallback for multiple chunks."""
+        Chunks by sentences to avoid truncation. SageMaker GPU is PRIMARY,
+        local ONNX INT8 is fallback."""
         if not self._load_grammar_model():
             return text
         if self._grammar_model is None or self._grammar_tokenizer is None:
@@ -359,7 +359,7 @@ class WritingToolsService:
 
         results: list[str] = [None] * len(chunks)
 
-        if len(chunks) > 2 and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
             try:
                 failed_indices = []
                 with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
@@ -380,13 +380,14 @@ class WritingToolsService:
                             failed_indices.append(idx)
 
                 if not failed_indices:
-                    logger.info(f"SageMaker CoEdIT processed {len(chunks)} chunks in parallel")
+                    logger.info(f"SageMaker GPU CoEdIT processed {len(chunks)} chunks in parallel")
                     return ' '.join(results)
 
+                logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
                 for idx in failed_indices:
                     results[idx] = None
             except Exception as e:
-                logger.warning(f"SageMaker CoEdIT parallel failed: {e}")
+                logger.warning(f"SageMaker GPU CoEdIT parallel failed, falling back to local: {e}")
 
         for idx, chunk in enumerate(chunks):
             if results[idx] is not None:
@@ -446,18 +447,19 @@ class WritingToolsService:
             return None
     
     def _generate_with_t5(self, prompt: str, max_length: int = 256, min_length: int = 10) -> Optional[str]:
-        """Generate text using Flan-T5 model (ONNX INT8 local → SageMaker fallback)."""
+        """Generate text using Flan-T5 model (SageMaker PRIMARY → local ONNX INT8 fallback)."""
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
+            if sm_result:
+                logger.info("Flan-T5 served via SageMaker (primary)")
+                return sm_result
+            logger.warning("SageMaker Flan-T5 failed, falling back to local model")
+
         try:
             if not self._load_general_t5_model():
-                sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
-                if sm_result:
-                    return sm_result
                 return None
             
             if self._general_t5_model is None or self._general_t5_tokenizer is None:
-                sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
-                if sm_result:
-                    return sm_result
                 return None
             
             inputs = self._general_t5_tokenizer(
@@ -487,10 +489,7 @@ class WritingToolsService:
             
             return generated_text.strip()
         except Exception as e:
-            logger.error(f"T5 generation failed: {e}")
-            sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
-            if sm_result:
-                return sm_result
+            logger.error(f"Local T5 generation also failed: {e}")
             return None
     
     # ==================== Feature 1: Grammar Checker ====================
