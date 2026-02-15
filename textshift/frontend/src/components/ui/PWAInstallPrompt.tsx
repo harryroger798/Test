@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { Download, X, Smartphone } from 'lucide-react';
-import { usePWAInstallPrompt } from '@/lib/mobile';
+import { usePWAInstallPrompt, useIsMobile } from '@/lib/mobile';
 import { Button } from './button';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +14,7 @@ interface PWAInstallPromptProps {
 
 export function PWAInstallPrompt({ className, delay = 30000 }: PWAInstallPromptProps) {
   const { canInstall, promptInstall } = usePWAInstallPrompt();
+  const isMobile = useIsMobile(1024);
   const [isVisible, setIsVisible] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
@@ -52,7 +53,7 @@ export function PWAInstallPrompt({ className, delay = 30000 }: PWAInstallPromptP
     localStorage.setItem('pwa-install-dismissed', Date.now().toString());
   };
 
-  if (!canInstall || isDismissed) {
+  if (!canInstall || isDismissed || !isMobile) {
     return null;
   }
 
