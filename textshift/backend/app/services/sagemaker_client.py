@@ -3,7 +3,8 @@ import logging
 import time
 import boto3
 from botocore.config import Config
-from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional, Dict, Any, List, Tuple
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -184,6 +185,71 @@ class SageMakerClient:
         if isinstance(body, list) and len(body) > 0:
             return body[0].get("translation_text", "")
         return None
+
+    def invoke_text2text_batch(
+        self,
+        endpoint_key: str,
+        inputs: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+        max_workers: int = 8,
+    ) -> List[Optional[str]]:
+        results: List[Optional[str]] = [None] * len(inputs)
+        if not inputs:
+            return results
+
+        def _invoke_single(idx: int, text: str) -> Tuple[int, Optional[str]]:
+            return idx, self.invoke_text2text(endpoint_key, text, parameters)
+
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=min(len(inputs), max_workers)) as executor:
+            futures = {
+                executor.submit(_invoke_single, idx, text): idx
+                for idx, text in enumerate(inputs)
+            }
+            for future in as_completed(futures):
+                try:
+                    idx, result = future.result()
+                    results[idx] = result
+                except Exception as e:
+                    idx = futures[future]
+                    logger.warning(f"Batch invoke [{endpoint_key}] chunk {idx} failed: {e}")
+
+        elapsed = time.time() - t0
+        succeeded = sum(1 for r in results if r is not None)
+        logger.info(f"Batch invoke [{endpoint_key}]: {succeeded}/{len(inputs)} succeeded in {elapsed:.1f}s (max_workers={min(len(inputs), max_workers)})")
+        return results
+
+    def invoke_translation_batch(
+        self,
+        endpoint_key: str,
+        inputs: List[str],
+        max_workers: int = 8,
+    ) -> List[Optional[str]]:
+        results: List[Optional[str]] = [None] * len(inputs)
+        if not inputs:
+            return results
+
+        def _invoke_single(idx: int, text: str) -> Tuple[int, Optional[str]]:
+            return idx, self.invoke_translation(endpoint_key, text)
+
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=min(len(inputs), max_workers)) as executor:
+            futures = {
+                executor.submit(_invoke_single, idx, text): idx
+                for idx, text in enumerate(inputs)
+            }
+            for future in as_completed(futures):
+                try:
+                    idx, result = future.result()
+                    results[idx] = result
+                except Exception as e:
+                    idx = futures[future]
+                    logger.warning(f"Batch translation [{endpoint_key}] chunk {idx} failed: {e}")
+
+        elapsed = time.time() - t0
+        succeeded = sum(1 for r in results if r is not None)
+        logger.info(f"Batch translation [{endpoint_key}]: {succeeded}/{len(inputs)} succeeded in {elapsed:.1f}s")
+        return results
 
     def invoke_embedding(
         self,
