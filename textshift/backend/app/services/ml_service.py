@@ -1828,7 +1828,10 @@ class MLModelService:
             chunk_scores.append(probs[0][1].item())
         
         chunked_ai = float(np.mean(chunk_scores))
-        blended_ai = (single_ai + chunked_ai) / 2.0
+        if len(chunks) > 3:
+            blended_ai = 0.15 * single_ai + 0.85 * chunked_ai
+        else:
+            blended_ai = (single_ai + chunked_ai) / 2.0
         
         logger.info(f"RoBERTa chunked: single={single_ai*100:.1f}%, chunked_avg={chunked_ai*100:.1f}% ({len(chunks)} chunks), blended={blended_ai*100:.1f}%")
         
@@ -1864,15 +1867,21 @@ class MLModelService:
         
         roberta_blended = roberta_chunked['blended_ai']
         roberta_single = roberta_chunked['single_ai']
+        roberta_chunked_score = roberta_chunked['chunked_ai']
+        num_chunks = roberta_chunked['num_chunks']
         
-        logger.info(f"RoBERTa: single={roberta_single*100:.1f}%, blended={roberta_blended*100:.1f}% ({roberta_chunked['num_chunks']} chunks)")
+        logger.info(f"RoBERTa: single={roberta_single*100:.1f}%, chunked={roberta_chunked_score*100:.1f}%, blended={roberta_blended*100:.1f}% ({num_chunks} chunks)")
         for version, result in triboost_results.items():
             logger.info(f"TriBoost {version}: {result['ai_prob']*100:.1f}% AI")
         
         triboost_ai_probs = [r['ai_prob'] for r in triboost_results.values()]
         triboost_avg = float(np.mean(triboost_ai_probs))
+        triboost_all_high = all(p > 0.90 for p in triboost_ai_probs)
         
-        if roberta_blended < 0.10:
+        if triboost_all_high and roberta_chunked_score > 0.40 and roberta_single < 0.20:
+            w_roberta, w_triboost = 0.40, 0.60
+            strategy_used = "consensus_ai_low_intro_high_body"
+        elif roberta_blended < 0.10:
             w_roberta, w_triboost = 0.98, 0.02
             strategy_used = "roberta_primary_confident_human"
         elif roberta_blended < 0.30:
