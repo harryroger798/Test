@@ -1539,7 +1539,15 @@ class MLModelService:
             return None
 
     def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
-        """Humanize a single sentence using ONNX INT8 or PyTorch T5 model."""
+        """Humanize a single sentence using SageMaker (primary) or local ONNX INT8 (fallback)."""
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            sm_result = self._humanize_chunk_via_sagemaker(sentence)
+            if sm_result:
+                model_output = sm_result
+                if use_post_processor:
+                    model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
+                return model_output
+            logger.info("SageMaker humanize failed for single sentence, falling back to local ONNX")
         try:
             self._load_humanizer()
             input_text = f"humanize: {sentence}"
@@ -1736,14 +1744,14 @@ class MLModelService:
         return results
     
     def _get_roberta_prediction(self, text: str) -> Dict[str, float]:
-        """Get AI probability from HF API (primary) → SageMaker (fallback) → local RoBERTa (last resort).
+        """Get AI probability from SageMaker (primary) → HF API (fallback) → local RoBERTa (last resort).
         
         Returns:
             Dict with 'ai_prob' and 'human_prob'
         """
         for backend_name, invoke_fn in [
-            ("HF API", lambda: hf_client.invoke_classification("detector", text, top_k=2)),
             ("SageMaker", lambda: sagemaker_client.invoke_classification("detector", text, top_k=2)),
+            ("HF API", lambda: hf_client.invoke_classification("detector", text, top_k=2)),
         ]:
             try:
                 result = invoke_fn()
@@ -1761,7 +1769,7 @@ class MLModelService:
             except Exception as e:
                 logger.warning(f"{backend_name} detector failed: {e}")
 
-        logger.info("HF API + SageMaker detector unavailable, falling back to local RoBERTa")
+        logger.info("SageMaker + HF API detector unavailable, falling back to local RoBERTa")
         self._load_detector()
         
         inputs = self._detector_tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
