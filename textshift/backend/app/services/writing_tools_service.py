@@ -30,6 +30,7 @@ import torch
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from transformers import (
     AutoTokenizer, 
     AutoModelForSequenceClassification,
@@ -39,6 +40,7 @@ from transformers import (
     MarianTokenizer
 )
 from app.core.config import settings
+from app.services.sagemaker_client import sagemaker_client
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,8 @@ class WritingToolsService:
     
     _instance = None
     _tone_model = None
+    _is_onnx_grammar = False
+    _is_onnx_flan_t5 = False
     _tone_tokenizer = None
     _translator_models: Dict[str, Tuple[Any, Any]] = {}
     _t5_model = None
@@ -199,18 +203,26 @@ class WritingToolsService:
             logger.error(f"Failed to load T5 model: {e}")
     
     def _load_general_t5_model(self):
-        """Load general-purpose Flan-T5 model for writing tasks (summarization, paraphrasing, etc.)."""
+        """Load general-purpose Flan-T5 model (ONNX INT8 preferred, PyTorch fallback)."""
         if self._general_t5_model is not None:
             return True
         
         try:
+            onnx_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base-onnx')
             model_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base')
             
-            # Download from iDrive if not present
+            if os.path.exists(onnx_dir) and os.path.exists(os.path.join(onnx_dir, 'encoder_model.onnx')):
+                from optimum.onnxruntime import ORTModelForSeq2SeqLM
+                logger.info("Loading Flan-T5-base ONNX INT8 model...")
+                self._general_t5_tokenizer = T5Tokenizer.from_pretrained(onnx_dir)
+                self._general_t5_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
+                self._is_onnx_flan_t5 = True
+                logger.info(f"Loaded Flan-T5-base ONNX INT8 from {onnx_dir}")
+                return True
+            
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
                 success = self._download_model_from_s3('textshift-models/flan-t5-base/', model_dir)
                 if not success:
-                    # Fallback to HuggingFace
                     logger.info("Downloading flan-t5-base from HuggingFace...")
                     self._general_t5_tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-base")
                     self._general_t5_model = T5ForConditionalGeneration.from_pretrained("google/flan-t5-base")
@@ -221,43 +233,184 @@ class WritingToolsService:
             self._general_t5_tokenizer = T5Tokenizer.from_pretrained(model_dir)
             self._general_t5_model = T5ForConditionalGeneration.from_pretrained(model_dir)
             self._general_t5_model.eval()
-            logger.info("Flan-T5 model loaded successfully from local storage")
+            logger.info("Flan-T5 model loaded (PyTorch) from local storage")
             return True
         except Exception as e:
             logger.error(f"Failed to load Flan-T5 model: {e}")
             return False
     
     def _load_grammar_model(self):
-        """Load T5 grammar correction model from iDrive e2."""
+        """Load CoEdIT-large grammar model (ONNX INT8 preferred, PyTorch fallback)."""
         if self._grammar_model is not None:
             return True
         
         try:
-            model_dir = os.path.join(settings.MODELS_DIR, 't5-grammar-correction')
+            onnx_dir = os.path.join(settings.MODELS_DIR, 'coedit-large-onnx')
+            model_dir = os.path.join(settings.MODELS_DIR, 'coedit-large')
             
-            # Download from iDrive if not present
+            if os.path.exists(onnx_dir) and os.path.exists(os.path.join(onnx_dir, 'encoder_model.onnx')):
+                from optimum.onnxruntime import ORTModelForSeq2SeqLM
+                logger.info("Loading CoEdIT-large ONNX INT8 model...")
+                self._grammar_tokenizer = AutoTokenizer.from_pretrained(onnx_dir)
+                self._grammar_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
+                self._is_onnx_grammar = True
+                logger.info(f"Loaded CoEdIT-large ONNX INT8 from {onnx_dir}")
+                return True
+            
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
-                success = self._download_model_from_s3('grammar-checker/t5-base-grammar-correction/', model_dir)
+                success = self._download_model_from_s3('grammar-checker/coedit-large/', model_dir)
                 if not success:
-                    # Fallback to HuggingFace
-                    logger.info("Downloading t5-base-grammar-correction from HuggingFace...")
-                    self._grammar_tokenizer = T5Tokenizer.from_pretrained("vennify/t5-base-grammar-correction")
-                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("vennify/t5-base-grammar-correction")
+                    logger.info("Downloading coedit-large from HuggingFace...")
+                    self._grammar_tokenizer = AutoTokenizer.from_pretrained("grammarly/coedit-large")
+                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("grammarly/coedit-large", torch_dtype=torch.float16)
                     self._grammar_model.eval()
-                    logger.info("Grammar T5 model loaded from HuggingFace")
+                    logger.info("CoEdIT-large model loaded from HuggingFace")
                     return True
             
-            self._grammar_tokenizer = T5Tokenizer.from_pretrained(model_dir)
-            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir)
+            self._grammar_tokenizer = AutoTokenizer.from_pretrained(model_dir)
+            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=torch.float16)
             self._grammar_model.eval()
-            logger.info("Grammar T5 model loaded successfully from local storage")
+            logger.info("CoEdIT-large model loaded (PyTorch) from local storage")
             return True
         except Exception as e:
-            logger.error(f"Failed to load Grammar T5 model: {e}")
+            logger.error(f"Failed to load CoEdIT-large model: {e}")
             return False
     
+    def _correct_grammar_chunk(self, chunk: str) -> str:
+        """Correct grammar for a single chunk using instruction-tuned model."""
+        input_text = f"Fix grammatical errors in this sentence: {chunk}"
+        inputs = self._grammar_tokenizer(
+            input_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
+        input_length = inputs["input_ids"].shape[1]
+        with torch.no_grad():
+            outputs = self._grammar_model.generate(
+                **inputs,
+                max_length=max(512, input_length + 128),
+                num_beams=5,
+                early_stopping=True
+            )
+        corrected = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return corrected.strip() if corrected else chunk
+
+    def _coedit_chunk_via_sagemaker(self, instruction: str, chunk: str) -> Optional[str]:
+        """Process a single CoEdIT chunk via SageMaker serverless endpoint."""
+        try:
+            input_text = f"{instruction}: {chunk}"
+            word_count = len(chunk.split())
+            parameters = {
+                "max_new_tokens": min(int(word_count * 2), 512),
+                "num_beams": 4,
+                "early_stopping": True,
+            }
+            result = sagemaker_client.invoke_text2text("coedit-large", input_text, parameters)
+            if result and len(result.strip()) > 5:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker CoEdIT chunk failed: {e}")
+            return None
+
+    def _flan_t5_via_sagemaker(self, prompt: str, max_length: int = 256) -> Optional[str]:
+        """Generate text via SageMaker Flan-T5-base endpoint."""
+        try:
+            parameters = {
+                "max_new_tokens": max_length,
+                "num_beams": 4,
+                "early_stopping": True,
+                "do_sample": False,
+            }
+            result = sagemaker_client.invoke_text2text("flan-t5-base", prompt, parameters)
+            if result and len(result.strip()) > 5:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker Flan-T5 failed: {e}")
+            return None
+
+    def _edit_text_with_coedit(self, text: str, instruction: str, max_chunk_tokens: int = 200) -> str:
+        """Edit text using CoEdIT-large with the given instruction prompt.
+        Chunks by sentences to avoid truncation. SageMaker GPU is PRIMARY,
+        local ONNX INT8 is fallback."""
+        if not self._load_grammar_model():
+            return text
+        if self._grammar_model is None or self._grammar_tokenizer is None:
+            return text
+
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        chunks: list[str] = []
+        current_chunk: list[str] = []
+        current_tokens = 0
+
+        for sentence in sentences:
+            sentence_tokens = len(self._grammar_tokenizer.encode(sentence))
+            if current_tokens + sentence_tokens > max_chunk_tokens and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_tokens = sentence_tokens
+            else:
+                current_chunk.append(sentence)
+                current_tokens += sentence_tokens
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        results: list[str] = [None] * len(chunks)
+
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            try:
+                failed_indices = []
+                with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                    future_to_idx = {
+                        executor.submit(self._coedit_chunk_via_sagemaker, instruction, chunk): idx
+                        for idx, chunk in enumerate(chunks)
+                    }
+                    from concurrent.futures import as_completed
+                    for future in as_completed(future_to_idx):
+                        idx = future_to_idx[future]
+                        try:
+                            result = future.result()
+                            if result:
+                                results[idx] = result
+                            else:
+                                failed_indices.append(idx)
+                        except Exception:
+                            failed_indices.append(idx)
+
+                if not failed_indices:
+                    logger.info(f"SageMaker GPU CoEdIT processed {len(chunks)} chunks in parallel")
+                    return ' '.join(results)
+
+                logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
+                for idx in failed_indices:
+                    results[idx] = None
+            except Exception as e:
+                logger.warning(f"SageMaker GPU CoEdIT parallel failed, falling back to local: {e}")
+
+        for idx, chunk in enumerate(chunks):
+            if results[idx] is not None:
+                continue
+            input_text = f"{instruction}: {chunk}"
+            inputs = self._grammar_tokenizer(
+                input_text, return_tensors="pt", truncation=True, max_length=512
+            )
+            input_length = inputs["input_ids"].shape[1]
+            with torch.no_grad():
+                outputs = self._grammar_model.generate(
+                    **inputs,
+                    max_length=max(512, input_length + 128),
+                    num_beams=4,
+                    early_stopping=True
+                )
+            result = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            results[idx] = result.strip() if result else chunk
+
+        return ' '.join(results)
+
     def _correct_grammar_with_t5(self, text: str) -> Optional[str]:
-        """Correct grammar using T5 model."""
+        """Correct grammar using T5 model, always processing in sentence chunks to avoid truncation."""
         try:
             if not self._load_grammar_model():
                 return None
@@ -265,32 +418,43 @@ class WritingToolsService:
             if self._grammar_model is None or self._grammar_tokenizer is None:
                 return None
             
-            # T5 grammar model expects "grammar: " prefix
-            input_text = f"grammar: {text}"
-            
-            inputs = self._grammar_tokenizer(
-                input_text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=512
-            )
-            
-            with torch.no_grad():
-                outputs = self._grammar_model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=5,
-                    early_stopping=True
-                )
-            
-            corrected_text = self._grammar_tokenizer.decode(outputs[0], skip_special_tokens=True)
-            return corrected_text.strip() if corrected_text else None
+            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+            if len(sentences) <= 1:
+                return self._correct_grammar_chunk(text)
+
+            corrected_chunks: list[str] = []
+            current_chunk: list[str] = []
+            current_tokens = 0
+
+            for sentence in sentences:
+                sentence_tokens = len(self._grammar_tokenizer.encode(sentence))
+                if current_tokens + sentence_tokens > 200 and current_chunk:
+                    chunk_text = ' '.join(current_chunk)
+                    corrected_chunks.append(self._correct_grammar_chunk(chunk_text))
+                    current_chunk = [sentence]
+                    current_tokens = sentence_tokens
+                else:
+                    current_chunk.append(sentence)
+                    current_tokens += sentence_tokens
+
+            if current_chunk:
+                chunk_text = ' '.join(current_chunk)
+                corrected_chunks.append(self._correct_grammar_chunk(chunk_text))
+
+            return ' '.join(corrected_chunks)
         except Exception as e:
             logger.error(f"T5 grammar correction failed: {e}")
             return None
     
     def _generate_with_t5(self, prompt: str, max_length: int = 256, min_length: int = 10) -> Optional[str]:
-        """Generate text using Flan-T5 model with error handling."""
+        """Generate text using Flan-T5 model (SageMaker PRIMARY → local ONNX INT8 fallback)."""
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
+            if sm_result:
+                logger.info("Flan-T5 served via SageMaker (primary)")
+                return sm_result
+            logger.warning("SageMaker Flan-T5 failed, falling back to local model")
+
         try:
             if not self._load_general_t5_model():
                 return None
@@ -318,7 +482,6 @@ class WritingToolsService:
             
             generated_text = self._general_t5_tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Validate output - should not be empty or just the prompt
             if not generated_text or len(generated_text.strip()) < 5:
                 return None
             if generated_text.strip().lower() == prompt.strip().lower():
@@ -326,7 +489,7 @@ class WritingToolsService:
             
             return generated_text.strip()
         except Exception as e:
-            logger.error(f"T5 generation failed: {e}")
+            logger.error(f"Local T5 generation also failed: {e}")
             return None
     
     # ==================== Feature 1: Grammar Checker ====================
@@ -342,6 +505,10 @@ class WritingToolsService:
         
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag == 'replace':
+                orig_word_count = i2 - i1
+                corr_word_count = j2 - j1
+                if orig_word_count > 4 and corr_word_count < orig_word_count // 2:
+                    continue
                 original_segment = ' '.join(original_words[i1:i2])
                 corrected_segment = ' '.join(corrected_words[j1:j2])
                 errors.append({
@@ -353,6 +520,8 @@ class WritingToolsService:
                     "replacements": [corrected_segment]
                 })
             elif tag == 'delete':
+                if (i2 - i1) > 4:
+                    continue
                 original_segment = ' '.join(original_words[i1:i2])
                 errors.append({
                     "message": f"Remove '{original_segment}'",
@@ -363,6 +532,8 @@ class WritingToolsService:
                     "replacements": [""]
                 })
             elif tag == 'insert':
+                if (j2 - j1) > 4:
+                    continue
                 corrected_segment = ' '.join(corrected_words[j1:j2])
                 errors.append({
                     "message": f"Insert '{corrected_segment}'",
@@ -376,21 +547,24 @@ class WritingToolsService:
         return errors
     
     async def check_grammar(self, text: str) -> Dict[str, Any]:
-        """Check grammar using T5 model (primary) + LanguageTool API (supplementary)."""
+        """Check grammar using T5 model (primary) + LanguageTool API (supplementary).
+        
+        Builds corrected_text by applying individual replacements to the original
+        text instead of using T5 raw output, which avoids seq2seq truncation.
+        Returns a corrections array with offset/length/replacement for each fix
+        so the frontend can render a precise diff view.
+        """
         try:
             errors = []
-            corrected_text = text
             
-            # Step 1: Use T5 grammar model for correction (primary)
-            t5_corrected = self._correct_grammar_with_t5(text)
+            # Step 1: Use CoEdIT grammar model via SageMaker GPU (primary) with local fallback
+            t5_corrected = self._edit_text_with_coedit(text, "Fix grammatical errors in this sentence")
             
             if t5_corrected and t5_corrected != text:
-                corrected_text = t5_corrected
-                # Find differences between original and T5 corrected
                 t5_errors = self._find_differences(text, t5_corrected)
                 errors.extend(t5_errors)
             
-            # Step 2: Also run LanguageTool for additional error explanations
+            # Step 2: Run LanguageTool for errors with exact positions
             lt_errors = []
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -408,11 +582,14 @@ class WritingToolsService:
                         matches = data.get("matches", [])
                         
                         for match in matches:
+                            offset = match.get("offset", 0)
+                            length = match.get("length", 0)
                             lt_error = {
                                 "message": match.get("message", ""),
                                 "short_message": match.get("shortMessage", ""),
-                                "offset": match.get("offset", 0),
-                                "length": match.get("length", 0),
+                                "offset": offset,
+                                "length": length,
+                                "original": text[offset:offset + length] if length > 0 else "",
                                 "context": match.get("context", {}).get("text", ""),
                                 "rule_id": match.get("rule", {}).get("id", ""),
                                 "rule_category": match.get("rule", {}).get("category", {}).get("name", ""),
@@ -422,19 +599,97 @@ class WritingToolsService:
             except Exception as lt_e:
                 logger.warning(f"LanguageTool API failed (using T5 only): {lt_e}")
             
-            # Merge errors - avoid duplicates by checking if correction already exists
-            existing_corrections = {e.get("replacement", "").lower() for e in errors}
+            # Merge errors - avoid duplicates by (offset, length) pairs
+            existing_spans = set()
+            for e in errors:
+                o = e.get("offset")
+                l = e.get("length")
+                if o is not None and l:
+                    existing_spans.add((o, l))
             for lt_error in lt_errors:
-                if lt_error["replacements"]:
-                    replacement = lt_error["replacements"][0].lower()
-                    if replacement not in existing_corrections:
-                        errors.append(lt_error)
-                        existing_corrections.add(replacement)
+                o = lt_error.get("offset")
+                l = lt_error.get("length")
+                if o is not None and l and (o, l) not in existing_spans:
+                    errors.append(lt_error)
+                    existing_spans.add((o, l))
+            
+            # Step 3: Build corrected_text by applying replacements to original text
+            # This avoids T5 seq2seq truncation by starting from the full original
+            replacement_ops: list[dict] = []
+            
+            for error in errors:
+                offset = error.get("offset")
+                length = error.get("length")
+                original_str = error.get("original", "")
+                replacements = error.get("replacements", [])
+                
+                if not replacements or replacements[0] == "":
+                    continue
+                
+                replacement_val = replacements[0]
+                
+                if offset is not None and length and length > 0:
+                    start = offset
+                    end = offset + length
+                    before_ok = (start == 0 or not text[start - 1].isalnum())
+                    after_ok = (end >= len(text) or not text[end].isalnum())
+                    if before_ok and after_ok:
+                        replacement_ops.append({
+                            "offset": offset,
+                            "length": length,
+                            "original": text[offset:offset + length],
+                            "replacement": replacement_val
+                        })
+                elif original_str:
+                    import re
+                    pattern = re.compile(r'(?<![\w])' + re.escape(original_str) + r'(?![\w])')
+                    m = pattern.search(text)
+                    if m:
+                        idx = m.start()
+                        new_end = idx + len(original_str)
+                        overlap = any(
+                            not (new_end <= op["offset"] or idx >= op["offset"] + op["length"])
+                            for op in replacement_ops
+                        )
+                        if not overlap:
+                            replacement_ops.append({
+                                "offset": idx,
+                                "length": len(original_str),
+                                "original": original_str,
+                                "replacement": replacement_val
+                            })
+            
+            # De-duplicate overlapping ops: keep the one with the earlier offset
+            replacement_ops.sort(key=lambda x: x["offset"])
+            deduped_ops: list[dict] = []
+            for op in replacement_ops:
+                if deduped_ops:
+                    prev = deduped_ops[-1]
+                    if op["offset"] < prev["offset"] + prev["length"]:
+                        continue
+                deduped_ops.append(op)
+            
+            # Apply replacements right-to-left to preserve offsets
+            corrected_text = text
+            for op in reversed(deduped_ops):
+                corrected_text = (
+                    corrected_text[:op["offset"]]
+                    + op["replacement"]
+                    + corrected_text[op["offset"] + op["length"]:]
+                )
+            
+            # Build corrections array for frontend diff rendering
+            corrections = [
+                {"offset": op["offset"], "length": op["length"],
+                 "original": op["original"], "replacement": op["replacement"]}
+                for op in deduped_ops
+            ]
             
             return {
                 "success": True,
                 "original_text": text,
                 "corrected_text": corrected_text,
+                "corrections": corrections,
                 "error_count": len(errors),
                 "errors": errors,
                 "language": "en-US",
@@ -444,45 +699,138 @@ class WritingToolsService:
             logger.error(f"Grammar check failed: {e}")
             return {"success": False, "error": str(e)}
     
+    POSITIVE_TONES = {'admiration', 'amusement', 'approval', 'caring', 'desire',
+                      'excitement', 'gratitude', 'joy', 'love', 'optimism', 'pride', 'relief'}
+    NEGATIVE_TONES = {'anger', 'annoyance', 'disappointment', 'disapproval', 'disgust',
+                      'embarrassment', 'fear', 'grief', 'nervousness', 'remorse', 'sadness'}
+    NEUTRAL_TONES = {'confusion', 'curiosity', 'realization', 'surprise', 'neutral'}
+
     # ==================== Feature 2: Tone Detector ====================
+    def _classify_tone_category(self, tone_name: str) -> str:
+        if tone_name in self.POSITIVE_TONES:
+            return "Positive"
+        if tone_name in self.NEGATIVE_TONES:
+            return "Negative"
+        return "Neutral"
+
+    def _analyze_tone_for_text(self, text_chunk: str) -> List[Dict[str, Any]]:
+        inputs = self._tone_tokenizer(
+            text_chunk,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512
+        )
+        with torch.no_grad():
+            outputs = self._tone_model(**inputs)
+            probs = torch.sigmoid(outputs.logits)[0]
+        top_indices = torch.argsort(probs, descending=True)[:5]
+        tones = []
+        for idx in top_indices:
+            tone_name = self.TONE_LABELS[idx.item()]
+            confidence = round(probs[idx].item() * 100, 2)
+            if confidence > 10:
+                tones.append({
+                    "tone": tone_name,
+                    "confidence": confidence,
+                    "category": self._classify_tone_category(tone_name)
+                })
+        return tones
+
     def detect_tone(self, text: str) -> Dict[str, Any]:
-        """Detect emotional tone using RoBERTa model."""
+        """Detect emotional tone with sentence breakdown, categories, and consistency score."""
         try:
             self._load_tone_model()
-            
+
             if self._tone_model is None:
                 return {"success": False, "error": "Tone model not available"}
-            
-            inputs = self._tone_tokenizer(
-                text, 
-                return_tensors="pt", 
-                truncation=True, 
-                max_length=512
-            )
-            
-            with torch.no_grad():
-                outputs = self._tone_model(**inputs)
-                probs = torch.sigmoid(outputs.logits)[0]
-            
-            # Get top 5 tones
-            top_indices = torch.argsort(probs, descending=True)[:5]
-            tones = []
-            for idx in top_indices:
-                tone_name = self.TONE_LABELS[idx.item()]
-                confidence = round(probs[idx].item() * 100, 2)
-                if confidence > 5:  # Only include if > 5%
-                    tones.append({
-                        "tone": tone_name,
-                        "confidence": confidence
-                    })
-            
-            primary_tone = tones[0] if tones else {"tone": "neutral", "confidence": 100}
-            
+
+            overall_tones = self._analyze_tone_for_text(text)
+
+            if not overall_tones:
+                overall_tones = [{"tone": "neutral", "confidence": 100.0, "category": "Neutral"}]
+
+            primary_tone = overall_tones[0]
+
+            pos_score = sum(t["confidence"] for t in overall_tones if t["category"] == "Positive")
+            neg_score = sum(t["confidence"] for t in overall_tones if t["category"] == "Negative")
+            neu_score = sum(t["confidence"] for t in overall_tones if t["category"] == "Neutral")
+            total = pos_score + neg_score + neu_score or 1
+            if pos_score > neg_score and pos_score > neu_score:
+                overall_category = "Positive"
+            elif neg_score > pos_score and neg_score > neu_score:
+                overall_category = "Negative"
+            elif abs(pos_score - neg_score) < 10 and pos_score > 15 and neg_score > 15:
+                overall_category = "Mixed"
+            else:
+                overall_category = "Neutral"
+
+            sentences = re.split(r'(?<=[.!?])\s+', text)
+            sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+
+            sentence_tones = []
+            sentence_primary_tones = []
+            if len(sentences) > 1:
+                batch_sents = sentences[:20]
+                batch_inputs = self._tone_tokenizer(
+                    batch_sents, return_tensors="pt", truncation=True,
+                    max_length=512, padding=True
+                )
+                with torch.no_grad():
+                    batch_outputs = self._tone_model(**batch_inputs)
+                    batch_probs = torch.sigmoid(batch_outputs.logits)
+
+                for si, sent in enumerate(batch_sents):
+                    probs = batch_probs[si]
+                    top_indices = torch.argsort(probs, descending=True)[:5]
+                    sent_tones = []
+                    for idx in top_indices:
+                        tone_name = self.TONE_LABELS[idx.item()]
+                        confidence = round(probs[idx].item() * 100, 2)
+                        if confidence > 10:
+                            sent_tones.append({
+                                "tone": tone_name,
+                                "confidence": confidence,
+                                "category": self._classify_tone_category(tone_name)
+                            })
+                    if sent_tones:
+                        sentence_primary_tones.append(sent_tones[0]["tone"])
+                        sentence_tones.append({
+                            "sentence": sent[:80] + "..." if len(sent) > 80 else sent,
+                            "primary_tone": sent_tones[0]["tone"],
+                            "confidence": sent_tones[0]["confidence"],
+                            "category": sent_tones[0]["category"]
+                        })
+                    else:
+                        sentence_primary_tones.append("neutral")
+                        sentence_tones.append({
+                            "sentence": sent[:80] + "..." if len(sent) > 80 else sent,
+                            "primary_tone": "neutral",
+                            "confidence": 100.0,
+                            "category": "Neutral"
+                        })
+
+            if sentence_primary_tones:
+                most_common_tone = Counter(sentence_primary_tones).most_common(1)[0]
+                consistency_score = round(most_common_tone[1] / len(sentence_primary_tones) * 100, 1)
+            else:
+                consistency_score = 100.0
+
+            category_breakdown = {
+                "positive": round(pos_score / total * 100, 1),
+                "negative": round(neg_score / total * 100, 1),
+                "neutral": round(neu_score / total * 100, 1)
+            }
+
             return {
                 "success": True,
                 "primary_tone": primary_tone["tone"],
                 "primary_confidence": primary_tone["confidence"],
-                "all_tones": tones,
+                "overall_category": overall_category,
+                "category_breakdown": category_breakdown,
+                "all_tones": overall_tones,
+                "sentence_tones": sentence_tones if sentence_tones else None,
+                "consistency_score": consistency_score,
+                "sentence_count_analyzed": len(sentence_tones) if sentence_tones else 0,
                 "text_preview": text[:100] + "..." if len(text) > 100 else text
             }
         except Exception as e:
@@ -491,11 +839,36 @@ class WritingToolsService:
     
     # ==================== Feature 3: Tone Adjuster ====================
     def adjust_tone(self, text: str, target_tone: str) -> Dict[str, Any]:
-        """Adjust text tone using comprehensive rule-based transformation."""
+        """Adjust text tone using CoEdIT-large (primary) with rule-based fallback."""
         try:
             import random
-            adjusted_text = text
             target = target_tone.lower()
+
+            tone_instructions = {
+                "formal": "Make this paragraph more formal",
+                "casual": "Make this paragraph more casual",
+                "persuasive": "Make this paragraph more persuasive",
+                "academic": "Make this paragraph more academic",
+                "confident": "Make this paragraph more assertive",
+                "empathetic": "Make this paragraph more empathetic",
+            }
+
+            instruction = tone_instructions.get(target)
+            if instruction:
+                coedit_result = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
+                if coedit_result and coedit_result.strip() != text.strip() and len(coedit_result) > 20:
+                    return {
+                        "success": True,
+                        "original_text": text,
+                        "adjusted_text": coedit_result,
+                        "target_tone": target_tone,
+                        "word_count_original": len(text.split()),
+                        "word_count_adjusted": len(coedit_result.split()),
+                        "transformation_applied": target,
+                        "method": "coedit-large"
+                    }
+
+            adjusted_text = text
             
             # Aggressive/negative phrase replacements for formal tone
             aggressive_to_formal = {
@@ -673,7 +1046,8 @@ class WritingToolsService:
                 "target_tone": target_tone,
                 "word_count_original": len(text.split()),
                 "word_count_adjusted": len(adjusted_text.split()),
-                "transformation_applied": target
+                "transformation_applied": target,
+                "method": "rule-based"
             }
         except Exception as e:
             logger.error(f"Tone adjustment failed: {e}")
@@ -821,6 +1195,48 @@ class WritingToolsService:
                 reading_level = "Very Difficult (Graduate level)"
                 audience = "Graduate students, specialists, academics"
             
+            # Vocabulary richness (Type-Token Ratio)
+            unique_words = set(w.lower() for w in words)
+            vocabulary_richness = round(len(unique_words) / word_count * 100, 1) if word_count > 0 else 0
+
+            # Grade-level explanation
+            avg_grade = round((fk_grade + fog_index + smog_index + coleman_liau + ari) / 5, 1)
+            if avg_grade <= 5:
+                grade_explanation = "Easily understood by 10-11 year olds"
+            elif avg_grade <= 8:
+                grade_explanation = "Suitable for 13-14 year old readers"
+            elif avg_grade <= 12:
+                grade_explanation = "Appropriate for high school students"
+            elif avg_grade <= 16:
+                grade_explanation = "College-level reading required"
+            else:
+                grade_explanation = "Graduate-level or professional reading"
+
+            # Paragraph-level breakdown
+            paragraphs = text.split('\n\n')
+            paragraphs = [p.strip() for p in paragraphs if p.strip()]
+            paragraph_breakdown = []
+            for idx, para in enumerate(paragraphs[:10]):
+                p_clean = re.sub(r'[^\w\s]', '', para)
+                p_words = [w for w in p_clean.split() if w.isalpha()]
+                p_sentences = re.split(r'[.!?]+', para)
+                p_sentences = [s.strip() for s in p_sentences if s.strip()]
+                p_wc = len(p_words)
+                p_sc = len(p_sentences) if p_sentences else 1
+                if p_wc > 0:
+                    p_avg_sl = p_wc / p_sc
+                    p_syls = [count_syllables(w) for w in p_words]
+                    p_avg_syl = sum(p_syls) / p_wc
+                    p_flesch = 206.835 - (1.015 * p_avg_sl) - (84.6 * p_avg_syl)
+                    p_flesch = max(0, min(100, p_flesch))
+                    paragraph_breakdown.append({
+                        "paragraph": idx + 1,
+                        "flesch_score": round(p_flesch, 1),
+                        "word_count": p_wc,
+                        "sentence_count": p_sc,
+                        "avg_sentence_length": round(p_avg_sl, 1)
+                    })
+
             # Generate improvement suggestions
             suggestions = []
             if avg_sentence_length > 20:
@@ -831,15 +1247,23 @@ class WritingToolsService:
                 suggestions.append(f"Reduce complex words ({complex_word_pct:.0f}% have 3+ syllables)")
             if flesch_ease < 60:
                 suggestions.append("Consider your audience - this text requires advanced reading skills")
+            if vocabulary_richness < 40:
+                suggestions.append("Vocabulary is repetitive - try using more varied word choices")
+            if vocabulary_richness > 85:
+                suggestions.append("High vocabulary diversity - ensure uncommon words are necessary")
+            long_sentences = [s for s in sentences if len(s.split()) > 30]
+            if long_sentences:
+                suggestions.append(f"{len(long_sentences)} sentence(s) exceed 30 words - consider splitting")
             if not suggestions:
                 suggestions.append("Text readability is good for general audiences")
-            
-            # Always return comprehensive results
+
             result = {
                 "success": True,
                 "flesch_reading_ease": round(flesch_ease, 1),
                 "reading_level": reading_level,
                 "recommended_audience": audience,
+                "grade_explanation": grade_explanation,
+                "average_grade_level": avg_grade,
                 "flesch_kincaid_grade": round(fk_grade, 1),
                 "gunning_fog_index": round(fog_index, 1),
                 "smog_index": round(smog_index, 1),
@@ -854,9 +1278,11 @@ class WritingToolsService:
                 "complex_word_percentage": round(complex_word_pct, 1),
                 "character_count": char_count,
                 "total_syllables": total_syllables,
+                "vocabulary_richness": vocabulary_richness,
+                "paragraph_breakdown": paragraph_breakdown if paragraph_breakdown else None,
                 "suggestions": suggestions
             }
-            
+
             return result
         except Exception as e:
             logger.error(f"Readability analysis failed: {e}")
@@ -994,13 +1420,45 @@ class WritingToolsService:
     
     # ==================== Feature 6: Paraphraser ====================
     def paraphrase(self, text: str, mode: str = "standard") -> Dict[str, Any]:
-        """Paraphrase text using comprehensive rule-based approach."""
+        """Paraphrase text using CoEdIT-large instruction-tuned model."""
+        try:
+            logger.info(f"Paraphrasing text in mode: {mode}")
+
+            mode_lower = mode.lower()
+            instruction_map = {
+                "standard": "Paraphrase this sentence",
+                "simple": "Simplify this sentence",
+                "formal": "Write this more formally",
+                "creative": "Paraphrase this sentence",
+                "fluency": "Make this text coherent",
+            }
+            instruction = instruction_map.get(mode_lower, "Paraphrase this sentence")
+
+            paraphrased = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
+
+            if not paraphrased or paraphrased == text:
+                paraphrased = self._edit_text_with_coedit(text, "Paraphrase this sentence", max_chunk_tokens=80)
+
+            changes_made = sum(1 for a, b in zip(text.split(), paraphrased.split()) if a != b)
+
+            return {
+                "success": True,
+                "original_text": text,
+                "paraphrased_text": paraphrased,
+                "mode": mode,
+                "original_word_count": len(text.split()),
+                "paraphrased_word_count": len(paraphrased.split()),
+                "changes_made": changes_made,
+                "used_t5": True
+            }
+        except Exception as e:
+            logger.error(f"Paraphrasing failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _paraphrase_rule_based_legacy(self, text: str, mode: str = "standard") -> Dict[str, Any]:
+        """Legacy rule-based paraphraser kept as fallback."""
         try:
             import random
-            
-            logger.info(f"Paraphrasing text in mode: {mode}")
-            
-            # Comprehensive synonym dictionary - expanded with more common words
             synonyms = {
                 # Common verbs
                 "use": ["utilize", "employ", "apply", "leverage"],
@@ -1326,7 +1784,7 @@ class WritingToolsService:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
                         f"https://api.crossref.org/works/{doi}",
-                        headers={"User-Agent": "TextShift/1.0 (mailto:support@textshift.org)"}
+                        headers={"User-Agent": "TextShift/1.0 (mailto:support@mail.textshift.org)"}
                     )
                     if response.status_code == 200:
                         data = response.json()
@@ -1338,7 +1796,7 @@ class WritingToolsService:
                     response = await client.get(
                         "https://api.crossref.org/works",
                         params={"query": query, "rows": 5},
-                        headers={"User-Agent": "TextShift/1.0 (mailto:support@textshift.org)"}
+                        headers={"User-Agent": "TextShift/1.0 (mailto:support@mail.textshift.org)"}
                     )
                     if response.status_code == 200:
                         data = response.json()
@@ -1441,57 +1899,102 @@ class WritingToolsService:
     
     # ==================== Feature 8: Word Counter ====================
     def count_words_detailed(self, text: str) -> Dict[str, Any]:
-        """Detailed word and character count analysis."""
+        """Detailed word, character, and text statistics analysis."""
         try:
-            # Basic counts
             words = text.split()
             word_count = len(words)
             char_count_with_spaces = len(text)
             char_count_no_spaces = len(text.replace(" ", "").replace("\n", "").replace("\t", ""))
-            
-            # Sentence and paragraph counts
+
+            letter_count = sum(1 for c in text if c.isalpha())
+            digit_count = sum(1 for c in text if c.isdigit())
+            special_count = char_count_with_spaces - letter_count - digit_count - text.count(' ') - text.count('\n') - text.count('\t')
+
             sentences = re.split(r'[.!?]+', text)
             sentences = [s.strip() for s in sentences if s.strip()]
             sentence_count = len(sentences)
-            
+
             paragraphs = text.split('\n\n')
             paragraphs = [p.strip() for p in paragraphs if p.strip()]
             paragraph_count = len(paragraphs) if paragraphs else 1
-            
-            # Reading time estimates
-            reading_time_minutes = word_count / 200  # Average reading speed
-            speaking_time_minutes = word_count / 150  # Average speaking speed
-            
-            # Unique words
+
+            reading_time_minutes = word_count / 238
+            speaking_time_minutes = word_count / 150
+
+            reading_time_display = f"{int(reading_time_minutes)} min {int((reading_time_minutes % 1) * 60)} sec"
+            speaking_time_display = f"{int(speaking_time_minutes)} min {int((speaking_time_minutes % 1) * 60)} sec"
+
             unique_words = len(set(w.lower() for w in words))
-            
-            # Most common words (excluding common stop words)
-            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'it', 'its', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'we', 'they'}
-            filtered_words = [w.lower() for w in words if w.lower() not in stop_words and len(w) > 2]
+
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+                         'of', 'with', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have',
+                         'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+                         'may', 'might', 'must', 'it', 'its', 'this', 'that', 'these', 'those',
+                         'i', 'you', 'he', 'she', 'we', 'they'}
+            filtered_words = [re.sub(r'[^\w]', '', w.lower()) for w in words
+                            if w.lower() not in stop_words and len(w) > 2]
+            filtered_words = [w for w in filtered_words if w]
             word_freq = Counter(filtered_words)
             top_words = word_freq.most_common(10)
-            
+
+            keyword_density = []
+            for w, c in top_words:
+                density = round(c / word_count * 100, 2) if word_count > 0 else 0
+                keyword_density.append({"word": w, "count": c, "density": density})
+
+            sentence_lengths = [len(s.split()) for s in sentences]
+            longest_sentence = max(sentence_lengths) if sentence_lengths else 0
+            shortest_sentence = min(sentence_lengths) if sentence_lengths else 0
+            avg_sentence_length = round(sum(sentence_lengths) / len(sentence_lengths), 1) if sentence_lengths else 0
+
+            paragraph_word_counts = []
+            for p in paragraphs:
+                p_words = len(p.split())
+                paragraph_word_counts.append(p_words)
+            avg_paragraph_length = round(sum(paragraph_word_counts) / len(paragraph_word_counts), 1) if paragraph_word_counts else 0
+
             return {
                 "success": True,
                 "word_count": word_count,
                 "character_count": char_count_with_spaces,
                 "character_count_no_spaces": char_count_no_spaces,
+                "letter_count": letter_count,
+                "digit_count": digit_count,
+                "special_char_count": special_count,
                 "sentence_count": sentence_count,
                 "paragraph_count": paragraph_count,
                 "unique_words": unique_words,
                 "avg_word_length": round(char_count_no_spaces / word_count, 1) if word_count > 0 else 0,
-                "avg_sentence_length": round(word_count / sentence_count, 1) if sentence_count > 0 else 0,
+                "avg_sentence_length": avg_sentence_length,
+                "longest_sentence_words": longest_sentence,
+                "shortest_sentence_words": shortest_sentence,
+                "avg_paragraph_length": avg_paragraph_length,
                 "reading_time_minutes": round(reading_time_minutes, 1),
+                "reading_time_display": reading_time_display,
                 "speaking_time_minutes": round(speaking_time_minutes, 1),
-                "top_words": [{"word": w, "count": c} for w, c in top_words]
+                "speaking_time_display": speaking_time_display,
+                "top_words": [{"word": w, "count": c} for w, c in top_words],
+                "keyword_density": keyword_density
             }
         except Exception as e:
             logger.error(f"Word count failed: {e}")
             return {"success": False, "error": str(e)}
     
     # ==================== Feature 9: Translator ====================
+    def _translate_chunk_via_sagemaker(self, lang_pair: str, chunk: str) -> Optional[str]:
+        """Translate a single chunk via SageMaker multi-model GPU endpoint."""
+        try:
+            endpoint_key = f"translator-{lang_pair}"
+            result = sagemaker_client.invoke_translation(endpoint_key, chunk)
+            if result and len(result.strip()) > 0:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker translator chunk failed: {e}")
+            return None
+
     def translate(self, text: str, source_lang: str, target_lang: str) -> Dict[str, Any]:
-        """Translate text using Helsinki-NLP models."""
+        """Translate text using SageMaker GPU (primary) with local Helsinki-NLP fallback."""
         try:
             lang_pair = f"{source_lang}-{target_lang}"
             
@@ -1501,30 +2004,78 @@ class WritingToolsService:
                     "error": f"Language pair {lang_pair} not supported. Supported: {list(self.SUPPORTED_LANGUAGES.keys())}"
                 }
             
-            self._load_translator_model(lang_pair)
-            
-            if lang_pair not in self._translator_models:
-                return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
-            
-            tokenizer, model = self._translator_models[lang_pair]
-            
-            # Split into sentences for better translation
             sentences = re.split(r'(?<=[.!?])\s+', text)
-            translated_sentences = []
+            sentences = [s for s in sentences if s.strip()]
             
+            chunks: list[str] = []
+            current_chunk: list[str] = []
+            current_len = 0
             for sentence in sentences:
-                if not sentence.strip():
-                    continue
-                    
-                inputs = tokenizer(sentence, return_tensors="pt", truncation=True, max_length=512)
-                
-                with torch.no_grad():
-                    outputs = model.generate(**inputs, max_length=512, num_beams=4)
-                
-                translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                translated_sentences.append(translated)
-            
-            translated_text = " ".join(translated_sentences)
+                slen = len(sentence)
+                if current_len + slen > 400 and current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                    current_chunk = [sentence]
+                    current_len = slen
+                else:
+                    current_chunk.append(sentence)
+                    current_len += slen
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+
+            translated_chunks: list[Optional[str]] = [None] * len(chunks)
+            used_gpu = False
+
+            if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                try:
+                    failed_indices = []
+                    with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                        future_to_idx = {
+                            executor.submit(self._translate_chunk_via_sagemaker, lang_pair, chunk): idx
+                            for idx, chunk in enumerate(chunks)
+                        }
+                        from concurrent.futures import as_completed
+                        for future in as_completed(future_to_idx):
+                            idx = future_to_idx[future]
+                            try:
+                                result = future.result()
+                                if result:
+                                    translated_chunks[idx] = result
+                                else:
+                                    failed_indices.append(idx)
+                            except Exception:
+                                failed_indices.append(idx)
+
+                    if not failed_indices:
+                        logger.info(f"SageMaker GPU translated {len(chunks)} chunks in parallel")
+                        used_gpu = True
+                    else:
+                        logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
+                        if len(failed_indices) < len(chunks):
+                            used_gpu = True
+                except Exception as e:
+                    logger.warning(f"SageMaker GPU translation failed, falling back to local: {e}")
+
+            local_needed = [i for i, t in enumerate(translated_chunks) if t is None]
+            if local_needed:
+                self._load_translator_model(lang_pair)
+                if lang_pair in self._translator_models:
+                    tokenizer, model = self._translator_models[lang_pair]
+                    for idx in local_needed:
+                        chunk = chunks[idx]
+                        chunk_sentences = re.split(r'(?<=[.!?])\s+', chunk)
+                        chunk_translated = []
+                        for sent in chunk_sentences:
+                            if not sent.strip():
+                                continue
+                            inputs = tokenizer(sent, return_tensors="pt", truncation=True, max_length=512)
+                            with torch.no_grad():
+                                outputs = model.generate(**inputs, max_length=512, num_beams=4)
+                            chunk_translated.append(tokenizer.decode(outputs[0], skip_special_tokens=True))
+                        translated_chunks[idx] = ' '.join(chunk_translated)
+                else:
+                    return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
+
+            translated_text = " ".join(t for t in translated_chunks if t)
             
             return {
                 "success": True,
@@ -1534,7 +2085,8 @@ class WritingToolsService:
                 "target_language": target_lang,
                 "language_pair": self.SUPPORTED_LANGUAGES[lang_pair],
                 "word_count_original": len(text.split()),
-                "word_count_translated": len(translated_text.split())
+                "word_count_translated": len(translated_text.split()),
+                "backend": "SageMaker GPU" if used_gpu else "Local CPU"
             }
         except Exception as e:
             logger.error(f"Translation failed: {e}")
@@ -1542,7 +2094,7 @@ class WritingToolsService:
     
     # ==================== Feature 10: Export Options ====================
     def export_text(self, text: str, format: str, title: str = "Document") -> Dict[str, Any]:
-        """Export text to different formats (TXT, HTML, Markdown)."""
+        """Export text to different formats (TXT, HTML, Markdown, PDF)."""
         try:
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
             
@@ -1580,6 +2132,42 @@ class WritingToolsService:
                 mime_type = "text/markdown"
                 extension = "md"
             
+            elif format.lower() == "pdf":
+                import base64
+                try:
+                    from fpdf import FPDF
+                except ImportError:
+                    return {"success": False, "error": "PDF export requires the fpdf2 library. Please install it with: pip install fpdf2"}
+                
+                pdf = FPDF()
+                pdf.set_auto_page_break(auto=True, margin=25)
+                pdf.add_page()
+                pdf.set_font("Helvetica", "B", 18)
+                pdf.cell(0, 12, title, new_x="LMARGIN", new_y="NEXT", align="C")
+                pdf.ln(8)
+                pdf.set_font("Helvetica", "", 11)
+                pdf.multi_cell(0, 6, text)
+                pdf.ln(10)
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.set_text_color(128, 128, 128)
+                pdf.cell(0, 6, f"Exported from TextShift on {timestamp}", align="C")
+                
+                pdf_bytes = pdf.output()
+                content = base64.b64encode(pdf_bytes).decode("utf-8")
+                mime_type = "application/pdf"
+                extension = "pdf"
+                
+                return {
+                    "success": True,
+                    "content": content,
+                    "format": "pdf",
+                    "mime_type": mime_type,
+                    "extension": extension,
+                    "filename": f"{title.replace(' ', '_').lower()}.pdf",
+                    "size_bytes": len(pdf_bytes),
+                    "encoding": "base64"
+                }
+            
             else:
                 return {"success": False, "error": f"Unsupported format: {format}"}
             
@@ -1598,62 +2186,151 @@ class WritingToolsService:
     
     # ==================== Feature 13: Style Analysis ====================
     def analyze_style(self, text: str) -> Dict[str, Any]:
-        """Analyze writing style including vocabulary, sentence structure, and word repetition."""
+        """Analyze writing style with POS distribution, formality, sentence variety, and transitions."""
         try:
             words = text.split()
             sentences = re.split(r'[.!?]+', text)
             sentences = [s.strip() for s in sentences if s.strip()]
-            
+
             word_count = len(words)
             sentence_count = len(sentences) if sentences else 1
-            
-            # Vocabulary diversity (Type-Token Ratio)
+
             unique_words = set(w.lower() for w in words)
             ttr = len(unique_words) / word_count if word_count > 0 else 0
-            
-            # Sentence length variation
+
             sentence_lengths = [len(s.split()) for s in sentences]
             avg_sentence_length = sum(sentence_lengths) / len(sentence_lengths) if sentence_lengths else 0
             sentence_length_std = (sum((l - avg_sentence_length) ** 2 for l in sentence_lengths) / len(sentence_lengths)) ** 0.5 if sentence_lengths else 0
-            
-            # Passive voice detection (simplified)
+
             passive_indicators = ['was', 'were', 'been', 'being', 'is', 'are', 'am']
-            passive_count = sum(1 for s in sentences if any(f" {p} " in f" {s.lower()} " for p in passive_indicators) and 'by' in s.lower())
+            passive_sentences = []
+            for s in sentences:
+                s_lower = f" {s.lower()} "
+                if any(f" {p} " in s_lower for p in passive_indicators) and 'by' in s_lower:
+                    passive_sentences.append(s[:80] + "..." if len(s) > 80 else s)
+            passive_count = len(passive_sentences)
             passive_percentage = (passive_count / sentence_count * 100) if sentence_count > 0 else 0
-            
-            # Question and exclamation counts
+
             question_count = text.count('?')
             exclamation_count = text.count('!')
-            
-            # Transition words
-            transition_words = ['however', 'therefore', 'moreover', 'furthermore', 'consequently', 'nevertheless', 'meanwhile', 'additionally', 'similarly', 'likewise', 'in contrast', 'on the other hand', 'as a result', 'for example', 'in conclusion']
-            transition_count = sum(1 for tw in transition_words if tw in text.lower())
-            
-            # ===== NEW: Word Frequency Analysis for Overused Words =====
-            # Common words to exclude from repetition analysis
-            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+
+            transition_words_list = [
+                'however', 'therefore', 'moreover', 'furthermore', 'consequently',
+                'nevertheless', 'meanwhile', 'additionally', 'similarly', 'likewise',
+                'in contrast', 'on the other hand', 'as a result', 'for example',
+                'in conclusion', 'in addition', 'on the contrary', 'in other words',
+                'for instance', 'above all', 'after all', 'in fact', 'as a matter of fact'
+            ]
+            text_lower = text.lower()
+            transition_found = [tw for tw in transition_words_list if tw in text_lower]
+            transition_count = len(transition_found)
+
+            # POS distribution (rule-based approximation)
+            common_nouns_suffixes = ('tion', 'ment', 'ness', 'ity', 'ence', 'ance', 'ism', 'ist', 'er', 'or')
+            common_verb_suffixes = ('ing', 'ize', 'ify', 'ate')
+            common_adj_suffixes = ('ful', 'less', 'ous', 'ive', 'able', 'ible', 'al', 'ial')
+            common_adv_suffixes = ('ly',)
+            common_verbs = {'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+                          'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+                          'must', 'shall', 'can', 'go', 'get', 'make', 'know', 'take', 'come',
+                          'see', 'want', 'look', 'use', 'find', 'give', 'tell', 'work', 'call',
+                          'try', 'ask', 'need', 'feel', 'become', 'leave', 'put', 'mean', 'keep',
+                          'let', 'begin', 'seem', 'help', 'show', 'hear', 'play', 'run', 'move', 'live'}
+            common_pronouns = {'i', 'me', 'my', 'mine', 'myself', 'you', 'your', 'yours', 'yourself',
+                             'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself',
+                             'it', 'its', 'itself', 'we', 'us', 'our', 'ours', 'ourselves',
+                             'they', 'them', 'their', 'theirs', 'themselves'}
+            common_prepositions = {'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as',
+                                 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+                                 'between', 'under', 'over', 'about', 'against', 'among'}
+
+            noun_count = verb_count = adj_count = adv_count = 0
+            for w in words:
+                w_lower = re.sub(r'[^\w]', '', w.lower())
+                if not w_lower:
+                    continue
+                if w_lower in common_verbs or (len(w_lower) > 4 and w_lower.endswith(common_verb_suffixes)):
+                    verb_count += 1
+                elif w_lower.endswith(common_adv_suffixes) and len(w_lower) > 3:
+                    adv_count += 1
+                elif w_lower.endswith(common_adj_suffixes) and len(w_lower) > 4:
+                    adj_count += 1
+                elif w_lower in common_pronouns or w_lower in common_prepositions:
+                    pass
+                elif w_lower.endswith(common_nouns_suffixes) or (w_lower[0].isupper() if w_lower else False):
+                    noun_count += 1
+
+            pos_distribution = {
+                "nouns": noun_count,
+                "verbs": verb_count,
+                "adjectives": adj_count,
+                "adverbs": adv_count
+            }
+
+            # Sentence variety score (0-100, higher = more varied)
+            if sentence_lengths and len(sentence_lengths) > 1:
+                short_sents = sum(1 for l in sentence_lengths if l <= 8)
+                medium_sents = sum(1 for l in sentence_lengths if 9 <= l <= 20)
+                long_sents = sum(1 for l in sentence_lengths if l > 20)
+                categories_used = sum(1 for c in [short_sents, medium_sents, long_sents] if c > 0)
+                length_diversity = categories_used / 3 * 50
+                std_component = min(sentence_length_std / 10 * 50, 50)
+                sentence_variety_score = round(length_diversity + std_component, 1)
+            else:
+                sentence_variety_score = 0
+
+            # Formality score (0-100, higher = more formal)
+            formal_words = {'therefore', 'consequently', 'furthermore', 'moreover', 'nevertheless',
+                          'notwithstanding', 'accordingly', 'subsequently', 'preceding', 'aforementioned',
+                          'henceforth', 'whereby', 'herein', 'thereof'}
+            informal_words = {'gonna', 'wanna', 'gotta', 'kinda', 'sorta', 'yeah', 'hey', 'cool',
+                            'awesome', 'stuff', 'thing', 'things', 'basically', 'literally', 'totally',
+                            'super', 'pretty', 'really', 'guys', 'ok', 'okay', 'lol', 'btw'}
+            contractions = ["n't", "'re", "'ve", "'ll", "'m", "'d", "'s"]
+
+            formal_count = sum(1 for w in words if w.lower() in formal_words)
+            informal_count = sum(1 for w in words if w.lower() in informal_words)
+            contraction_count = sum(1 for c in contractions if c in text.lower())
+
+            formality_base = 50
+            formality_base += formal_count * 5
+            formality_base -= informal_count * 5
+            formality_base -= contraction_count * 3
+            formality_base += min(avg_sentence_length / 5, 15)
+            if passive_percentage > 20:
+                formality_base += 5
+            formality_score = max(0, min(100, round(formality_base, 1)))
+
+            if formality_score >= 75:
+                formality_label = "Highly Formal"
+            elif formality_score >= 55:
+                formality_label = "Formal"
+            elif formality_score >= 40:
+                formality_label = "Neutral"
+            elif formality_score >= 25:
+                formality_label = "Informal"
+            else:
+                formality_label = "Very Informal"
+
+            stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
                          'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-                         'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 
+                         'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
                          'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need',
-                         'it', 'its', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 
+                         'it', 'its', 'this', 'that', 'these', 'those', 'i', 'you', 'he',
                          'she', 'we', 'they', 'my', 'your', 'his', 'her', 'our', 'their',
                          'what', 'which', 'who', 'whom', 'when', 'where', 'why', 'how',
                          'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
                          'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
                          'than', 'too', 'just', 'also', 'now', 'here', 'there', 'then'}
-            
-            # Count word frequencies (excluding stop words)
+
             word_freq = Counter()
             for word in words:
                 clean_word = re.sub(r'[^\w]', '', word.lower())
                 if clean_word and clean_word not in stop_words and len(clean_word) > 2:
                     word_freq[clean_word] += 1
-            
-            # Find overused words (appearing 3+ times)
+
             overused_words = []
             overused_threshold = 3
-            
-            # Synonyms for common overused words
             word_alternatives = {
                 'very': ['extremely', 'highly', 'remarkably', 'exceptionally', 'particularly'],
                 'really': ['truly', 'genuinely', 'actually', 'indeed', 'certainly'],
@@ -1678,7 +2355,7 @@ class WritingToolsService:
                 'actually': ['in fact', 'indeed', 'truly', 'really'],
                 'basically': ['essentially', 'fundamentally', 'primarily'],
             }
-            
+
             for word, count in word_freq.most_common(20):
                 if count >= overused_threshold:
                     alternatives = word_alternatives.get(word, [])
@@ -1687,13 +2364,11 @@ class WritingToolsService:
                         'count': count,
                         'alternatives': alternatives[:5] if alternatives else ['(consider varying your word choice)']
                     })
-            
-            # Adverb overuse detection (words ending in -ly)
+
             adverbs = [w.lower() for w in words if w.lower().endswith('ly') and len(w) > 3]
             adverb_freq = Counter(adverbs)
             overused_adverbs = [{'word': word, 'count': count} for word, count in adverb_freq.most_common(5) if count >= 2]
-            
-            # Determine writing style
+
             if ttr > 0.7 and avg_sentence_length > 20:
                 style_type = "Academic/Formal"
             elif ttr < 0.4 and avg_sentence_length < 12:
@@ -1704,13 +2379,12 @@ class WritingToolsService:
                 style_type = "Expressive/Emotional"
             else:
                 style_type = "Standard/Neutral"
-            
-            # Generate recommendations including overused words
+
             recommendations = self._get_style_recommendations(
-                ttr, avg_sentence_length, passive_percentage, transition_count, 
+                ttr, avg_sentence_length, passive_percentage, transition_count,
                 overused_words, overused_adverbs
             )
-            
+
             return {
                 "success": True,
                 "style_type": style_type,
@@ -1718,8 +2392,14 @@ class WritingToolsService:
                 "vocabulary_level": "Rich" if ttr > 0.6 else "Moderate" if ttr > 0.4 else "Simple",
                 "avg_sentence_length": round(avg_sentence_length, 1),
                 "sentence_length_variation": round(sentence_length_std, 1),
+                "sentence_variety_score": sentence_variety_score,
                 "passive_voice_percentage": round(passive_percentage, 1),
+                "passive_voice_sentences": passive_sentences[:5] if passive_sentences else None,
                 "transition_word_count": transition_count,
+                "transition_words_found": transition_found if transition_found else None,
+                "pos_distribution": pos_distribution,
+                "formality_score": formality_score,
+                "formality_label": formality_label,
                 "question_count": question_count,
                 "exclamation_count": exclamation_count,
                 "unique_word_count": len(unique_words),
@@ -1775,15 +2455,57 @@ class WritingToolsService:
     
     # ==================== Feature 14: Content Improver ====================
     def improve_content(self, text: str, focus: str = "clarity") -> Dict[str, Any]:
-        """Improve content using comprehensive rule-based approach."""
+        """Improve content using CoEdIT-large instruction-tuned model."""
+        try:
+            logger.info(f"Improving content with focus: {focus}")
+
+            focus_lower = focus.lower()
+            instruction_map = {
+                "clarity": "Simplify this sentence",
+                "conciseness": "Simplify this sentence",
+                "engagement": "Make this text coherent",
+                "professionalism": "Write this more formally",
+                "seo": "Simplify this sentence",
+            }
+            instruction = instruction_map.get(focus_lower, "Make this text coherent")
+
+            improved_text = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
+
+            if not improved_text or improved_text == text:
+                improved_text = self._edit_text_with_coedit(text, "Make this text coherent", max_chunk_tokens=80)
+
+            suggestions = [f"Text improved for {focus} using advanced language model"]
+            changes_made = sum(1 for a, b in zip(text.split(), improved_text.split()) if a != b)
+
+            original_readability = self.analyze_readability(text)
+            improved_readability = self.analyze_readability(improved_text)
+
+            return {
+                "success": True,
+                "original_text": text,
+                "improved_text": improved_text,
+                "focus": focus,
+                "suggestions": suggestions,
+                "original_word_count": len(text.split()),
+                "improved_word_count": len(improved_text.split()),
+                "changes_made": changes_made,
+                "readability_change": {
+                    "original_score": original_readability.get("flesch_reading_ease", 0),
+                    "improved_score": improved_readability.get("flesch_reading_ease", 0)
+                },
+                "used_t5": True
+            }
+        except Exception as e:
+            logger.error(f"Content improvement failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _improve_content_rule_based_legacy(self, text: str, focus: str = "clarity") -> Dict[str, Any]:
+        """Legacy rule-based content improver kept as fallback."""
         try:
             import random
-            
-            logger.info(f"Improving content with focus: {focus}")
             improved_text = text
             suggestions = []
             changes_made = 0
-            
             focus_lower = focus.lower()
             
             # Extended clarity replacements including business clichés
