@@ -2279,10 +2279,10 @@ class MLModelService:
             sagemaker_used = False
 
             if use_sagemaker:
-                logger.info(f"Attempting parallel SageMaker inference for {len(chunks)} chunks (max_workers=4)")
+                logger.info(f"Attempting parallel SageMaker inference for {len(chunks)} chunks (max_workers=8)")
                 failed_indices: List[int] = []
                 try:
-                    with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
+                    with ThreadPoolExecutor(max_workers=min(len(chunks), 8)) as executor:
                         future_to_idx = {
                             executor.submit(self._humanize_chunk_via_sagemaker, chunk): idx
                             for idx, chunk in enumerate(chunks)
