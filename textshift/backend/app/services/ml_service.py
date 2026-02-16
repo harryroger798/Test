@@ -1505,7 +1505,7 @@ class MLModelService:
     
     @staticmethod
     def _clean_model_output(text: str) -> str:
-        """Strip task-prefix leakage and clean up raw model output."""
+        """Strip task-prefix leakage and clean up raw model output and simple loops."""
         result = text.strip()
         prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
         for prefix in prefixes:
@@ -1513,6 +1513,40 @@ class MLModelService:
                 result = result[len(prefix):].strip()
             result = result.replace(f" {prefix} ", " ")
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        # Collapse obvious repeated substrings like: "I was ... I was ... I was ..."
+        words = result.split()
+        n = len(words)
+        changed = True
+        # Try windows 5..12 words for up to ~3 consecutive repeats
+        while changed:
+            changed = False
+            i = 0
+            out = []
+            while i < n:
+                collapsed = False
+                # limit window so i+2*w <= n
+                for w in range(12, 4, -1):
+                    if i + 2*w <= n:
+                        seg = words[i:i+w]
+                        if words[i+w:i+2*w] == seg:
+                            # count repeats
+                            j = i + w
+                            repeats = 1
+                            while j + w <= n and words[j:j+w] == seg:
+                                repeats += 1
+                                j += w
+                            # keep only one
+                            out.extend(seg)
+                            i = j
+                            collapsed = True
+                            changed = True
+                            break
+                if not collapsed:
+                    out.append(words[i])
+                    i += 1
+            words = out
+            n = len(words)
+        result = ' '.join(words)
         return result.strip()
 
     def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
