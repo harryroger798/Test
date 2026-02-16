@@ -2338,6 +2338,9 @@ class MLModelService:
         if preserved_indices is not None:
             return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
 
+        MIN_HUMANIZE_WORDS = 8
+        TARGET_GROUP_WORDS = 150
+
         paragraphs = re.split(r'(\n\s*\n)', text)
         content_paragraphs: List[str] = []
         separators: List[str] = []
@@ -2349,27 +2352,89 @@ class MLModelService:
 
         has_paragraph_breaks = len(content_paragraphs) > 1
         if not has_paragraph_breaks:
-            single_newline_parts = text.split('\n')
-            if len(single_newline_parts) > 1:
-                content_paragraphs = single_newline_parts
-                separators = ['\n'] * (len(content_paragraphs) - 1)
-                has_paragraph_breaks = True
+            lines = text.split('\n')
+            if len(lines) > 1:
+                groups: List[str] = []
+                group_seps: List[str] = []
+                current_lines: List[str] = []
+                current_word_count = 0
 
+                for line in lines:
+                    stripped = line.strip()
+                    if not stripped:
+                        if current_lines:
+                            groups.append(' '.join(current_lines))
+                            current_lines = []
+                            current_word_count = 0
+                        if groups and len(group_seps) < len(groups):
+                            group_seps.append('\n\n')
+                        continue
+
+                    words = len(stripped.split())
+                    if current_lines and current_word_count >= TARGET_GROUP_WORDS and words >= 15:
+                        groups.append(' '.join(current_lines))
+                        group_seps.append('\n\n')
+                        current_lines = [stripped]
+                        current_word_count = words
+                    else:
+                        current_lines.append(stripped)
+                        current_word_count += words
+
+                if current_lines:
+                    groups.append(' '.join(current_lines))
+
+                content_paragraphs = groups
+                separators = group_seps
+                has_paragraph_breaks = len(content_paragraphs) > 1
+        else:
+            merged_groups: List[str] = []
+            merged_seps: List[str] = []
+            current_group: List[str] = []
+            current_wc = 0
+            for idx, para in enumerate(content_paragraphs):
+                stripped = para.strip()
+                if not stripped:
+                    continue
+                wc = len(stripped.split())
+                if current_group and current_wc >= TARGET_GROUP_WORDS:
+                    merged_groups.append(' '.join(current_group))
+                    if merged_groups and len(merged_seps) < len(merged_groups) - 1:
+                        merged_seps.append('\n\n')
+                    current_group = [stripped]
+                    current_wc = wc
+                else:
+                    current_group.append(stripped)
+                    current_wc += wc
+            if current_group:
+                merged_groups.append(' '.join(current_group))
+            while len(merged_seps) < len(merged_groups) - 1:
+                merged_seps.append('\n\n')
+            content_paragraphs = merged_groups
+            separators = merged_seps
+
+        skip_indices: set = set()
         batch_inputs: List[str] = []
         batch_indices: List[int] = []
         for idx, para in enumerate(content_paragraphs):
             stripped = para.strip()
             if not stripped:
                 continue
+            word_count = len(stripped.split())
+            if word_count < MIN_HUMANIZE_WORDS:
+                skip_indices.add(idx)
+                continue
             batch_inputs.append(f"humanize: {stripped}")
             batch_indices.append(idx)
 
         logger.info(
-            f"Humanizer: {len(content_paragraphs)} paragraphs, "
-            f"{len(batch_inputs)} non-empty, sending all in parallel batch"
+            f"Humanizer: {len(content_paragraphs)} groups, "
+            f"{len(batch_inputs)} to humanize, {len(skip_indices)} kept as-is (short), "
+            f"sending in parallel batch"
         )
 
         humanized_paragraphs: List[str] = [''] * len(content_paragraphs)
+        for idx in skip_indices:
+            humanized_paragraphs[idx] = content_paragraphs[idx].strip()
         total_chunks = len(batch_inputs)
         any_sagemaker = False
 
