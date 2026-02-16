@@ -29,7 +29,7 @@ textshift/                 # TextShift (separate project)
 ## VedicStarAstro
 
 **Live site:** https://vedicstarastro.com
-**Droplet:** 139.59.15.76
+**Droplet:** (see private deployment docs)
 
 ### Setup
 ```bash
@@ -39,8 +39,8 @@ npm run dev
 
 ### Deployment
 1. Build locally: `npm run build`
-2. Transfer: `rsync -avz --delete -e "ssh -i ~/.ssh/droplet_key" .next/ root@139.59.15.76:/root/vedicstarastro/.next/`
-3. Restart: `ssh root@139.59.15.76 "cd /root/vedicstarastro && pm2 restart all"`
+2. Transfer: `rsync -avz --delete -e "ssh -i ~/.ssh/droplet_key" .next/ root@<DROPLET_IP>:/root/vedicstarastro/.next/`
+3. Restart: `ssh root@<DROPLET_IP> "cd /root/vedicstarastro && pm2 restart all"`
 
 Never build on the droplet — always build locally first.
 
@@ -50,7 +50,7 @@ Supports 10 languages: en, hi, ta, te, bn, mr, gu, kn, ml, pa
 ## TextShift
 
 **Live site:** https://textshift.org
-**Droplet:** 143.110.183.71
+**Droplet:** (see private deployment docs)
 
 See [textshift/README.md](../textshift/README.md) and [textshift/CONTRIBUTING.md](../textshift/CONTRIBUTING.md) for detailed setup, deployment, and code conventions.
 

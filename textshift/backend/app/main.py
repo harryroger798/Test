@@ -177,9 +177,14 @@ async def healthz():
         from sqlalchemy import text as sa_text
         from app.core.database import SessionLocal
         db = SessionLocal()
-        db.execute(sa_text("SELECT 1"))
-        db.close()
-        health["checks"]["database"] = "ok"
+        try:
+            db.execute(sa_text("SELECT 1"))
+            health["checks"]["database"] = "ok"
+        except Exception as e:
+            health["checks"]["database"] = f"error: {e}"
+            health["status"] = "degraded"
+        finally:
+            db.close()
     except Exception as e:
         health["checks"]["database"] = f"error: {e}"
         health["status"] = "degraded"

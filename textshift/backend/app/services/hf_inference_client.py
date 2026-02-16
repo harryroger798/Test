@@ -61,7 +61,7 @@ def _set_cached(key: str, data: Any):
 
 
 def _get_token() -> str:
-    return getattr(settings, "HUGGINGFACE_API_KEY", "") or ""
+    return settings.HUGGINGFACE_API_KEY if hasattr(settings, "HUGGINGFACE_API_KEY") and settings.HUGGINGFACE_API_KEY else ""
 
 
 _client_instance: Optional[_HFClient] = None

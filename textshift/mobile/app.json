@@ -39,6 +39,12 @@
       ],
       "./plugins/withAndroidFonts"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/f3984ec6-f3e3-4058-ad07-cee726b6aca2"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "f3984ec6-f3e3-4058-ad07-cee726b6aca2"

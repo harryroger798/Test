@@ -39,7 +39,7 @@ export default defineConfig({
       },
       // Tree-shaking optimization
       treeshake: {
-        moduleSideEffects: false,
+        moduleSideEffects: (id) => id.endsWith('.css') || id.includes('style'),
         propertyReadSideEffects: false,
       },
     },

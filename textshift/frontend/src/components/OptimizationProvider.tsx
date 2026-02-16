@@ -35,6 +35,7 @@ export default function OptimizationProvider({ children }: { children: React.Rea
   useEffect(() => {
     if (!mounted) return;
 
+    if (typeof PerformanceObserver === 'undefined') return;
     const observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
         if (entry.entryType === 'longtask') {

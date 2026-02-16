@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { clearApiCache } from '@/lib/api';
 
 interface User {
   id: number;
@@ -43,6 +44,7 @@ export const useAuthStore = create<AuthState>()(
       },
       logout: () => {
         localStorage.removeItem('token');
+        clearApiCache();
         set({ token: null, user: null, isAuthenticated: false });
       },
       setHasHydrated: (v) => set({ _hasHydrated: v }),

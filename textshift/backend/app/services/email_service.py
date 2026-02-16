@@ -465,7 +465,7 @@ Need help? Reply to this email or visit our website.
                     <tr>
                         <td align="center">
                             <a href="{dashboard_url}" class="button" style="display: inline-block; background: linear-gradient(135deg, #10b981, #059669); color: #000000; font-size: 16px; font-weight: 600; text-decoration: none; padding: 16px 48px; border-radius: 50px; text-align: center;">
-                                Start Using Your Credits
+                                Start Using Your Words
                             </a>
                         </td>
                     </tr>
@@ -487,9 +487,9 @@ Thanks for upgrading, {name}! Your {plan_name} plan is now active.
 Plan: {plan_name}
 Words Added: {credits_display}
 
-Your credits never expire. Cancel or change your plan anytime.
+Your words never expire. Cancel or change your plan anytime.
 
-Go to Dashboard: {dashboard_url}
+Go to Dashboard:{dashboard_url}
 
 - The TextShift Team
         """
@@ -593,7 +593,7 @@ You can change these preferences anytime at: {settings_url}
         )
     
     def send_credit_topup_confirmation(self, to_email: str, credits_added: int, new_balance: int, price: float, full_name: Optional[str] = None) -> bool:
-        """Send email confirming credit top-up purchase."""
+        """Send email confirming word top-up purchase."""
         name = full_name.split()[0] if full_name else "there"
         dashboard_url = f"{settings.FRONTEND_URL}/dashboard"
         

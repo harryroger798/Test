@@ -37,20 +37,20 @@ The frontend dev server runs on port 5173 and proxies API requests to port 8000.
 ### Deploy Backend
 ```bash
 # 1. Backup current state
-ssh root@143.110.183.71 "cp -r /opt/textshift/backend/app /opt/textshift/backend/app.bak"
+ssh root@<DROPLET_IP> "cp -r /opt/textshift/backend/app /opt/textshift/backend/app.bak"
 
 # 2. Transfer files (NEVER use --delete without excluding .env)
 rsync -avz --exclude='.env' --exclude='*.db' --exclude='venv/' --exclude='__pycache__/' \
-  textshift/backend/app/ root@143.110.183.71:/opt/textshift/backend/app/
+  textshift/backend/app/ root@<DROPLET_IP>:/opt/textshift/backend/app/
 
 # 3. Install any new dependencies
-ssh root@143.110.183.71 "cd /opt/textshift/backend && source venv/bin/activate && pip install -r requirements.txt"
+ssh root@<DROPLET_IP> "cd /opt/textshift/backend && source venv/bin/activate && pip install -r requirements.txt"
 
 # 4. Restart service
-ssh root@143.110.183.71 "systemctl restart textshift-backend"
+ssh root@<DROPLET_IP> "systemctl restart textshift-backend"
 
 # 5. Verify
-ssh root@143.110.183.71 "systemctl status textshift-backend"
+ssh root@<DROPLET_IP> "systemctl status textshift-backend"
 ```
 
 ### Deploy Frontend
@@ -59,13 +59,13 @@ ssh root@143.110.183.71 "systemctl status textshift-backend"
 cd textshift/frontend && npm run build
 
 # 2. Transfer
-rsync -avz dist/ root@143.110.183.71:/opt/textshift/frontend/dist/
+rsync -avz dist/ root@<DROPLET_IP>:/opt/textshift/frontend/dist/
 ```
 
 ### Rollback
 ```bash
 # Backend rollback
-ssh root@143.110.183.71 "cp -r /opt/textshift/backend/app.bak /opt/textshift/backend/app && systemctl restart textshift-backend"
+ssh root@<DROPLET_IP> "cp -r /opt/textshift/backend/app.bak /opt/textshift/backend/app && systemctl restart textshift-backend"
 ```
 
 ## Branch Strategy

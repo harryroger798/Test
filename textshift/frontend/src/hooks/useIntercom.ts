@@ -25,6 +25,9 @@ export function useIntercom() {
       : lastUserIdRef.current !== null;
 
     if (!bootedRef.current || authChanged) {
+      if (bootedRef.current && authChanged) {
+        window.Intercom('shutdown');
+      }
       if (isAuthenticated && user) {
         window.Intercom('boot', {
           api_base: 'https://api-iam.intercom.io',

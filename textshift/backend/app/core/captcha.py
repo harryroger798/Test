@@ -11,8 +11,8 @@ async def verify_captcha_token(token: str) -> bool:
     settings = get_settings()
     private_key = settings.MTCAPTCHA_PRIVATE_KEY
     if not private_key:
-        logger.warning("MTCAPTCHA_PRIVATE_KEY not set, skipping captcha verification")
-        return True
+        logger.error("MTCAPTCHA_PRIVATE_KEY not set; captcha verification disabled")
+        return settings.DEBUG
 
     if not token:
         return False

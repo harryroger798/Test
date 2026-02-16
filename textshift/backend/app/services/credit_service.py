@@ -46,8 +46,20 @@ def deduct_credits(db: Session, user: User, amount: int, description: str, refer
     Uses atomic SQL UPDATE with WHERE clause to prevent race conditions
     on concurrent deductions.
     """
+    if amount <= 0:
+        logger.warning("Invalid credit deduction amount: %s", amount)
+        return False
     if user.credits_balance == -1:
-        user.credits_used_total += amount
+        result = db.execute(
+            text(
+                "UPDATE users SET credits_used_total = credits_used_total + :amount "
+                "WHERE id = :user_id AND credits_balance = -1"
+            ),
+            {"amount": amount, "user_id": user.id}
+        )
+        if result.rowcount == 0:
+            db.rollback()
+            return False
         transaction = CreditTransaction(
             user_id=user.id,
             transaction_type=TransactionType.USAGE,

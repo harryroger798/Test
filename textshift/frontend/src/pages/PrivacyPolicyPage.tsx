@@ -58,7 +58,7 @@ export default function PrivacyPolicyPage() {
             <p className="leading-relaxed mb-4">When you register or use our services, we may collect:</p>
             <ul className="list-disc list-inside space-y-2 text-gray-400 mb-4">
               <li>Name and email address</li>
-              <li>Account credentials (password is encrypted)</li>
+              <li>Account credentials (password is securely hashed)</li>
               <li>Payment information (processed securely by PayPal)</li>
               <li>Usage data and preferences</li>
             </ul>

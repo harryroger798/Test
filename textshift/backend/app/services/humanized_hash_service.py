@@ -14,6 +14,7 @@ import logging
 from typing import Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.humanized_hash import HumanizedTextHash
 
@@ -78,7 +79,16 @@ class HumanizedHashService:
         )
         
         db.add(hash_record)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing = db.query(HumanizedTextHash).filter(
+                HumanizedTextHash.text_hash == text_hash
+            ).first()
+            if existing:
+                return existing
+            raise
         db.refresh(hash_record)
         
         logger.info(f"Stored humanized text hash: {text_hash[:16]}...")

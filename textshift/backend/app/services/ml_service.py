@@ -1210,7 +1210,7 @@ class MLModelService:
     IDRIVE_ENDPOINT = "https://s3.us-west-1.idrivee2.com"
     IDRIVE_BUCKET = "crop-spray-uploads"
     TRIBOOST_VERSIONS = ["original", "v3", "v4"]  # All TriBoost versions for super-ensemble
-    LOCAL_TRIBOOST_CACHE = "/tmp/triboost_super_ensemble"
+    LOCAL_TRIBOOST_CACHE = os.environ.get("TRIBOOST_CACHE_DIR", "/var/lib/textshift/triboost_super_ensemble")
     
     def __new__(cls):
         if cls._instance is None:
@@ -1269,18 +1269,24 @@ class MLModelService:
             for version in self.TRIBOOST_VERSIONS:
                 self._triboost_models[version] = {}
                 for model_name in model_names:
-                    model_path = self._download_triboost_model(version, model_name)
-                    with open(model_path, 'rb') as f:
-                        self._triboost_models[version][model_name] = pickle.load(f)
-                    logger.info(f"Loaded TriBoost {version}/{model_name} model")
+                    try:
+                        model_path = self._download_triboost_model(version, model_name)
+                        with open(model_path, 'rb') as f:
+                            self._triboost_models[version][model_name] = pickle.load(f)
+                        logger.info(f"Loaded TriBoost {version}/{model_name} model")
+                    except FileNotFoundError:
+                        logger.warning(f"Missing TriBoost {version}/{model_name} model; continuing")
+                        continue
+                if not self._triboost_models[version]:
+                    logger.warning(f"No models available for TriBoost version {version}")
             
-            # Initialize feature extractor
             if self._feature_extractor is None:
                 self._feature_extractor = FeatureExtractor565()
                 logger.info("Initialized 565-feature extractor")
             
-            self._triboost_loaded = True
-            logger.info("Super-Ensemble TriBoost loaded: 9 models (3 versions x 3 algorithms)")
+            total_loaded = sum(len(v) for v in self._triboost_models.values())
+            self._triboost_loaded = total_loaded > 0
+            logger.info(f"Super-Ensemble TriBoost loaded: {total_loaded} models across {len(self.TRIBOOST_VERSIONS)} versions")
         except Exception as e:
             logger.error(f"Failed to load TriBoost models: {e}")
             self._triboost_loaded = False

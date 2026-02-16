@@ -4,8 +4,11 @@ After=network.target postgresql.service redis.service
 
 [Service]
 Type=simple
-User=root
+User=textshift
+Group=textshift
 WorkingDirectory=/opt/textshift/backend
+ProtectSystem=strict
+ReadWritePaths=/opt/textshift/backend /tmp
 Environment=PATH=/opt/textshift/backend/venv/bin:/usr/local/bin:/usr/bin:/bin
 Environment=DD_SERVICE=textshift-backend
 Environment=DD_ENV=production

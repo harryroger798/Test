@@ -128,7 +128,8 @@ _region_cache: dict[str, tuple[str, float]] = {}
 async def detect_region(request: Request):
     """Detect user's country from IP address for region parity pricing."""
     import time
-    client_ip = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or request.client.host if request.client else ""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client_ip = request.headers.get("x-real-ip") or (forwarded.split(",")[0].strip() if forwarded else "") or (request.client.host if request.client else "")
 
     if client_ip in _region_cache:
         code, ts = _region_cache[client_ip]
@@ -159,6 +160,34 @@ async def detect_region(request: Request):
     _region_cache[client_ip] = (country_code, time.time())
     region = REGION_CURRENCY_MAP.get(country_code)
     return {"country_code": country_code, "currency": region["currency"] if region else "USD", "symbol": region["symbol"] if region else "$"}
+
+
+async def _resolve_country(request: Request, client_country: str) -> str:
+    """Resolve country from server-side IP lookup, ignoring client-supplied value."""
+    import time
+    forwarded = request.headers.get("x-forwarded-for", "")
+    client_ip = request.headers.get("x-real-ip") or (forwarded.split(",")[0].strip() if forwarded else "") or (request.client.host if request.client else "")
+    if client_ip in _region_cache:
+        code, ts = _region_cache[client_ip]
+        if time.time() - ts < 86400:
+            return code
+    apis = [
+        f"https://ipapi.co/{client_ip}/json/",
+        f"http://ip-api.com/json/{client_ip}?fields=countryCode",
+    ]
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for api_url in apis:
+            try:
+                resp = await client.get(api_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    code = data.get("country_code") or data.get("countryCode") or data.get("country") or ""
+                    if code:
+                        _region_cache[client_ip] = (code.upper(), time.time())
+                        return code.upper()
+            except Exception:
+                continue
+    return client_country.upper() if client_country else ""
 
 
 async def get_paypal_access_token() -> str:
@@ -262,6 +291,7 @@ def get_plan_features(plan_id: str) -> list:
 
 @router.post("/create-order")
 async def create_paypal_order(
+    request: Request,
     plan_id: str,
     billing_cycle: str = "monthly",
     country: str = "",
@@ -275,7 +305,8 @@ async def create_paypal_order(
         billing_cycle: 'monthly' or 'yearly'
         country: ISO country code for region parity pricing (e.g., 'IN' for India)
     """
-    region = REGION_CURRENCY_MAP.get(country.upper()) if country else None
+    resolved_country = await _resolve_country(request, country)
+    region = REGION_CURRENCY_MAP.get(resolved_country) if resolved_country else None
     currency_code = region["currency"] if region else "USD"
 
     if billing_cycle == "yearly":
@@ -359,6 +390,7 @@ async def create_paypal_order(
 
 @router.post("/capture-order")
 async def capture_paypal_order(
+    request: Request,
     order_id: str,
     plan_id: str,
     billing_cycle: str = "monthly",
@@ -374,7 +406,8 @@ async def capture_paypal_order(
         billing_cycle: 'monthly' or 'yearly'
         country: ISO country code for region parity pricing
     """
-    region = REGION_CURRENCY_MAP.get(country.upper()) if country else None
+    resolved_country = await _resolve_country(request, country)
+    region = REGION_CURRENCY_MAP.get(resolved_country) if resolved_country else None
 
     if billing_cycle == "yearly":
         plans_src = region["yearly"] if region else YEARLY_PRICING_PLANS

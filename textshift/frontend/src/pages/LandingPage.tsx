@@ -51,8 +51,7 @@ import {
   NoiseOverlay,
 } from '@/components/animations';
 import { useAuthStore } from '@/store/authStore';
-
-const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:8000');
+import api from '@/lib/api';
 
 interface LandingPromo {
   id: number;
@@ -173,11 +172,8 @@ export default function LandingPage() {
   useEffect(() => {
     const fetchPromos = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/promo/active`);
-        if (response.ok) {
-          const data = await response.json();
-          setActivePromos(data);
-        }
+        const { data } = await api.get('/api/promo/active');
+        setActivePromos(data);
       } catch (err) {
         console.error('Failed to fetch promos:', err);
       }
@@ -201,30 +197,19 @@ export default function LandingPage() {
     setContactError('');
     
     try {
-      const response = await fetch(`${API_URL}/api/contact/sales`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(contactForm),
+      await api.post('/api/contact/sales', contactForm);
+      setContactSuccess(true);
+      setContactForm({
+        name: '',
+        email: '',
+        company: '',
+        phone: '',
+        message: '',
+        plan_interest: 'General'
       });
-      
-      if (response.ok) {
-        setContactSuccess(true);
-        setContactForm({
-          name: '',
-          email: '',
-          company: '',
-          phone: '',
-          message: '',
-          plan_interest: 'General'
-        });
-      } else {
-        const data = await response.json();
-        setContactError(data.detail || 'Failed to send message. Please try again.');
-      }
-    } catch {
-      setContactError('Failed to send message. Please try again or email us directly at support@mail.textshift.org');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { detail?: string } } };
+      setContactError(axiosErr.response?.data?.detail || 'Failed to send message. Please try again or email us directly at support@mail.textshift.org');
     } finally {
       setContactLoading(false);
     }

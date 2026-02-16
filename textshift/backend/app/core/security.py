@@ -47,16 +47,16 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
-def _get_auth0_jwks() -> dict:
+async def _get_auth0_jwks() -> dict:
     global _auth0_jwks_cache, _auth0_jwks_cache_time
     now = _time.time()
     if _auth0_jwks_cache and (now - _auth0_jwks_cache_time) < 3600:
         return _auth0_jwks_cache
     try:
-        resp = httpx.get(
-            f"https://{settings.AUTH0_DOMAIN}/.well-known/jwks.json",
-            timeout=10,
-        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://{settings.AUTH0_DOMAIN}/.well-known/jwks.json",
+            )
         _auth0_jwks_cache = resp.json()
         _auth0_jwks_cache_time = now
         return _auth0_jwks_cache
@@ -67,10 +67,10 @@ def _get_auth0_jwks() -> dict:
         return {"keys": []}
 
 
-def decode_auth0_token(token: str) -> Optional[dict]:
+async def decode_auth0_token(token: str) -> Optional[dict]:
     try:
         unverified_header = jwt.get_unverified_header(token)
-        jwks = _get_auth0_jwks()
+        jwks = await _get_auth0_jwks()
         rsa_key: dict = {}
         for key in jwks.get("keys", []):
             if key["kid"] == unverified_header.get("kid"):
@@ -118,7 +118,7 @@ async def get_current_user(
             raise credentials_exception
         return user
 
-    auth0_payload = decode_auth0_token(token)
+    auth0_payload = await decode_auth0_token(token)
     if auth0_payload is not None:
         auth0_sub = auth0_payload.get("sub")
         if not auth0_sub:

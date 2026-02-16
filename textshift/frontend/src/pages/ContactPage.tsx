@@ -39,7 +39,7 @@ export default function ContactPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, captcha_token: captchaToken }),
       });
 
       if (response.ok) {

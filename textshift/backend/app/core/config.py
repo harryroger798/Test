@@ -16,20 +16,20 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     
     # JWT
-    SECRET_KEY: str = "textshift-super-secret-key-change-in-production-2024"
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     
     # PayPal
-    PAYPAL_CLIENT_ID: str = "ATNvYPU61RI3s-JnjGotzLW4NZrXP6ApCXzJM2KsvuOFQK1QTKFGCAyesEWBhGnHPqKdX9gexjxYlN3l"
-    PAYPAL_SECRET_KEY: str = "EAYgOzANLnaqQPqYU0_rnIoBCdkMP0l4a3GtAW5KvpyUQSH_zK7MZxoclvwbPXgLi9fo8KDIwLKx_REI"
+    PAYPAL_CLIENT_ID: str = ""
+    PAYPAL_SECRET_KEY: str = ""
     PAYPAL_MODE: str = "live"  # "sandbox" or "live"
     
     # iDrive e2 (S3-compatible)
     S3_ENDPOINT: str = "https://s3.us-west-1.idrivee2.com"
     S3_BUCKET: str = "crop-spray-uploads"
-    S3_ACCESS_KEY: str = "EQQ53Vm4Cr9Rov1FsOPt"
-    S3_SECRET_KEY: str = "far8XneFX3NH9UT6HFUjAAt9YZ3CB8RmJiCvKpe6"
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
     
     # ML Models paths
     MODELS_DIR: str = "/opt/textshift/models"
@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     TRANSLATOR_MODELS_DIR: str = "/opt/textshift/models/translators"
     
     # External APIs (fallback)
-    SERPER_API_KEY: str = "14e76cf7d90184e9053825ba67d99621705dc122"
-    ORIGINALITY_API_KEY: str = "4mrg7suxpdhfi2ty6kq85ne9cz3ljowv"
+    SERPER_API_KEY: str = ""
+    ORIGINALITY_API_KEY: str = ""
     
     # HuggingFace API for LoRA training (set via environment variable)
     HUGGINGFACE_API_KEY: str = ""  # Set via HF_API_KEY environment variable
