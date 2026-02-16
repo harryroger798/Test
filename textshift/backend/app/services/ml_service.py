@@ -2108,8 +2108,10 @@ class MLModelService:
             if not result.endswith("."):
                 result += "."
         
-        # Clean up extra whitespace
-        return re.sub(r'\s+', ' ', result).strip()
+        # Clean up extra whitespace (preserve newlines for paragraph structure)
+        lines = result.split('\n')
+        lines = [re.sub(r'[^\S\n]+', ' ', line).strip() for line in lines]
+        return '\n'.join(lines).strip()
     
     def _apply_spelling_only_pass(self, text: str) -> str:
         """Apply spelling-only corrections using LanguageTool API.
@@ -2249,30 +2251,12 @@ class MLModelService:
             chunks.append(' '.join(current_chunk))
         return chunks
 
-    def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
-        """Humanize AI text using Stealthwriter T5 Chaos model.
-        
-        If preserved_indices is provided, only humanize sentences NOT in the list.
-        Preserved sentences are kept exactly as-is in the output.
-        Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
-        
-        Long texts (>400 words) are automatically split into chunks of ~400 words
-        at sentence boundaries. Each chunk is humanized separately to avoid the
-        T5 tokenizer's 1024-token truncation limit.
-        """
-        mode_config = {
-            'academic': {'temperature': 0.7, 'top_p': 0.9},
-            'professional': {'temperature': 0.75, 'top_p': 0.92},
-            'casual': {'temperature': 0.85, 'top_p': 0.93},
-        }
-        config = mode_config.get(mode, mode_config['casual'])
-        if preserved_indices is not None:
-            return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
-
-        word_count = len(text.split())
+    def _humanize_paragraph(self, paragraph: str, use_post_processor: bool, passes: int, mode: str) -> tuple:
+        """Humanize a single paragraph, returning (humanized_text, chunk_count, sagemaker_used)."""
+        word_count = len(paragraph.split())
         if word_count > self._CHUNK_WORD_LIMIT:
-            chunks = self._build_chunks(text)
-            logger.info(f"Text has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks for humanization")
+            chunks = self._build_chunks(paragraph)
+            logger.info(f"Paragraph has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks")
 
             use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
             result_chunks: List[str] = [None] * len(chunks)
@@ -2320,41 +2304,96 @@ class MLModelService:
                     humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
                     result_chunks[idx] = humanized
 
-            model_output = ' '.join(result_chunks)
-            model_output = self._clean_model_output(model_output)
-            if use_post_processor:
-                model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode)
-            before_spelling = model_output
-            final_output = self._apply_spelling_only_pass(model_output)
-            original_words = text.lower().split()
-            final_words = final_output.lower().split()
-            changes = len(set(original_words).symmetric_difference(set(final_words)))
-            return {
-                "original_text": text,
-                "model_output": model_output,
-                "humanized_text": final_output,
-                "changes_made": changes,
-                "original_length": len(text),
-                "humanized_length": len(final_output),
-                "post_processor_used": use_post_processor,
-                "passes": passes,
-                "used_fallback": False,
-                "mode": mode,
-                "spelling_pass_applied": final_output != before_spelling,
-                "chunked": True,
-                "chunk_count": len(chunks),
-                "sagemaker_used": sagemaker_used,
-            }
+            output = ' '.join(result_chunks)
+            output = self._clean_model_output(output)
+            return output, len(chunks), sagemaker_used
 
-        model_output = self._humanize_single(text, use_post_processor=False, passes=passes, mode=mode)
-        use_fallback = False
+        output = self._humanize_single(paragraph, use_post_processor=False, passes=passes, mode=mode)
+        return output, 1, False
+
+    def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
+        """Humanize AI text using Stealthwriter T5 Chaos model.
         
-        final_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode) if use_post_processor else model_output
-        before_spelling = final_output
-        final_output = self._apply_spelling_only_pass(final_output)
+        If preserved_indices is provided, only humanize sentences NOT in the list.
+        Preserved sentences are kept exactly as-is in the output.
+        Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
+        
+        Paragraph structure is preserved: text is split on blank lines, each paragraph
+        is humanized independently, then paragraphs are rejoined with the original breaks.
+        Long paragraphs (>500 words) are further split into chunks at sentence boundaries.
+        """
+        mode_config = {
+            'academic': {'temperature': 0.7, 'top_p': 0.9},
+            'professional': {'temperature': 0.75, 'top_p': 0.92},
+            'casual': {'temperature': 0.85, 'top_p': 0.93},
+        }
+        config = mode_config.get(mode, mode_config['casual'])
+        if preserved_indices is not None:
+            return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
+
+        paragraphs = re.split(r'(\n\s*\n)', text)
+        content_paragraphs = []
+        separators = []
+        for i, part in enumerate(paragraphs):
+            if i % 2 == 0:
+                content_paragraphs.append(part)
+            else:
+                separators.append(part)
+
+        has_paragraph_breaks = len(content_paragraphs) > 1
+        if not has_paragraph_breaks:
+            single_newline_parts = text.split('\n')
+            if len(single_newline_parts) > 1:
+                content_paragraphs = single_newline_parts
+                separators = ['\n'] * (len(content_paragraphs) - 1)
+                has_paragraph_breaks = True
+
+        total_chunks = 0
+        any_sagemaker = False
+        humanized_paragraphs: List[str] = []
+
+        for p_idx, paragraph in enumerate(content_paragraphs):
+            stripped = paragraph.strip()
+            if not stripped:
+                humanized_paragraphs.append('')
+                continue
+            logger.info(f"Humanizing paragraph {p_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
+            h_text, chunk_count, sm_used = self._humanize_paragraph(stripped, use_post_processor, passes, mode)
+            total_chunks += chunk_count
+            if sm_used:
+                any_sagemaker = True
+            humanized_paragraphs.append(h_text)
+
+        if has_paragraph_breaks:
+            parts: List[str] = []
+            for i, h_para in enumerate(humanized_paragraphs):
+                parts.append(h_para)
+                if i < len(separators):
+                    parts.append(separators[i])
+            model_output = ''.join(parts)
+        else:
+            model_output = humanized_paragraphs[0] if humanized_paragraphs else ''
+
+        if use_post_processor:
+            para_outputs = re.split(r'(\n\s*\n|\n)', model_output)
+            processed_parts: List[str] = []
+            orig_parts = re.split(r'(\n\s*\n|\n)', text)
+            for i, part in enumerate(para_outputs):
+                if part.strip() and not re.match(r'^\s*$', part) and '\n' not in part:
+                    orig_part = orig_parts[i] if i < len(orig_parts) else None
+                    processed_parts.append(
+                        self._apply_stealthwriter_postprocessor(part, passes, original_text=orig_part, mode=mode)
+                    )
+                else:
+                    processed_parts.append(part)
+            model_output = ''.join(processed_parts)
+
+        before_spelling = model_output
+        final_output = self._apply_spelling_only_pass(model_output)
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
+        is_chunked = total_chunks > len(content_paragraphs) or len(content_paragraphs) > 1
         return {
             "original_text": text,
             "model_output": model_output,
@@ -2364,9 +2403,13 @@ class MLModelService:
             "humanized_length": len(final_output),
             "post_processor_used": use_post_processor,
             "passes": passes,
-            "used_fallback": use_fallback,
+            "used_fallback": False,
             "mode": mode,
-            "spelling_pass_applied": final_output != before_spelling
+            "spelling_pass_applied": final_output != before_spelling,
+            "chunked": is_chunked,
+            "chunk_count": total_chunks,
+            "paragraph_count": len(content_paragraphs),
+            "sagemaker_used": any_sagemaker,
         }
     
     def _humanize_selective(self, text: str, preserved_indices: List[int], use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
