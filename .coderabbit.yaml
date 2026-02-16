@@ -1,0 +1,7 @@
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - "setup-main"
+      - "devin/1768516620-vedicstarastro-website"
+  review_status: true
