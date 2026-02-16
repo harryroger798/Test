@@ -2391,7 +2391,7 @@ class MLModelService:
             merged_seps: List[str] = []
             current_group: List[str] = []
             current_wc = 0
-            for idx, para in enumerate(content_paragraphs):
+            for para in content_paragraphs:
                 stripped = para.strip()
                 if not stripped:
                     continue
@@ -2447,8 +2447,8 @@ class MLModelService:
                 "max_new_tokens": max_new,
                 "num_beams": 1,
                 "do_sample": True,
-                "temperature": 1.0,
-                "top_p": 0.95,
+                "temperature": config["temperature"],
+                "top_p": config["top_p"],
                 "repetition_penalty": 2.5,
                 "no_repeat_ngram_size": 3,
             }
@@ -2473,6 +2473,8 @@ class MLModelService:
                         )
         else:
             for p_idx, paragraph in enumerate(content_paragraphs):
+                if p_idx in skip_indices:
+                    continue
                 stripped = paragraph.strip()
                 if not stripped:
                     continue
