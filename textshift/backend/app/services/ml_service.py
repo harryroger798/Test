@@ -1813,13 +1813,21 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
+    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2,
+                 preserved_indices: Optional[List[int]] = None, mode: str = 'casual') -> Dict[str, Any]:
         model_output = None
         use_fallback = False
         
+        mode_prefixes = {
+            'academic': 'humanize in academic tone: ',
+            'professional': 'humanize in professional tone: ',
+            'casual': 'humanize: ',
+        }
+        prefix = mode_prefixes.get(mode, 'humanize: ')
+        
         try:
             self._load_humanizer()
-            input_text = f"humanize: {text}"
+            input_text = f"{prefix}{text}"
             inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
             with torch.no_grad():
                 outputs = self._humanizer_model.generate(
@@ -1839,6 +1847,20 @@ class MLModelService:
             model_output = self._humanize_with_hf_api(text)
         
         final_output = self._apply_stealthwriter_postprocessor(model_output, passes) if use_post_processor else model_output
+        
+        if preserved_indices:
+            original_sentences = self._split_sentences(text)
+            humanized_sentences = self._split_sentences(final_output)
+            merged = []
+            for i, sent in enumerate(original_sentences):
+                if i in preserved_indices:
+                    merged.append(sent)
+                elif i < len(humanized_sentences):
+                    merged.append(humanized_sentences[i])
+                else:
+                    merged.append(sent)
+            final_output = ' '.join(merged)
+        
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
@@ -1851,7 +1873,8 @@ class MLModelService:
             "humanized_length": len(final_output),
             "post_processor_used": use_post_processor,
             "passes": passes,
-            "used_fallback": use_fallback
+            "used_fallback": use_fallback,
+            "mode": mode
         }
     
     def _sync_web_search(self, text: str) -> List[Dict[str, Any]]:
