@@ -15,9 +15,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/scan", tags=["Scanning"]) 
+router = APIRouter(prefix="/api/scan", tags=["Scanning"])
 
-# Simple low-content detector: proportion of >=3-letter alphabetic tokens
 COMMON_SHORT_WORDS = {"i", "a", "an", "am", "as", "at", "be", "by", "do", "go",
                       "he", "if", "in", "is", "it", "me", "my", "no", "of", "on",
                       "or", "so", "to", "up", "us", "we", "ok"}
@@ -140,7 +139,7 @@ async def detect_ai(
     if word_count < 50:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Please enter at least 50 words for reliable detection")
     if _is_low_content(scan_data.text, 0.7):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Input appears to be gibberish/low-content. Please provide meaningful text (≥70% real words).")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Input appears to be gibberish/low-content. Please provide meaningful text (\u226570% real words).")
 
     # Calculate credits needed (word count)
     credits_needed = calculate_credits_needed(scan_data.text, "ai_detection")
@@ -181,45 +180,75 @@ async def detect_ai(
         scan.status = ScanStatus.PROCESSING
         db.commit()
         
-        # Get A/B testing model version assignment
-        model_version = ABTestingIntegration.get_model_version_for_user(
-            user_id=current_user.id,
-            model_type='detector',
-            db_session=db
-        )
+        # Check if text was humanized by TextShift (hash-based recognition)
+        is_textshift_humanized = humanized_hash_service.check_hash(db, scan.input_text)
         
-        if humanized_hash_service.check_hash(db, scan.input_text):
+        if is_textshift_humanized:
+            # Text was humanized by TextShift - return 0% AI automatically
+            logger.info(f"Scan {scan.id}: Text recognized as TextShift humanized output")
             result = {
                 "ai_probability": 0.0,
                 "human_probability": 100.0,
-                "confidence_score": 1.0,
-                "confidence_level": "high",
-                "analysis": {"text_length": len(scan.input_text), "word_count": count_words(scan.input_text)},
-                "reliability": "normal",
-                "warning": None,
-                "textshift_humanized": True,
-                "model_used": "hash_bypass",
+                "confidence_score": 10,
+                "confidence_level": "Very High",
+                "analysis": {
+                    "text_length": len(scan.input_text),
+                    "word_count": len(scan.input_text.split()),
+                    "avg_sentence_length": len(scan.input_text.split()) / max(1, scan.input_text.count('.') + scan.input_text.count('!') + scan.input_text.count('?'))
+                },
+                "model_breakdown": {
+                    "roberta": 0.0,
+                    "triboost_original": 0.0,
+                    "triboost_v3": 0.0,
+                    "triboost_v4": 0.0,
+                    "triboost_average": 0.0
+                },
+                "ensemble_info": {
+                    "votes_ai": 0,
+                    "votes_human": 4,
+                    "strategy_used": "textshift_humanized_bypass",
+                    "total_models": 10
+                },
+                "level_analysis": {
+                    "level": 1,
+                    "label": "Human Written",
+                    "description": "Content verified as TextShift humanized output"
+                },
+                "model_used": "textshift_humanized_bypass",
+                "textshift_humanized": True
             }
+            scan.ai_probability = 0.0
+            scan.confidence_level = "Very High"
         else:
+            # Normal AI detection flow
+            # Get A/B testing model version assignment
+            model_version = ABTestingIntegration.get_model_version_for_user(
+                user_id=current_user.id,
+                model_type='detector',
+                db_session=db
+            )
+            
             result = ml_service.detect_ai(scan.input_text)
-        scan.ai_probability = result["ai_probability"]
-        scan.confidence_level = result["confidence_level"]
+            scan.ai_probability = result["ai_probability"]
+            scan.confidence_level = result["confidence_level"]
+            
+            # Add model version info to results
+            result["model_version"] = model_version.get("version_name", "detector_v1.0")
+            result["is_test_group"] = model_version.get("is_test_group", False)
+            result["textshift_humanized"] = False
+            
+            # Record model usage for A/B testing analytics
+            ABTestingIntegration.record_model_usage(
+                user_id=current_user.id,
+                model_type='detector',
+                version_name=model_version.get("version_name", "detector_v1.0"),
+                scan_id=scan.id,
+                db_session=db
+            )
         
-        # Add model version info to results
-        result["model_version"] = model_version.get("version_name", "detector_v1.0")
-        result["is_test_group"] = model_version.get("is_test_group", False)
         scan.results = result
         scan.status = ScanStatus.COMPLETED
         scan.completed_at = datetime.utcnow()
-        
-        # Record model usage for A/B testing analytics
-        ABTestingIntegration.record_model_usage(
-            user_id=current_user.id,
-            model_type='detector',
-            version_name=model_version.get("version_name", "detector_v1.0"),
-            scan_id=scan.id,
-            db_session=db
-        )
         
     except Exception as e:
         logger.error(f"Error processing scan {scan.id}: {str(e)}")
@@ -302,6 +331,7 @@ async def humanize_text(
         scan.output_text = result["humanized_text"]
         
         # Store hash of humanized output for future AI detection bypass
+        # This ensures TextShift humanized text always shows 0% AI when checked
         try:
             humanized_hash_service.store_hash(
                 db=db,
@@ -311,6 +341,7 @@ async def humanize_text(
             )
             logger.info(f"Stored humanized text hash for scan {scan.id}")
         except Exception as hash_error:
+            # Don't fail the scan if hash storage fails
             logger.warning(f"Failed to store humanized text hash: {hash_error}")
         
         # Add model version info to results

@@ -212,13 +212,17 @@ class WritingToolsService:
             model_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base')
             
             if os.path.exists(onnx_dir) and os.path.exists(os.path.join(onnx_dir, 'encoder_model.onnx')):
-                from optimum.onnxruntime import ORTModelForSeq2SeqLM
-                logger.info("Loading Flan-T5-base ONNX INT8 model...")
-                self._general_t5_tokenizer = T5Tokenizer.from_pretrained(onnx_dir)
-                self._general_t5_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
-                self._is_onnx_flan_t5 = True
-                logger.info(f"Loaded Flan-T5-base ONNX INT8 from {onnx_dir}")
-                return True
+                try:
+                    from optimum.onnxruntime import ORTModelForSeq2SeqLM
+                except Exception as ort_err:
+                    logger.warning(f"ONNX runtime unavailable, falling back to PyTorch: {ort_err}")
+                else:
+                    logger.info("Loading Flan-T5-base ONNX INT8 model...")
+                    self._general_t5_tokenizer = T5Tokenizer.from_pretrained(onnx_dir)
+                    self._general_t5_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
+                    self._is_onnx_flan_t5 = True
+                    logger.info(f"Loaded Flan-T5-base ONNX INT8 from {onnx_dir}")
+                    return True
             
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
                 success = self._download_model_from_s3('textshift-models/flan-t5-base/', model_dir)
@@ -262,13 +266,15 @@ class WritingToolsService:
                 if not success:
                     logger.info("Downloading coedit-large from HuggingFace...")
                     self._grammar_tokenizer = AutoTokenizer.from_pretrained("grammarly/coedit-large")
-                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("grammarly/coedit-large", torch_dtype=torch.float16)
+                    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("grammarly/coedit-large", torch_dtype=dtype)
                     self._grammar_model.eval()
                     logger.info("CoEdIT-large model loaded from HuggingFace")
                     return True
             
             self._grammar_tokenizer = AutoTokenizer.from_pretrained(model_dir)
-            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=torch.float16)
+            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=dtype)
             self._grammar_model.eval()
             logger.info("CoEdIT-large model loaded (PyTorch) from local storage")
             return True
@@ -361,33 +367,32 @@ class WritingToolsService:
 
         if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
             try:
+                input_texts = [f"{instruction}: {chunk}" for chunk in chunks]
+                word_count = len(text.split())
+                max_new = min(512, max(256, int(word_count * 1.5 / len(chunks))))
+                parameters = {
+                    "max_new_tokens": max_new,
+                    "num_beams": 4,
+                    "early_stopping": True,
+                    "do_sample": False,
+                }
+                batch_results = sagemaker_client.invoke_text2text_batch(
+                    "coedit-large", input_texts, parameters, max_workers=8
+                )
                 failed_indices = []
-                with ThreadPoolExecutor(max_workers=min(len(chunks), 4)) as executor:
-                    future_to_idx = {
-                        executor.submit(self._coedit_chunk_via_sagemaker, instruction, chunk): idx
-                        for idx, chunk in enumerate(chunks)
-                    }
-                    from concurrent.futures import as_completed
-                    for future in as_completed(future_to_idx):
-                        idx = future_to_idx[future]
-                        try:
-                            result = future.result()
-                            if result:
-                                results[idx] = result
-                            else:
-                                failed_indices.append(idx)
-                        except Exception:
-                            failed_indices.append(idx)
+                for idx, result in enumerate(batch_results):
+                    if result and len(result.strip()) > 0:
+                        results[idx] = result.strip()
+                    else:
+                        failed_indices.append(idx)
 
                 if not failed_indices:
-                    logger.info(f"SageMaker GPU CoEdIT processed {len(chunks)} chunks in parallel")
+                    logger.info(f"SageMaker GPU CoEdIT batch processed {len(chunks)} chunks")
                     return ' '.join(results)
 
                 logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
-                for idx in failed_indices:
-                    results[idx] = None
             except Exception as e:
-                logger.warning(f"SageMaker GPU CoEdIT parallel failed, falling back to local: {e}")
+                logger.warning(f"SageMaker GPU CoEdIT batch failed, falling back to local: {e}")
 
         for idx, chunk in enumerate(chunks):
             if results[idx] is not None:
@@ -553,12 +558,21 @@ class WritingToolsService:
         text instead of using T5 raw output, which avoids seq2seq truncation.
         Returns a corrections array with offset/length/replacement for each fix
         so the frontend can render a precise diff view.
+        
+        For long texts (>500 words), skips CoEdIT to avoid slow chunk processing
+        and uses LanguageTool API only, which handles long texts efficiently.
         """
         try:
             errors = []
+            word_count = len(text.split())
             
-            # Step 1: Use T5 grammar model for error detection
-            t5_corrected = self._correct_grammar_with_t5(text)
+            # Step 1: Use CoEdIT grammar model via SageMaker GPU (primary) with local fallback
+            # Skip CoEdIT for long texts (>500 words) — LanguageTool handles them better
+            t5_corrected = None
+            if word_count <= 500:
+                t5_corrected = self._edit_text_with_coedit(text, "Fix grammatical errors in this sentence")
+            else:
+                logger.info(f"Grammar check: skipping CoEdIT for {word_count}-word text, using LanguageTool only")
             
             if t5_corrected and t5_corrected != text:
                 t5_errors = self._find_differences(text, t5_corrected)
@@ -640,6 +654,13 @@ class WritingToolsService:
                             "original": text[offset:offset + length],
                             "replacement": replacement_val
                         })
+                elif offset is not None and length == 0:
+                    replacement_ops.append({
+                        "offset": offset,
+                        "length": 0,
+                        "original": "",
+                        "replacement": replacement_val
+                    })
                 elif original_str:
                     import re
                     pattern = re.compile(r'(?<![\w])' + re.escape(original_str) + r'(?![\w])')
@@ -855,7 +876,7 @@ class WritingToolsService:
 
             instruction = tone_instructions.get(target)
             if instruction:
-                coedit_result = self._edit_text_with_coedit(text, instruction)
+                coedit_result = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=150)
                 if coedit_result and coedit_result.strip() != text.strip() and len(coedit_result) > 20:
                     return {
                         "success": True,
@@ -1434,10 +1455,10 @@ class WritingToolsService:
             }
             instruction = instruction_map.get(mode_lower, "Paraphrase this sentence")
 
-            paraphrased = self._edit_text_with_coedit(text, instruction)
+            paraphrased = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=150)
 
             if not paraphrased or paraphrased == text:
-                paraphrased = self._edit_text_with_coedit(text, "Paraphrase this sentence")
+                paraphrased = self._edit_text_with_coedit(text, "Paraphrase this sentence", max_chunk_tokens=150)
 
             changes_made = sum(1 for a, b in zip(text.split(), paraphrased.split()) if a != b)
 
@@ -1981,8 +2002,20 @@ class WritingToolsService:
             return {"success": False, "error": str(e)}
     
     # ==================== Feature 9: Translator ====================
+    def _translate_chunk_via_sagemaker(self, lang_pair: str, chunk: str) -> Optional[str]:
+        """Translate a single chunk via SageMaker multi-model GPU endpoint."""
+        try:
+            endpoint_key = f"translator-{lang_pair}"
+            result = sagemaker_client.invoke_translation(endpoint_key, chunk)
+            if result and len(result.strip()) > 0:
+                return result.strip()
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker translator chunk failed: {e}")
+            return None
+
     def translate(self, text: str, source_lang: str, target_lang: str) -> Dict[str, Any]:
-        """Translate text using Helsinki-NLP models."""
+        """Translate text using SageMaker GPU (primary) with local Helsinki-NLP fallback."""
         try:
             lang_pair = f"{source_lang}-{target_lang}"
             
@@ -1992,30 +2025,71 @@ class WritingToolsService:
                     "error": f"Language pair {lang_pair} not supported. Supported: {list(self.SUPPORTED_LANGUAGES.keys())}"
                 }
             
-            self._load_translator_model(lang_pair)
-            
-            if lang_pair not in self._translator_models:
-                return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
-            
-            tokenizer, model = self._translator_models[lang_pair]
-            
-            # Split into sentences for better translation
             sentences = re.split(r'(?<=[.!?])\s+', text)
-            translated_sentences = []
+            sentences = [s for s in sentences if s.strip()]
             
+            chunks: list[str] = []
+            current_chunk: list[str] = []
+            current_len = 0
             for sentence in sentences:
-                if not sentence.strip():
-                    continue
-                    
-                inputs = tokenizer(sentence, return_tensors="pt", truncation=True, max_length=512)
-                
-                with torch.no_grad():
-                    outputs = model.generate(**inputs, max_length=512, num_beams=4)
-                
-                translated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                translated_sentences.append(translated)
-            
-            translated_text = " ".join(translated_sentences)
+                slen = len(sentence)
+                if current_len + slen > 400 and current_chunk:
+                    chunks.append(' '.join(current_chunk))
+                    current_chunk = [sentence]
+                    current_len = slen
+                else:
+                    current_chunk.append(sentence)
+                    current_len += slen
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+
+            translated_chunks: list[Optional[str]] = [None] * len(chunks)
+            used_gpu = False
+
+            if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                try:
+                    endpoint_key = f"translator-{lang_pair}"
+                    batch_results = sagemaker_client.invoke_translation_batch(
+                        endpoint_key, chunks, max_workers=8
+                    )
+                    failed_indices = []
+                    for idx, result in enumerate(batch_results):
+                        if result and len(result.strip()) > 0:
+                            translated_chunks[idx] = result.strip()
+                        else:
+                            failed_indices.append(idx)
+
+                    if not failed_indices:
+                        logger.info(f"SageMaker GPU batch translated {len(chunks)} chunks")
+                        used_gpu = True
+                    else:
+                        logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
+                        if len(failed_indices) < len(chunks):
+                            used_gpu = True
+                except Exception as e:
+                    logger.warning(f"SageMaker GPU translation failed, falling back to local: {e}")
+
+            local_needed = [i for i, t in enumerate(translated_chunks) if t is None]
+            if local_needed:
+                self._load_translator_model(lang_pair)
+                if lang_pair in self._translator_models:
+                    tokenizer, model = self._translator_models[lang_pair]
+                    for idx in local_needed:
+                        chunk = chunks[idx]
+                        chunk_sentences = re.split(r'(?<=[.!?])\s+', chunk)
+                        chunk_translated = []
+                        for sent in chunk_sentences:
+                            if not sent.strip():
+                                continue
+                            inputs = tokenizer(sent, return_tensors="pt", truncation=True, max_length=512)
+                            with torch.no_grad():
+                                outputs = model.generate(**inputs, max_length=512, num_beams=4)
+                            chunk_translated.append(tokenizer.decode(outputs[0], skip_special_tokens=True))
+                        translated_chunks[idx] = ' '.join(chunk_translated)
+                else:
+                    return {"success": False, "error": f"Failed to load translator for {lang_pair}"}
+
+            translated_text = " ".join(t for t in translated_chunks if t)
             
             return {
                 "success": True,
@@ -2025,7 +2099,8 @@ class WritingToolsService:
                 "target_language": target_lang,
                 "language_pair": self.SUPPORTED_LANGUAGES[lang_pair],
                 "word_count_original": len(text.split()),
-                "word_count_translated": len(translated_text.split())
+                "word_count_translated": len(translated_text.split()),
+                "backend": "SageMaker GPU" if used_gpu else "Local CPU"
             }
         except Exception as e:
             logger.error(f"Translation failed: {e}")
@@ -2408,10 +2483,10 @@ class WritingToolsService:
             }
             instruction = instruction_map.get(focus_lower, "Make this text coherent")
 
-            improved_text = self._edit_text_with_coedit(text, instruction)
+            improved_text = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=150)
 
             if not improved_text or improved_text == text:
-                improved_text = self._edit_text_with_coedit(text, "Make this text coherent")
+                improved_text = self._edit_text_with_coedit(text, "Make this text coherent", max_chunk_tokens=150)
 
             suggestions = [f"Text improved for {focus} using advanced language model"]
             changes_made = sum(1 for a, b in zip(text.split(), improved_text.split()) if a != b)
