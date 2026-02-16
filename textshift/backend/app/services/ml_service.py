@@ -2494,14 +2494,57 @@ class MLModelService:
             t_batch_end = _time.time()
             logger.info(f"Batch SageMaker inference for {len(batch_inputs)} paragraphs took {t_batch_end - t_batch_start:.1f}s")
 
+            retry_indices: List[int] = []
             for i, result in enumerate(batch_results):
                 para_idx = batch_indices[i]
                 if result and len(result) > 10:
-                    humanized_paragraphs[para_idx] = self._clean_model_output(result)
-                    any_sagemaker = True
+                    cleaned = self._clean_model_output(result)
+                    input_wc = len(content_paragraphs[para_idx].strip().split())
+                    output_wc = len(cleaned.split())
+                    ratio = output_wc / max(input_wc, 1)
+                    words_out = cleaned.lower().split()
+                    ngram_repeat = False
+                    if len(words_out) > 20:
+                        for ng in range(4, 8):
+                            seen: dict = {}
+                            for k in range(len(words_out) - ng + 1):
+                                gram = tuple(words_out[k:k+ng])
+                                seen[gram] = seen.get(gram, 0) + 1
+                                if seen[gram] >= 4:
+                                    ngram_repeat = True
+                                    break
+                            if ngram_repeat:
+                                break
+                    if ratio < 0.3 or ratio > 3.0 or ngram_repeat:
+                        logger.warning(f"Batch para {para_idx}: quality issue (ratio={ratio:.2f}, ngram_repeat={ngram_repeat}), will retry individually")
+                        retry_indices.append(para_idx)
+                    else:
+                        humanized_paragraphs[para_idx] = cleaned
+                        any_sagemaker = True
                 else:
+                    retry_indices.append(para_idx)
+
+            if retry_indices:
+                logger.info(f"Re-running {len(retry_indices)} paragraphs individually with safer settings")
+                safe_params = {
+                    "max_new_tokens": 512,
+                    "num_beams": 1,
+                    "do_sample": True,
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "repetition_penalty": 3.0,
+                    "no_repeat_ngram_size": 4,
+                }
+                for para_idx in retry_indices:
                     stripped = content_paragraphs[para_idx].strip()
-                    if stripped:
+                    if not stripped:
+                        continue
+                    retry_input = f"humanize: {stripped}"
+                    retry_result = sagemaker_client.invoke_text2text("humanizer", retry_input, safe_params)
+                    if retry_result and len(retry_result) > 10:
+                        humanized_paragraphs[para_idx] = self._clean_model_output(retry_result)
+                        any_sagemaker = True
+                    else:
                         humanized_paragraphs[para_idx] = self._humanize_single(
                             stripped, use_post_processor=False, passes=passes, mode=mode
                         )
