@@ -14,12 +14,16 @@ import pickle
 from botocore.config import Config
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, T5Tokenizer, T5ForConditionalGeneration
+from optimum.onnxruntime import ORTModelForSeq2SeqLM
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from collections import Counter
 from app.core.config import settings
 from app.services.feature_extractor import FeatureExtractor565
+from app.services.sagemaker_client import sagemaker_client
+from app.services.hf_inference_client import hf_client
 
 logger = logging.getLogger(__name__)
 
@@ -365,31 +369,63 @@ class WebSearchService:
         return ""
     
     @staticmethod
+    async def _search_sentence(sentence: str) -> List[Dict[str, Any]]:
+        """Search for a single sentence with DuckDuckGo + Serper fallback."""
+        results = await WebSearchService.search_duckduckgo(sentence)
+        if len(results) < 2:
+            serper_results = await WebSearchService.search_serper(sentence)
+            results.extend(serper_results)
+        for result in results:
+            snippet = result.get("snippet", "")
+            jaccard_score = WebSearchService._calculate_jaccard_similarity(sentence, snippet)
+            result["jaccard_similarity"] = round(jaccard_score * 100, 2)
+            result["matched_sentence"] = sentence
+        return results
+
+    @staticmethod
     async def search_for_plagiarism(text: str) -> List[Dict[str, Any]]:
-        """Search the web for potential plagiarism sources using DuckDuckGo + Serper fallback."""
+        """Search the web for potential plagiarism sources using DuckDuckGo + Serper fallback.
+        Searches all key sentences in parallel, then fetches page content in parallel."""
         sentences = WebSearchService._extract_key_sentences(text)
+
+        search_tasks = [WebSearchService._search_sentence(s) for s in sentences]
+        all_sentence_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
         all_results = []
         seen_urls = set()
-        
-        for sentence in sentences:
-            results = await WebSearchService.search_duckduckgo(sentence)
-            
-            if len(results) < 2:
-                serper_results = await WebSearchService.search_serper(sentence)
-                results.extend(serper_results)
-            
-            for result in results:
+        for batch in all_sentence_results:
+            if isinstance(batch, Exception):
+                continue
+            for result in batch:
                 url = result.get("url", "")
                 if url and url not in seen_urls:
                     seen_urls.add(url)
-                    snippet = result.get("snippet", "")
-                    jaccard_score = WebSearchService._calculate_jaccard_similarity(sentence, snippet)
-                    result["jaccard_similarity"] = round(jaccard_score * 100, 2)
-                    result["matched_sentence"] = sentence
                     all_results.append(result)
-        
+
         all_results.sort(key=lambda x: x.get("jaccard_similarity", 0), reverse=True)
-        return all_results[:10]
+        top_results = all_results[:10]
+
+        fetch_tasks = []
+        for result in top_results[:5]:
+            url = result.get("url", "")
+            if url:
+                fetch_tasks.append(WebSearchService.fetch_page_content(url, timeout=8.0))
+
+        if fetch_tasks:
+            page_contents = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+            for i, page_content in enumerate(page_contents):
+                if i < len(top_results) and isinstance(page_content, str) and len(page_content) > 50:
+                    top_results[i]["page_content"] = page_content[:5000]
+                    page_jaccard = WebSearchService._calculate_jaccard_similarity(
+                        text, page_content
+                    )
+                    snippet_jaccard = top_results[i].get("jaccard_similarity", 0)
+                    best_jaccard = max(snippet_jaccard, round(page_jaccard * 100, 2))
+                    top_results[i]["jaccard_similarity"] = best_jaccard
+                    top_results[i]["page_content_fetched"] = True
+
+        top_results.sort(key=lambda x: x.get("jaccard_similarity", 0), reverse=True)
+        return top_results
 
 
 web_search_service = WebSearchService()
@@ -1162,10 +1198,25 @@ META_COMMENTARY_PATTERNS = [
     r"^(here\s+is|here's)\s+(a\s+)?(more\s+)?(conversational|human|natural|casual).*?(version|rewrite|text).*?[.!:]\s*",
     r"^trying\s+to\s+(make|create)\s+it\s+sound.*?[.!:]\s*",
     r"^(this\s+is\s+)?(a\s+)?(more\s+)?(conversational|human-like|natural).*?(rewrite|version).*?[.!:]\s*",
+    # Catch broad preamble like "Here's a more conversational and human-like rewrite of that text about X:"
+    r"^here'?s\s+a\s+.*?(rewrite|version|take|rendition|rephrasing)\s+(of|on)\s+.*?[.!:\n]\s*",
+    # Catch "I rewrote/rephrased/reworded this..." preambles
+    r"^i\s+(rewrote|rephrased|reworded|reworked|revised)\s+.*?[.!:\n]\s*",
+    # Catch "This is a rewrite..." or "This is my take..."
+    r"^this\s+is\s+(a|my)\s+.*?(rewrite|version|take|attempt).*?[.!:\n]\s*",
+    # Catch "So basically..." or "So what I did was..."
+    r"^so\s+(basically|what\s+i\s+did|i\s+took|i\s+tried)\s+.*?[.!:\n]\s*",
+    # Catch any opening sentence that references rewriting/paraphrasing before actual content
+    r"^.*?(here is|here's|i've|i have)\s+(a|the|my)?\s*(more\s+)?(human|conversational|natural|casual|informal).*?(rewrite|version|take|text).*?[.!:\n]\s*",
+    # Trailing meta-commentary
     r"(makes?\s+sense,?\s*(though|right)?,?\s*(does\s+)?(not\s+)?(it|n't\s+it)[.?!]?\s*$)",
     r"(you\s+know[.?!]?\s*$)",
     r"(right[.?!]?\s*$)",
     r"(does\s+not\s+it[.?!]?\s*$)",
+    # Catch trailing "Hope this helps" or "Let me know" type endings
+    r"(hope\s+this\s+helps.*$)",
+    r"(let\s+me\s+know\s+if.*$)",
+    r"(feel\s+free\s+to.*$)",
 ]
 
 
@@ -1360,20 +1411,70 @@ class MLModelService:
                 self._detector_model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=2)
             self._current_model = "detector"
     
+    def _download_humanizer_from_idrive(self):
+        """Download Stealthwriter T5 Chaos humanizer from iDrive e2 if not available locally."""
+        local_path = settings.HUMANIZER_MODEL_PATH
+        s3_prefix = "stealthwriter_t5_final_9350"
+        
+        # Check if model already exists locally
+        if os.path.exists(os.path.join(local_path, "model.safetensors")):
+            logger.info(f"Humanizer model already exists at {local_path}")
+            return True
+        
+        logger.info(f"Downloading Stealthwriter T5 Chaos humanizer from iDrive e2...")
+        os.makedirs(local_path, exist_ok=True)
+        
+        try:
+            s3_client = self._get_s3_client_for_triboost()
+            
+            # List and download all model files
+            response = s3_client.list_objects_v2(
+                Bucket=self.IDRIVE_BUCKET,
+                Prefix=f"{s3_prefix}/"
+            )
+            
+            for obj in response.get('Contents', []):
+                key = obj['Key']
+                filename = key.split('/')[-1]
+                if filename:
+                    local_file = os.path.join(local_path, filename)
+                    logger.info(f"  Downloading {filename}...")
+                    s3_client.download_file(self.IDRIVE_BUCKET, key, local_file)
+            
+            logger.info(f"Successfully downloaded humanizer model to {local_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to download humanizer from iDrive: {e}")
+            return False
+    
     def _load_humanizer(self):
+        """Load Stealthwriter T5 Chaos humanizer (ONNX INT8 preferred, PyTorch fallback)."""
         if self._current_model != "humanizer":
             self._unload_all_models()
-            logger.info("Loading humanizer model (T5 V3)...")
+
+            onnx_path = settings.HUMANIZER_ONNX_MODEL_PATH
             model_path = settings.HUMANIZER_MODEL_PATH
-            if os.path.exists(os.path.join(model_path, "model.safetensors")):
+            self._is_onnx_humanizer = False
+
+            if os.path.exists(os.path.join(onnx_path, "encoder_model.onnx")):
+                logger.info("Loading Stealthwriter T5 Chaos ONNX INT8 humanizer...")
+                self._humanizer_tokenizer = T5Tokenizer.from_pretrained(onnx_path)
+                self._humanizer_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_path)
+                self._is_onnx_humanizer = True
+                logger.info(f"Loaded ONNX INT8 humanizer from {onnx_path}")
+            elif os.path.exists(os.path.join(model_path, "model.safetensors")):
+                logger.info("Loading Stealthwriter T5 Chaos PyTorch humanizer...")
                 self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
                 self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
                 self._humanizer_model.eval()
-                logger.info(f"Loaded trained T5 V3 model from {model_path}")
+                logger.info(f"Loaded PyTorch humanizer from {model_path}")
             else:
-                logger.warning(f"Local model not found at {model_path}, using base T5")
-                self._humanizer_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-                self._humanizer_model = T5ForConditionalGeneration.from_pretrained("t5-base")
+                if not os.path.exists(os.path.join(model_path, "model.safetensors")):
+                    self._download_humanizer_from_idrive()
+                self._humanizer_tokenizer = T5Tokenizer.from_pretrained(model_path)
+                self._humanizer_model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float32)
+                self._humanizer_model.eval()
+                logger.info(f"Loaded PyTorch humanizer from {model_path} (after download)")
             self._current_model = "humanizer"
     
     def _load_plagiarism(self):
@@ -1396,6 +1497,87 @@ class MLModelService:
     def _split_sentences(self, text: str) -> List[str]:
         sentences = re.split(r'[.!?]+', text)
         return [s.strip() for s in sentences if s.strip()]
+    
+    def _split_sentences_preserve(self, text: str) -> List[str]:
+        """Split text into sentences while preserving punctuation."""
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        return [s.strip() for s in sentences if s.strip()]
+    
+    @staticmethod
+    def _clean_model_output(text: str) -> str:
+        """Strip task-prefix leakage and clean up raw model output."""
+        result = text.strip()
+        prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
+        for prefix in prefixes:
+            if result.startswith(prefix):
+                result = result[len(prefix):].strip()
+            result = result.replace(f" {prefix} ", " ")
+        result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        return result.strip()
+
+    def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
+        """Humanize a single chunk via SageMaker serverless endpoint."""
+        try:
+            input_text = f"humanize: {chunk}"
+            word_count = len(chunk.split())
+            max_new = min(int(word_count * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": 1.0,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            result = sagemaker_client.invoke_text2text("humanizer", input_text, parameters)
+            if result and len(result) > 20:
+                return self._clean_model_output(result)
+            return None
+        except Exception as e:
+            logger.warning(f"SageMaker humanize chunk failed: {e}")
+            return None
+
+    def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
+        """Humanize a single sentence using SageMaker (primary) or local ONNX INT8 (fallback)."""
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            sm_result = self._humanize_chunk_via_sagemaker(sentence)
+            if sm_result:
+                model_output = sm_result
+                if use_post_processor:
+                    model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
+                return model_output
+            logger.info("SageMaker humanize failed for single sentence, falling back to local ONNX")
+        try:
+            self._load_humanizer()
+            input_text = f"humanize: {sentence}"
+            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+            input_token_count = inputs['input_ids'].shape[1]
+            max_new = min(int(input_token_count * 1.3), 512)
+            gen_kwargs = dict(
+                max_new_tokens=max_new,
+                num_beams=1,
+                do_sample=True,
+                temperature=1.0,
+                top_p=0.95,
+                repetition_penalty=2.5,
+                no_repeat_ngram_size=3,
+            )
+            if self._is_onnx_humanizer:
+                outputs = self._humanizer_model.generate(**inputs, **gen_kwargs)
+            else:
+                with torch.no_grad():
+                    outputs = self._humanizer_model.generate(**inputs, **gen_kwargs)
+            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            model_output = self._clean_model_output(model_output)
+        except Exception as e:
+            logger.warning(f"Single sentence humanize failed: {e}, using HF API fallback")
+            model_output = self._humanize_with_hf_api(sentence)
+            model_output = self._clean_model_output(model_output)
+        
+        if use_post_processor:
+            model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
+        return model_output
     
     def _calculate_confidence_score(self, ai_prob: float) -> int:
         if ai_prob >= 0.95:
@@ -1439,15 +1621,22 @@ class MLModelService:
     
     def _analyze_sentences(self, text: str) -> List[Dict[str, Any]]:
         sentences = [s for s in self._split_sentences(text) if len(s) > 10]
+        selected = sentences[:10]
+        if not selected:
+            return []
+        self._load_detector()
+        batch_inputs = self._detector_tokenizer(
+            selected, return_tensors="pt", truncation=True,
+            max_length=512, padding=True
+        )
+        with torch.no_grad():
+            outputs = self._detector_model(**batch_inputs)
+            probs = torch.softmax(outputs.logits, dim=-1)
         results = []
-        for sentence in sentences[:10]:
-            inputs = self._detector_tokenizer(sentence, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._detector_model(**inputs)
-                probs = torch.softmax(outputs.logits, dim=-1)
+        for i, sentence in enumerate(selected):
             results.append({
                 "text": sentence[:100] + "..." if len(sentence) > 100 else sentence,
-                "ai_probability": round(probs[0][1].item() * 100, 2)
+                "ai_probability": round(probs[i][1].item() * 100, 2)
             })
         return results
     
@@ -1555,11 +1744,32 @@ class MLModelService:
         return results
     
     def _get_roberta_prediction(self, text: str) -> Dict[str, float]:
-        """Get AI probability from RoBERTa model.
+        """Get AI probability from SageMaker (primary) → HF API (fallback) → local RoBERTa (last resort).
         
         Returns:
             Dict with 'ai_prob' and 'human_prob'
         """
+        for backend_name, invoke_fn in [
+            ("SageMaker", lambda: sagemaker_client.invoke_classification("detector", text, top_k=2)),
+            ("HF API", lambda: hf_client.invoke_classification("detector", text, top_k=2)),
+        ]:
+            try:
+                result = invoke_fn()
+                if result:
+                    human_prob = 0.5
+                    ai_prob = 0.5
+                    for item in result:
+                        label = item.get("label", "")
+                        if label in ("LABEL_0", "Real"):
+                            human_prob = item["score"]
+                        elif label in ("LABEL_1", "Fake"):
+                            ai_prob = item["score"]
+                    logger.info(f"{backend_name} detector: AI={ai_prob*100:.1f}%")
+                    return {'ai_prob': ai_prob, 'human_prob': human_prob}
+            except Exception as e:
+                logger.warning(f"{backend_name} detector failed: {e}")
+
+        logger.info("SageMaker + HF API detector unavailable, falling back to local RoBERTa")
         self._load_detector()
         
         inputs = self._detector_tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
@@ -1574,63 +1784,143 @@ class MLModelService:
             'ai_prob': ai_prob,
             'human_prob': human_prob
         }
+
+    def _get_roberta_chunked_prediction(self, text: str) -> Dict[str, Any]:
+        """Get chunked RoBERTa prediction for long texts.
+        
+        Splits text into overlapping chunks of ~400 tokens, scores each via
+        SageMaker GPU (parallel) with local CPU fallback, and returns both
+        single-pass and chunked averages plus the blended score.
+        """
+        self._load_detector()
+        
+        single_pass = self._get_roberta_prediction(text)
+        single_ai = single_pass['ai_prob']
+        
+        tokens = self._detector_tokenizer.encode(text, add_special_tokens=False)
+        if len(tokens) <= 512:
+            return {
+                'single_ai': single_ai,
+                'chunked_ai': single_ai,
+                'blended_ai': single_ai,
+                'num_chunks': 1,
+                'chunk_scores': [single_ai],
+            }
+        
+        max_tokens = 400
+        overlap = 50
+        chunks = []
+        start = 0
+        while start < len(tokens):
+            end = min(start + max_tokens, len(tokens))
+            chunk_tokens = tokens[start:end]
+            chunk_text = self._detector_tokenizer.decode(chunk_tokens, skip_special_tokens=True)
+            chunks.append(chunk_text)
+            if end >= len(tokens):
+                break
+            start = end - overlap
+        
+        def _score_chunk(chunk_text: str) -> float:
+            pred = self._get_roberta_prediction(chunk_text)
+            return pred['ai_prob']
+        
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            chunk_scores = list(executor.map(_score_chunk, chunks))
+        
+        chunked_ai = float(np.mean(chunk_scores))
+        if len(chunks) > 3:
+            blended_ai = 0.15 * single_ai + 0.85 * chunked_ai
+        else:
+            blended_ai = (single_ai + chunked_ai) / 2.0
+        
+        logger.info(f"RoBERTa chunked: single={single_ai*100:.1f}%, chunked_avg={chunked_ai*100:.1f}% ({len(chunks)} chunks), blended={blended_ai*100:.1f}%")
+        logger.info(f"Chunk scores: {[round(s*100, 1) for s in chunk_scores]}")
+        
+        return {
+            'single_ai': single_ai,
+            'chunked_ai': chunked_ai,
+            'blended_ai': blended_ai,
+            'num_chunks': len(chunks),
+            'chunk_scores': chunk_scores,
+        }
     
     def detect_ai(self, text: str) -> Dict[str, Any]:
         """
         Detect AI-generated text using Super-Ensemble (RoBERTa + TriBoost Original + V3 + V4).
         
         The super-ensemble combines:
-        - RoBERTa: Fine-tuned transformer (355M params)
+        - RoBERTa: Fine-tuned transformer (355M params) with chunked prediction for long texts
         - TriBoost Original: XGBoost + LightGBM + CatBoost (99.85% accuracy)
         - TriBoost V3: Enhanced with humanized samples (99.86% accuracy)
         - TriBoost V4: Weighted humanized training (99.82% accuracy)
         
-        Strategy: Hybrid with TriBoost priority
-        - If ANY TriBoost version detects AI (>50%), use TriBoost average
-        - Otherwise, use RoBERTa's judgment
-        - This gives highest confidence while maintaining accuracy
+        Strategy: Dynamic RoBERTa-primary weighting
+        - RoBERTa is the primary signal (transformer understands language context)
+        - TriBoost provides secondary signal (statistical features)
+        - Weighting is confidence-based: when RoBERTa is confident, trust it more
+        - Chunked RoBERTa processes full text (no 512-token truncation loss)
         """
-        # Get predictions from all models
-        triboost_results = self._get_triboost_predictions(text)
-        roberta_result = self._get_roberta_prediction(text)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            triboost_future = executor.submit(self._get_triboost_predictions, text)
+            roberta_chunked_future = executor.submit(self._get_roberta_chunked_prediction, text)
+            triboost_results = triboost_future.result()
+            roberta_chunked = roberta_chunked_future.result()
         
-        # Log individual model results
-        logger.info(f"RoBERTa: {roberta_result['ai_prob']*100:.1f}% AI")
+        roberta_blended = roberta_chunked['blended_ai']
+        roberta_single = roberta_chunked['single_ai']
+        roberta_chunked_score = roberta_chunked['chunked_ai']
+        num_chunks = roberta_chunked['num_chunks']
+        
+        logger.info(f"RoBERTa: single={roberta_single*100:.1f}%, chunked={roberta_chunked_score*100:.1f}%, blended={roberta_blended*100:.1f}% ({num_chunks} chunks)")
         for version, result in triboost_results.items():
             logger.info(f"TriBoost {version}: {result['ai_prob']*100:.1f}% AI")
         
-        # Calculate TriBoost average
         triboost_ai_probs = [r['ai_prob'] for r in triboost_results.values()]
         triboost_avg = float(np.mean(triboost_ai_probs))
+        triboost_all_high = all(p > 0.90 for p in triboost_ai_probs)
+        chunk_gap = roberta_chunked_score - roberta_single
         
-        # Hybrid strategy: TriBoost priority
-        any_triboost_detects_ai = any(p > 0.5 for p in triboost_ai_probs)
-        
-        if any_triboost_detects_ai:
-            # Use TriBoost average when any version detects AI
-            final_ai_prob = triboost_avg
-            strategy_used = "triboost_priority"
-            logger.info(f"Super-Ensemble using TriBoost (detected AI): {final_ai_prob*100:.1f}% AI")
+        if triboost_all_high and num_chunks > 3 and roberta_chunked_score > 0.30:
+            w_roberta, w_triboost = 0.40, 0.60
+            strategy_used = "consensus_ai_strong_chunks"
+        elif triboost_all_high and num_chunks > 3 and chunk_gap > 0.03 and roberta_chunked_score > 0.05:
+            w_roberta, w_triboost = 0.30, 0.70
+            strategy_used = "consensus_ai_body_gap"
+        elif roberta_blended < 0.10:
+            w_roberta, w_triboost = 0.98, 0.02
+            strategy_used = "roberta_primary_confident_human"
+        elif roberta_blended < 0.30:
+            w_roberta, w_triboost = 0.85, 0.15
+            strategy_used = "roberta_primary_lean_human"
+        elif roberta_blended < 0.70:
+            w_roberta, w_triboost = 0.70, 0.30
+            strategy_used = "roberta_primary_uncertain"
         else:
-            # Use simple average of all 4 model groups when no AI detected
-            all_probs = triboost_ai_probs + [roberta_result['ai_prob']]
-            final_ai_prob = float(np.mean(all_probs))
-            strategy_used = "full_average"
-            logger.info(f"Super-Ensemble using full average: {final_ai_prob*100:.1f}% AI")
+            w_roberta, w_triboost = 0.60, 0.40
+            strategy_used = "roberta_primary_confident_ai"
+        
+        final_ai_prob = w_roberta * roberta_blended + w_triboost * triboost_avg
+        final_ai_prob = max(0.0, min(1.0, final_ai_prob))
+        
+        logger.info(f"Super-Ensemble [{strategy_used}]: w_r={w_roberta}, w_t={w_triboost}, "
+                    f"roberta_blended={roberta_blended*100:.1f}%, triboost_avg={triboost_avg*100:.1f}%, "
+                    f"final={final_ai_prob*100:.1f}%")
         
         final_human_prob = 1.0 - final_ai_prob
         
-        # Calculate confidence score
         confidence_score = self._calculate_confidence_score(final_ai_prob)
         
-        # Count votes (how many model groups say AI)
         votes_ai = sum([
-            1 if roberta_result['ai_prob'] > 0.5 else 0,
+            1 if roberta_blended > 0.5 else 0,
             1 if triboost_results['original']['ai_prob'] > 0.5 else 0,
             1 if triboost_results['v3']['ai_prob'] > 0.5 else 0,
             1 if triboost_results['v4']['ai_prob'] > 0.5 else 0
         ])
         
+        from app.services.credit_service import count_words
+        wc = count_words(text)
+        min_words = 50
+        reliability = "low" if wc < min_words else "normal"
         result = {
             "ai_probability": round(final_ai_prob * 100, 2),
             "human_probability": round(final_human_prob * 100, 2),
@@ -1638,11 +1928,15 @@ class MLModelService:
             "confidence_level": self._get_confidence_level(confidence_score),
             "analysis": {
                 "text_length": len(text),
-                "word_count": len(text.split()),
+                "word_count": wc,
                 "avg_sentence_length": self._avg_sentence_length(text)
             },
+            "reliability": reliability,
+            "warning": "Short text (<50 words) — result may be less reliable" if reliability == "low" else None,
             "model_breakdown": {
-                "roberta": round(roberta_result['ai_prob'] * 100, 2),
+                "roberta": round(roberta_single * 100, 2),
+                "roberta_chunked": round(roberta_chunked['chunked_ai'] * 100, 2),
+                "roberta_blended": round(roberta_blended * 100, 2),
                 "triboost_original": round(triboost_results['original']['ai_prob'] * 100, 2),
                 "triboost_v3": round(triboost_results['v3']['ai_prob'] * 100, 2),
                 "triboost_v4": round(triboost_results['v4']['ai_prob'] * 100, 2),
@@ -1652,21 +1946,80 @@ class MLModelService:
                 "votes_ai": votes_ai,
                 "votes_human": 4 - votes_ai,
                 "strategy_used": strategy_used,
-                "total_models": 10  # 1 RoBERTa + 9 TriBoost (3 versions x 3 algorithms)
+                "roberta_weight": w_roberta,
+                "triboost_weight": w_triboost,
+                "num_chunks": roberta_chunked['num_chunks'],
+                "total_models": 10
             },
             "level_analysis": self._perform_10_level_analysis(text, final_ai_prob),
+            "sentence_analysis": self._analyze_sentences(text),
             "model_used": "super_ensemble"
         }
         
         return result
     
-    def _remove_meta_commentary(self, text: str) -> str:
+    _STOPWORDS = frozenset({
+        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+        'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought',
+        'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+        'as', 'into', 'through', 'during', 'before', 'after', 'above',
+        'below', 'between', 'out', 'off', 'over', 'under', 'again',
+        'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
+        'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most',
+        'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same',
+        'so', 'than', 'too', 'very', 'just', 'because', 'but', 'and', 'or',
+        'if', 'while', 'about', 'up', 'its', 'it', 'i', 'me', 'my', 'we',
+        'our', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'they',
+        'them', 'their', 'what', 'which', 'who', 'whom', 'this', 'that',
+        'these', 'those', 'am', 'like', 'also', 'much', 'many', 'well',
+        'back', 'even', 'still', 'already', 'since', 'right', 'thing',
+        'things', 'way', 'really', 'know', 'think', 'make', 'got', 'get',
+        'go', 'see', 'come', 'take', 'say', 'said', 'one', 'two',
+    })
+
+    def _extract_content_words(self, text: str) -> set:
+        words = re.findall(r'[a-zA-Z]{3,}', text.lower())
+        return {w for w in words if w not in self._STOPWORDS}
+
+    def _strip_preamble_by_overlap(self, original_text: str, model_output: str) -> str:
+        """Strip preamble from model output by checking keyword overlap with original input.
+        
+        Leading output sentences that share zero content words with the input
+        are preamble and get removed. This catches ANY preamble format.
+        """
+        input_keywords = self._extract_content_words(original_text)
+        if not input_keywords:
+            return model_output
+
+        output_text = re.sub(r'^\s*#\s*\d+[^.!?\n]*[.!?]?\s*', '', model_output.strip())
+
+        sentences = re.split(r'(?<=[.!?])\s+', output_text)
+        if not sentences:
+            return output_text
+
+        first_relevant_idx = 0
+        for idx, sentence in enumerate(sentences):
+            sentence_keywords = self._extract_content_words(sentence)
+            overlap = sentence_keywords & input_keywords
+            if len(overlap) >= 2:
+                first_relevant_idx = idx
+                break
+        else:
+            return output_text
+
+        result = ' '.join(sentences[first_relevant_idx:])
+        if result and result[0].islower():
+            result = result[0].upper() + result[1:]
+        return result.strip()
+
+    def _remove_meta_commentary(self, text: str, original_text: Optional[str] = None) -> str:
         """Remove meta-commentary from model output like 'okay, here is a rewrite...'"""
         result = text.strip()
-        # Apply meta-commentary removal patterns
+        if original_text:
+            result = self._strip_preamble_by_overlap(original_text, result)
         for pattern in META_COMMENTARY_PATTERNS:
             result = re.sub(pattern, '', result, flags=re.IGNORECASE)
-        # Also remove common conversational fillers at the start
         start_fillers = [
             "okay, ", "ok, ", "alright, ", "sure, ", "well, ", "so, ",
             "as a matter of fact, ", "in point of fact, ",
@@ -1676,17 +2029,16 @@ class MLModelService:
             if lower_result.startswith(filler):
                 result = result[len(filler):]
                 lower_result = result.lower()
-        # Capitalize first letter if needed
         if result and result[0].islower():
             result = result[0].upper() + result[1:]
         return result.strip()
     
-    def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 2) -> str:
+    def _apply_stealthwriter_postprocessor(self, text: str, passes: int = 2, original_text: Optional[str] = None, mode: str = 'casual') -> str:
         """
         Apply Stealthwriter-style transformations to make text sound more human.
         
         Process order (important for best results):
-        1. Remove meta-commentary
+        1. Remove meta-commentary (with keyword-overlap preamble stripping)
         2. Apply phrase replacements (longer patterns first)
         3. Expand contractions
         4. Remove filler words
@@ -1694,25 +2046,26 @@ class MLModelService:
         6. Add occasional formal starters
         """
         result = text
-        # First remove meta-commentary
-        result = self._remove_meta_commentary(result)
+        result = self._remove_meta_commentary(result, original_text=original_text)
         
         for _ in range(passes):
-            # Step 1: Apply phrase replacements FIRST (longer patterns before shorter)
-            # Sort by length descending to avoid partial matches
-            sorted_phrases = sorted(STEALTHWRITER_PHRASE_REPLACEMENTS.items(), 
-                                   key=lambda x: len(x[0]), reverse=True)
-            for phrase, replacement in sorted_phrases:
-                # Case-insensitive replacement while preserving sentence case
-                pattern = re.compile(re.escape(phrase), re.IGNORECASE)
-                matches = pattern.findall(result)
-                for match in matches:
-                    # Preserve capitalization of first letter
-                    if match[0].isupper():
-                        new_replacement = replacement[0].upper() + replacement[1:]
-                    else:
-                        new_replacement = replacement
-                    result = result.replace(match, new_replacement, 1)
+            starter_prob = 0.3 if mode == 'casual' else (0.1 if mode == 'professional' else 0.0)
+            # Step 1: Apply phrase replacements FIRST (skip for academic)
+            if mode != 'academic':
+                # Sort by length descending to avoid partial matches
+                sorted_phrases = sorted(STEALTHWRITER_PHRASE_REPLACEMENTS.items(), 
+                                       key=lambda x: len(x[0]), reverse=True)
+                for phrase, replacement in sorted_phrases:
+                    # Case-insensitive replacement while preserving sentence case
+                    pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+                    matches = pattern.findall(result)
+                    for match in matches:
+                        # Preserve capitalization of first letter
+                        if match[0].isupper():
+                            new_replacement = replacement[0].upper() + replacement[1:]
+                        else:
+                            new_replacement = replacement
+                        result = result.replace(match, new_replacement, 1)
             
             # Step 2: Expand contractions
             for contraction, expansion in CONTRACTION_EXPANSIONS.items():
@@ -1722,7 +2075,7 @@ class MLModelService:
             for filler in FILLERS_TO_REMOVE:
                 result = result.replace(filler, "").replace(filler.capitalize(), "")
             
-            # Step 4: Apply word replacements
+            # Step 4: Apply word replacements (skip for academic)
             words = result.split()
             new_words = []
             for word in words:
@@ -1730,7 +2083,7 @@ class MLModelService:
                 clean_word = word.strip('.,!?;:()[]{}"\'-')
                 lower_word = clean_word.lower()
                 
-                if lower_word in SYNONYM_REPLACEMENTS:
+                if mode != 'academic' and lower_word in SYNONYM_REPLACEMENTS:
                     replacement = SYNONYM_REPLACEMENTS[lower_word]
                     # Preserve capitalization
                     if clean_word and clean_word[0].isupper():
@@ -1747,7 +2100,7 @@ class MLModelService:
             sentences = self._split_sentences(result)
             new_sentences = []
             for i, sentence in enumerate(sentences):
-                if i == 0 and len(sentence) > 20 and random.random() < 0.3:
+                if i == 0 and len(sentence) > 20 and random.random() < starter_prob:
                     starter = random.choice(FORMAL_STARTERS)
                     sentence = starter + sentence[0].lower() + sentence[1:]
                 new_sentences.append(sentence)
@@ -1758,6 +2111,72 @@ class MLModelService:
         # Clean up extra whitespace
         return re.sub(r'\s+', ' ', result).strip()
     
+    def _apply_spelling_only_pass(self, text: str) -> str:
+        """Apply spelling-only corrections using LanguageTool API.
+        
+        Only fixes typos and orthography — no grammar, style, or word-level rewrites.
+        Preserves proper nouns, casing, and punctuation. Skips URLs and code blocks.
+        """
+        try:
+            url_pattern = re.compile(r'https?://\S+|www\.\S+')
+            code_pattern = re.compile(r'`[^`]+`')
+            
+            protected_regions: list[tuple[int, int]] = []
+            for match in url_pattern.finditer(text):
+                protected_regions.append((match.start(), match.end()))
+            for match in code_pattern.finditer(text):
+                protected_regions.append((match.start(), match.end()))
+
+            response = httpx.post(
+                "https://api.languagetool.org/v2/check",
+                data={
+                    "text": text,
+                    "language": "en-US",
+                    "enabledCategories": "TYPOS",
+                    "enabledOnly": "true",
+                },
+                timeout=15.0,
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"LanguageTool spelling pass returned {response.status_code}")
+                return text
+
+            matches = response.json().get("matches", [])
+            if not matches:
+                return text
+
+            replacements: list[tuple[int, int, str]] = []
+            for match in matches:
+                offset = match.get("offset", 0)
+                length = match.get("length", 0)
+                suggestions = match.get("replacements", [])
+                if not suggestions:
+                    continue
+
+                in_protected = False
+                for start, end in protected_regions:
+                    if offset < end and (offset + length) > start:
+                        in_protected = True
+                        break
+                if in_protected:
+                    continue
+
+                replacements.append((offset, length, suggestions[0].get("value", "")))
+
+            if not replacements:
+                return text
+
+            replacements.sort(key=lambda r: r[0], reverse=True)
+            result = text
+            for offset, length, replacement in replacements:
+                result = result[:offset] + replacement + result[offset + length:]
+
+            return result
+        except Exception as e:
+            logger.warning(f"Spelling-only pass failed (non-fatal): {e}")
+            return text
+
     def _humanize_with_hf_api(self, text: str) -> str:
         """Fallback humanization using HuggingFace Inference API."""
         try:
@@ -1807,32 +2226,132 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    def humanize(self, text: str, use_post_processor: bool = True, passes: int = 2) -> Dict[str, Any]:
-        model_output = None
+    _CHUNK_WORD_LIMIT = 500
+
+    def _build_chunks(self, text: str) -> List[str]:
+        """Split text into chunks of roughly _CHUNK_WORD_LIMIT words, breaking at sentence boundaries."""
+        sentences = self._split_sentences_preserve(text)
+        chunks: List[str] = []
+        current_chunk: List[str] = []
+        current_words = 0
+
+        for sentence in sentences:
+            sentence_words = len(sentence.split())
+            if current_words + sentence_words > self._CHUNK_WORD_LIMIT and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_words = sentence_words
+            else:
+                current_chunk.append(sentence)
+                current_words += sentence_words
+
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        return chunks
+
+    def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
+        """Humanize AI text using Stealthwriter T5 Chaos model.
+        
+        If preserved_indices is provided, only humanize sentences NOT in the list.
+        Preserved sentences are kept exactly as-is in the output.
+        Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
+        
+        Long texts (>400 words) are automatically split into chunks of ~400 words
+        at sentence boundaries. Each chunk is humanized separately to avoid the
+        T5 tokenizer's 1024-token truncation limit.
+        """
+        mode_config = {
+            'academic': {'temperature': 0.7, 'top_p': 0.9},
+            'professional': {'temperature': 0.75, 'top_p': 0.92},
+            'casual': {'temperature': 0.85, 'top_p': 0.93},
+        }
+        config = mode_config.get(mode, mode_config['casual'])
+        if preserved_indices is not None:
+            return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
+
+        word_count = len(text.split())
+        if word_count > self._CHUNK_WORD_LIMIT:
+            chunks = self._build_chunks(text)
+            logger.info(f"Text has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks for humanization")
+
+            use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+            result_chunks: List[str] = [None] * len(chunks)
+            sagemaker_used = False
+
+            if use_sagemaker:
+                logger.info(f"Attempting optimized batch SageMaker inference for {len(chunks)} chunks")
+                try:
+                    batch_inputs = [f"humanize: {chunk}" for chunk in chunks]
+                    word_counts = [len(c.split()) for c in chunks]
+                    max_new = min(int(max(word_counts) * 2.5), 512)
+                    parameters = {
+                        "max_new_tokens": max_new,
+                        "num_beams": 1,
+                        "do_sample": True,
+                        "temperature": 1.0,
+                        "top_p": 0.95,
+                        "repetition_penalty": 2.5,
+                        "no_repeat_ngram_size": 3,
+                    }
+                    batch_results = sagemaker_client.invoke_text2text_batch_optimized(
+                        "humanizer", batch_inputs, parameters, max_concurrent=3
+                    )
+                    failed_indices: List[int] = []
+                    for idx, result in enumerate(batch_results):
+                        if result and len(result) > 20:
+                            result_chunks[idx] = self._clean_model_output(result)
+                            logger.info(f"SageMaker chunk {idx + 1}/{len(chunks)} done ({len(result_chunks[idx].split())} words)")
+                        else:
+                            failed_indices.append(idx)
+
+                    if failed_indices:
+                        logger.info(f"SageMaker failed for {len(failed_indices)} chunks, falling back to local ONNX")
+                        for idx in failed_indices:
+                            result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
+                    sagemaker_used = not failed_indices
+                except Exception as e:
+                    logger.warning(f"SageMaker batch processing failed: {e}, falling back to local ONNX")
+                    for idx, chunk in enumerate(chunks):
+                        if result_chunks[idx] is None:
+                            result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+            else:
+                for idx, chunk in enumerate(chunks):
+                    logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
+                    humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
+                    result_chunks[idx] = humanized
+
+            model_output = ' '.join(result_chunks)
+            model_output = self._clean_model_output(model_output)
+            if use_post_processor:
+                model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode)
+            before_spelling = model_output
+            final_output = self._apply_spelling_only_pass(model_output)
+            original_words = text.lower().split()
+            final_words = final_output.lower().split()
+            changes = len(set(original_words).symmetric_difference(set(final_words)))
+            return {
+                "original_text": text,
+                "model_output": model_output,
+                "humanized_text": final_output,
+                "changes_made": changes,
+                "original_length": len(text),
+                "humanized_length": len(final_output),
+                "post_processor_used": use_post_processor,
+                "passes": passes,
+                "used_fallback": False,
+                "mode": mode,
+                "spelling_pass_applied": final_output != before_spelling,
+                "chunked": True,
+                "chunk_count": len(chunks),
+                "sagemaker_used": sagemaker_used,
+            }
+
+        model_output = self._humanize_single(text, use_post_processor=False, passes=passes, mode=mode)
         use_fallback = False
         
-        try:
-            self._load_humanizer()
-            input_text = f"humanize: {text}"
-            inputs = self._humanizer_tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512, padding=True)
-            with torch.no_grad():
-                outputs = self._humanizer_model.generate(
-                    **inputs,
-                    max_length=512,
-                    num_beams=4,
-                    do_sample=True,
-                    temperature=0.8,
-                    top_p=0.9,
-                    repetition_penalty=2.5,
-                    no_repeat_ngram_size=3
-                )
-            model_output = self._humanizer_tokenizer.decode(outputs[0], skip_special_tokens=True)
-        except Exception as e:
-            logger.warning(f"Local humanizer model failed: {e}, using HuggingFace API fallback")
-            use_fallback = True
-            model_output = self._humanize_with_hf_api(text)
-        
-        final_output = self._apply_stealthwriter_postprocessor(model_output, passes) if use_post_processor else model_output
+        final_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=text, mode=mode) if use_post_processor else model_output
+        before_spelling = final_output
+        final_output = self._apply_spelling_only_pass(final_output)
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
@@ -1845,7 +2364,62 @@ class MLModelService:
             "humanized_length": len(final_output),
             "post_processor_used": use_post_processor,
             "passes": passes,
-            "used_fallback": use_fallback
+            "used_fallback": use_fallback,
+            "mode": mode,
+            "spelling_pass_applied": final_output != before_spelling
+        }
+    
+    def _humanize_selective(self, text: str, preserved_indices: List[int], use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
+        """Humanize text selectively - only humanize sentences not in preserved_indices."""
+        sentences = self._split_sentences_preserve(text)
+        result_sentences = []
+        sentence_details = []
+        total_preserved = 0
+        total_humanized = 0
+        
+        for i, sentence in enumerate(sentences):
+            if i in preserved_indices:
+                result_sentences.append(sentence)
+                sentence_details.append({
+                    "index": i,
+                    "original": sentence,
+                    "output": sentence,
+                    "action": "preserved"
+                })
+                total_preserved += 1
+            else:
+                humanized = self._humanize_single(sentence, use_post_processor, passes, mode=mode)
+                result_sentences.append(humanized)
+                sentence_details.append({
+                    "index": i,
+                    "original": sentence,
+                    "output": humanized,
+                    "action": "humanized"
+                })
+                total_humanized += 1
+        
+        final_output = ' '.join(result_sentences)
+        before_spelling = final_output
+        final_output = self._apply_spelling_only_pass(final_output)
+        original_words = text.lower().split()
+        final_words = final_output.lower().split()
+        changes = len(set(original_words).symmetric_difference(set(final_words)))
+        
+        return {
+            "original_text": text,
+            "humanized_text": final_output,
+            "changes_made": changes,
+            "original_length": len(text),
+            "humanized_length": len(final_output),
+            "post_processor_used": use_post_processor,
+            "passes": passes,
+            "used_fallback": False,
+            "selective_mode": True,
+            "sentence_count": len(sentences),
+            "preserved_count": total_preserved,
+            "humanized_count": total_humanized,
+            "sentence_details": sentence_details,
+            "spelling_pass_applied": final_output != before_spelling
         }
     
     def _sync_web_search(self, text: str) -> List[Dict[str, Any]]:
@@ -1903,34 +2477,48 @@ class MLModelService:
                 "message": "No matching sources found on the web"
             }
         
-        sources_with_scores = []
-        max_similarity = 0.0
-        
+        valid_results = []
         for result in web_results:
             snippet = result.get("snippet", "")
-            if len(snippet) < 20:
-                continue
-            
+            if len(snippet) >= 20:
+                valid_results.append(result)
+
+        matched_sentences = []
+        snippets = []
+        for result in valid_results:
+            ms = result.get("matched_sentence", "")
+            sn = result.get("snippet", "")
+            matched_sentences.append(ms if ms else "")
+            snippets.append(sn if sn else "")
+
+        semantic_scores = [0.0] * len(valid_results)
+        encode_pairs = [(i, matched_sentences[i], snippets[i])
+                        for i in range(len(valid_results))
+                        if matched_sentences[i] and snippets[i]]
+        if encode_pairs:
+            ms_texts = [p[1] for p in encode_pairs]
+            sn_texts = [p[2] for p in encode_pairs]
+            ms_embs = self._plagiarism_encoder.encode(ms_texts, convert_to_tensor=True, batch_size=len(ms_texts))
+            sn_embs = self._plagiarism_encoder.encode(sn_texts, convert_to_tensor=True, batch_size=len(sn_texts))
+            sims = torch.nn.functional.cosine_similarity(ms_embs, sn_embs)
+            for j, (idx, _, _) in enumerate(encode_pairs):
+                semantic_scores[idx] = max(0.0, sims[j].item()) * 100
+
+        sources_with_scores = []
+        max_similarity = 0.0
+
+        for i, result in enumerate(valid_results):
             jaccard_score = result.get("jaccard_similarity", 0)
-            
-            matched_sentence = result.get("matched_sentence", "")
-            if matched_sentence and snippet:
-                text_embedding = self._plagiarism_encoder.encode([matched_sentence], convert_to_tensor=True)
-                snippet_embedding = self._plagiarism_encoder.encode([snippet], convert_to_tensor=True)
-                semantic_similarity = torch.nn.functional.cosine_similarity(text_embedding, snippet_embedding).item()
-                semantic_score = max(0, semantic_similarity) * 100
-            else:
-                semantic_score = 0
-            
-            combined_score = (jaccard_score * 0.6) + (semantic_score * 0.4)
-            
+            combined_score = (jaccard_score * 0.6) + (semantic_scores[i] * 0.4)
+
             if combined_score >= 30:
+                snippet = result.get("snippet", "")
                 sources_with_scores.append({
                     "url": result.get("url", ""),
                     "title": result.get("title", "Unknown Source"),
                     "similarity_score": round(combined_score, 2),
                     "jaccard_score": round(jaccard_score, 2),
-                    "semantic_score": round(semantic_score, 2),
+                    "semantic_score": round(semantic_scores[i], 2),
                     "matched_text": snippet[:200] + "..." if len(snippet) > 200 else snippet,
                     "source_api": result.get("source", "unknown")
                 })

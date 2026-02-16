@@ -251,6 +251,44 @@ class SageMakerClient:
         logger.info(f"Batch translation [{endpoint_key}]: {succeeded}/{len(inputs)} succeeded in {elapsed:.1f}s")
         return results
 
+    def invoke_text2text_batch_optimized(
+        self,
+        endpoint_key: str,
+        inputs: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+        max_concurrent: int = 3,
+    ) -> List[Optional[str]]:
+        if not inputs:
+            return []
+        results: List[Optional[str]] = [None] * len(inputs)
+        batch_size = max(1, len(inputs) // max_concurrent)
+        batches: List[List[Tuple[int, str]]] = []
+        for i in range(0, len(inputs), batch_size):
+            batch = [(idx, text) for idx, text in enumerate(inputs[i:i + batch_size], start=i)]
+            batches.append(batch)
+
+        def _process_batch(batch: List[Tuple[int, str]]) -> List[Tuple[int, Optional[str]]]:
+            batch_results: List[Tuple[int, Optional[str]]] = []
+            for idx, text in batch:
+                result = self.invoke_text2text(endpoint_key, text, parameters)
+                batch_results.append((idx, result))
+            return batch_results
+
+        t0 = time.time()
+        with ThreadPoolExecutor(max_workers=min(len(batches), max_concurrent)) as executor:
+            futures = [executor.submit(_process_batch, batch) for batch in batches]
+            for future in as_completed(futures):
+                try:
+                    for idx, result in future.result():
+                        results[idx] = result
+                except Exception as e:
+                    logger.warning(f"Batch optimized [{endpoint_key}] sub-batch failed: {e}")
+
+        elapsed = time.time() - t0
+        succeeded = sum(1 for r in results if r is not None)
+        logger.info(f"Batch optimized [{endpoint_key}]: {succeeded}/{len(inputs)} in {elapsed:.1f}s ({len(batches)} sub-batches, max_concurrent={max_concurrent})")
+        return results
+
     def invoke_embedding(
         self,
         input_text: str,

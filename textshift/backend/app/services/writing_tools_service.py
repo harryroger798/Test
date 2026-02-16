@@ -212,13 +212,17 @@ class WritingToolsService:
             model_dir = os.path.join(settings.MODELS_DIR, 'flan-t5-base')
             
             if os.path.exists(onnx_dir) and os.path.exists(os.path.join(onnx_dir, 'encoder_model.onnx')):
-                from optimum.onnxruntime import ORTModelForSeq2SeqLM
-                logger.info("Loading Flan-T5-base ONNX INT8 model...")
-                self._general_t5_tokenizer = T5Tokenizer.from_pretrained(onnx_dir)
-                self._general_t5_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
-                self._is_onnx_flan_t5 = True
-                logger.info(f"Loaded Flan-T5-base ONNX INT8 from {onnx_dir}")
-                return True
+                try:
+                    from optimum.onnxruntime import ORTModelForSeq2SeqLM
+                except Exception as ort_err:
+                    logger.warning(f"ONNX runtime unavailable, falling back to PyTorch: {ort_err}")
+                else:
+                    logger.info("Loading Flan-T5-base ONNX INT8 model...")
+                    self._general_t5_tokenizer = T5Tokenizer.from_pretrained(onnx_dir)
+                    self._general_t5_model = ORTModelForSeq2SeqLM.from_pretrained(onnx_dir)
+                    self._is_onnx_flan_t5 = True
+                    logger.info(f"Loaded Flan-T5-base ONNX INT8 from {onnx_dir}")
+                    return True
             
             if not os.path.exists(model_dir) or not os.listdir(model_dir):
                 success = self._download_model_from_s3('textshift-models/flan-t5-base/', model_dir)
@@ -262,13 +266,15 @@ class WritingToolsService:
                 if not success:
                     logger.info("Downloading coedit-large from HuggingFace...")
                     self._grammar_tokenizer = AutoTokenizer.from_pretrained("grammarly/coedit-large")
-                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("grammarly/coedit-large", torch_dtype=torch.float16)
+                    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+                    self._grammar_model = T5ForConditionalGeneration.from_pretrained("grammarly/coedit-large", torch_dtype=dtype)
                     self._grammar_model.eval()
                     logger.info("CoEdIT-large model loaded from HuggingFace")
                     return True
             
             self._grammar_tokenizer = AutoTokenizer.from_pretrained(model_dir)
-            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=torch.float16)
+            dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+            self._grammar_model = T5ForConditionalGeneration.from_pretrained(model_dir, torch_dtype=dtype)
             self._grammar_model.eval()
             logger.info("CoEdIT-large model loaded (PyTorch) from local storage")
             return True
@@ -648,6 +654,13 @@ class WritingToolsService:
                             "original": text[offset:offset + length],
                             "replacement": replacement_val
                         })
+                elif offset is not None and length == 0:
+                    replacement_ops.append({
+                        "offset": offset,
+                        "length": 0,
+                        "original": "",
+                        "replacement": replacement_val
+                    })
                 elif original_str:
                     import re
                     pattern = re.compile(r'(?<![\w])' + re.escape(original_str) + r'(?![\w])')
@@ -863,7 +876,7 @@ class WritingToolsService:
 
             instruction = tone_instructions.get(target)
             if instruction:
-                coedit_result = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=150)
+                coedit_result = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
                 if coedit_result and coedit_result.strip() != text.strip() and len(coedit_result) > 20:
                     return {
                         "success": True,
@@ -1303,9 +1316,19 @@ class WritingToolsService:
             used_t5 = False
             summary = None
             
-            # Try T5 model first
-            t5_prompt = f"Summarize the following text: {text}"
-            t5_result = self._generate_with_t5(t5_prompt, max_length=max_length, min_length=min_length)
+            word_count = len(text.split())
+            if word_count > 500:
+                max_length = min(512, max(200, word_count // 5))
+                min_length = min(100, max(50, word_count // 15))
+            
+            # For long texts (>1000 words), skip T5 and use extractive directly
+            if word_count > 1000:
+                logger.info(f"Long text ({word_count} words), skipping T5, using extractive")
+                t5_result = None
+            else:
+                # Try T5 model first
+                t5_prompt = f"Summarize the following text: {text}"
+                t5_result = self._generate_with_t5(t5_prompt, max_length=max_length, min_length=min_length)
             
             if t5_result and len(t5_result) > 10 and len(t5_result) < len(text):
                 summary = t5_result
@@ -1442,10 +1465,10 @@ class WritingToolsService:
             }
             instruction = instruction_map.get(mode_lower, "Paraphrase this sentence")
 
-            paraphrased = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=150)
+            paraphrased = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
 
             if not paraphrased or paraphrased == text:
-                paraphrased = self._edit_text_with_coedit(text, "Paraphrase this sentence", max_chunk_tokens=150)
+                paraphrased = self._edit_text_with_coedit(text, "Paraphrase this sentence", max_chunk_tokens=80)
 
             changes_made = sum(1 for a, b in zip(text.split(), paraphrased.split()) if a != b)
 
@@ -2470,10 +2493,10 @@ class WritingToolsService:
             }
             instruction = instruction_map.get(focus_lower, "Make this text coherent")
 
-            improved_text = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=150)
+            improved_text = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
 
             if not improved_text or improved_text == text:
-                improved_text = self._edit_text_with_coedit(text, "Make this text coherent", max_chunk_tokens=150)
+                improved_text = self._edit_text_with_coedit(text, "Make this text coherent", max_chunk_tokens=80)
 
             suggestions = [f"Text improved for {focus} using advanced language model"]
             changes_made = sum(1 for a, b in zip(text.split(), improved_text.split()) if a != b)
