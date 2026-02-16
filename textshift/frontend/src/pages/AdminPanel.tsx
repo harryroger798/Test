@@ -166,6 +166,10 @@ export default function AdminPanel() {
     // Settings
     const [settings, setSettings] = useState<any>(null);
 
+    // Site settings (cookie consent)
+    const [cookieConsentEnabled, setCookieConsentEnabled] = useState(true);
+    const [siteSettingsLoading, setSiteSettingsLoading] = useState(false);
+
     // Promos data
     const [promos, setPromos] = useState<PromoData[]>([]);
     const [promosLoading, setPromosLoading] = useState(false);
@@ -302,15 +306,48 @@ export default function AdminPanel() {
 
     const fetchSettings = async () => {
       try {
-        const response = await fetch(`${API_URL}/api/admin/settings`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.ok) {
-          const data = await response.json();
+        const [settingsRes, siteSettingsRes] = await Promise.all([
+          fetch(`${API_URL}/api/admin/settings`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch(`${API_URL}/api/admin/site-settings`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+        if (settingsRes.ok) {
+          const data = await settingsRes.json();
           setSettings(data);
+        }
+        if (siteSettingsRes.ok) {
+          const data = await siteSettingsRes.json();
+          setCookieConsentEnabled(data.cookie_consent_enabled);
         }
       } catch (err) {
         console.error('Failed to fetch settings:', err);
+      }
+    };
+
+    const toggleCookieConsent = async (enabled: boolean) => {
+      setSiteSettingsLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/api/admin/site-settings`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ cookie_consent_enabled: enabled })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCookieConsentEnabled(data.cookie_consent_enabled);
+        } else {
+          setError('Failed to update cookie consent setting');
+        }
+      } catch (err) {
+        setError('Failed to update cookie consent setting');
+      } finally {
+        setSiteSettingsLoading(false);
       }
     };
 
@@ -1670,6 +1707,35 @@ export default function AdminPanel() {
         {/* Settings Tab */}
         {activeTab === 'settings' && settings && (
           <div className="space-y-6">
+            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-orange-500" />
+                Site Settings
+              </h3>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white font-medium">Cookie Consent Banner (Termly)</p>
+                  <p className="text-gray-400 text-sm">Show/hide the Termly cookie consent banner on the site</p>
+                </div>
+                <button
+                  onClick={() => toggleCookieConsent(!cookieConsentEnabled)}
+                  disabled={siteSettingsLoading}
+                  className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+                    cookieConsentEnabled ? 'bg-emerald-500' : 'bg-gray-600'
+                  } ${siteSettingsLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                      cookieConsentEnabled ? 'translate-x-8' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Status: {cookieConsentEnabled ? 'Enabled' : 'Disabled'}
+                {siteSettingsLoading && ' (Saving...)'}
+              </p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Rate Limits */}
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">

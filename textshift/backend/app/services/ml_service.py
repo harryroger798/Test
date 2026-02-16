@@ -2226,7 +2226,7 @@ class MLModelService:
             logger.warning(f"HuggingFace API fallback failed: {e}")
             return text
     
-    _CHUNK_WORD_LIMIT = 350
+    _CHUNK_WORD_LIMIT = 500
 
     def _build_chunks(self, text: str) -> List[str]:
         """Split text into chunks of roughly _CHUNK_WORD_LIMIT words, breaking at sentence boundaries."""
@@ -2279,25 +2279,30 @@ class MLModelService:
             sagemaker_used = False
 
             if use_sagemaker:
-                logger.info(f"Attempting parallel SageMaker inference for {len(chunks)} chunks (max_workers=8)")
-                failed_indices: List[int] = []
+                logger.info(f"Attempting optimized batch SageMaker inference for {len(chunks)} chunks")
                 try:
-                    with ThreadPoolExecutor(max_workers=min(len(chunks), 8)) as executor:
-                        future_to_idx = {
-                            executor.submit(self._humanize_chunk_via_sagemaker, chunk): idx
-                            for idx, chunk in enumerate(chunks)
-                        }
-                        for future in as_completed(future_to_idx):
-                            idx = future_to_idx[future]
-                            try:
-                                result = future.result()
-                                if result:
-                                    result_chunks[idx] = result
-                                    logger.info(f"SageMaker chunk {idx + 1}/{len(chunks)} done ({len(result.split())} words)")
-                                else:
-                                    failed_indices.append(idx)
-                            except Exception:
-                                failed_indices.append(idx)
+                    batch_inputs = [f"humanize: {chunk}" for chunk in chunks]
+                    word_counts = [len(c.split()) for c in chunks]
+                    max_new = min(int(max(word_counts) * 2.5), 512)
+                    parameters = {
+                        "max_new_tokens": max_new,
+                        "num_beams": 1,
+                        "do_sample": True,
+                        "temperature": 1.0,
+                        "top_p": 0.95,
+                        "repetition_penalty": 2.5,
+                        "no_repeat_ngram_size": 3,
+                    }
+                    batch_results = sagemaker_client.invoke_text2text_batch_optimized(
+                        "humanizer", batch_inputs, parameters, max_concurrent=3
+                    )
+                    failed_indices: List[int] = []
+                    for idx, result in enumerate(batch_results):
+                        if result and len(result) > 20:
+                            result_chunks[idx] = self._clean_model_output(result)
+                            logger.info(f"SageMaker chunk {idx + 1}/{len(chunks)} done ({len(result_chunks[idx].split())} words)")
+                        else:
+                            failed_indices.append(idx)
 
                     if failed_indices:
                         logger.info(f"SageMaker failed for {len(failed_indices)} chunks, falling back to local ONNX")
@@ -2305,7 +2310,7 @@ class MLModelService:
                             result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
                     sagemaker_used = not failed_indices
                 except Exception as e:
-                    logger.warning(f"SageMaker parallel processing failed: {e}, falling back to local ONNX")
+                    logger.warning(f"SageMaker batch processing failed: {e}, falling back to local ONNX")
                     for idx, chunk in enumerate(chunks):
                         if result_chunks[idx] is None:
                             result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)

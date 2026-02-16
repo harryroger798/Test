@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from app.core.database import engine, Base
 from app.core.config import settings
-from app.routers import auth, scan, credits, payment, api_keys, batch, contact, feedback, admin, admin_extended, promo, user_settings, email_campaigns, writing_tools
+from app.routers import auth, scan, credits, payment, api_keys, batch, contact, feedback, admin, admin_extended, promo, user_settings, email_campaigns, writing_tools, site_settings
 from app.models import User, Scan, CreditTransaction, Subscription, APIKey  # Import models to register with Base
 # Phase 3: Self-Learning ML System models
 from app.models import UserFeedback, ModelVersion, TrainingRun, ABTestAssignment, ModelMetrics, TrainingSampleQueue
@@ -17,6 +17,8 @@ from app.models import UserFeedback, ModelVersion, TrainingRun, ABTestAssignment
 from app.models import Promo, PromoRedemption
 # Email campaign models
 from app.models import EmailCampaign, EmailSend
+# Humanized text hash tracking (for ensuring TextShift humanized outputs pass our detector)
+from app.models import HumanizedTextHash
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -166,6 +168,9 @@ app.include_router(email_campaigns.tracking_router)
 # Phase 4: Writing Tools router (14 new features)
 app.include_router(writing_tools.router)
 
+# Site settings router (public + admin)
+app.include_router(site_settings.router)
+
 
 @app.get("/healthz")
 async def healthz():
@@ -175,9 +180,14 @@ async def healthz():
         from sqlalchemy import text as sa_text
         from app.core.database import SessionLocal
         db = SessionLocal()
-        db.execute(sa_text("SELECT 1"))
-        db.close()
-        health["checks"]["database"] = "ok"
+        try:
+            db.execute(sa_text("SELECT 1"))
+            health["checks"]["database"] = "ok"
+        except Exception as e:
+            health["checks"]["database"] = f"error: {e}"
+            health["status"] = "degraded"
+        finally:
+            db.close()
     except Exception as e:
         health["checks"]["database"] = f"error: {e}"
         health["status"] = "degraded"
