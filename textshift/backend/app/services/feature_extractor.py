@@ -152,33 +152,35 @@ class FeatureExtractor565:
         }
     
     def _tokenize_sentences(self, text: str) -> List[str]:
-        """Tokenize text into sentences with NLTK fallback."""
+        """Tokenize text into sentences using basic regex splitting.
+        
+        IMPORTANT: Uses basic regex splitting to match the tokenization used during
+        TriBoost model training. Do NOT change to NLTK as it produces different
+        sentence counts which breaks model compatibility.
+        """
         if not text:
             return []
         
-        if NLTK_AVAILABLE:
-            try:
-                return sent_tokenize(text)
-            except:
-                pass
-        
-        # Fallback: simple sentence splitting
+        # Use basic sentence splitting to match training
         sentences = re.split(r'(?<=[.!?])\s+', text)
         return [s.strip() for s in sentences if s.strip()]
     
     def _tokenize_words(self, text: str) -> List[str]:
-        """Tokenize text into words with NLTK fallback."""
+        """Tokenize text into words using alpha-only regex pattern.
+        
+        IMPORTANT: Uses re.findall(r'[a-zA-Z]+', text) to match the exact
+        tokenization used during TriBoost model training. This extracts only
+        alphabetic words, excluding numbers and punctuation.
+        
+        Do NOT change to NLTK word_tokenize or text.split() as they produce
+        different word counts which breaks model compatibility.
+        """
         if not text:
             return []
         
-        if NLTK_AVAILABLE:
-            try:
-                return word_tokenize(text.lower())
-            except:
-                pass
-        
-        # Fallback: simple word splitting
-        return self.word_pattern.findall(text.lower())
+        # Use alpha-only regex pattern to match training exactly
+        # This gives 263 words for sample 1 vs text.split()'s 282
+        return [w.lower() for w in re.findall(r'[a-zA-Z]+', text)]
     
     def _get_pos_tags(self, words: List[str]) -> List[Tuple[str, str]]:
         """Get POS tags for words with fallback."""

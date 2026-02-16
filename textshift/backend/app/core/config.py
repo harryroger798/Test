@@ -112,9 +112,19 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
+    # Intercom integration (optional)
+    INTERCOM_APP_ID: str = ""
+    INTERCOM_ACCESS_TOKEN: str = ""
+    INTERCOM_IDENTITY_SECRET: str = ""
+    
+    # iDrive credentials (alternative naming)
+    IDRIVE_ACCESS_KEY: str = ""
+    IDRIVE_SECRET_KEY: str = ""
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra environment variables
 
 
 @lru_cache()
