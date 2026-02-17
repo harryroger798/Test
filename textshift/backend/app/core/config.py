@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     AWS_DEFAULT_REGION: str = "us-east-1"
 
     # Modal.com serverless GPU (off-peak humanizer)
-    MODAL_ENDPOINT_URL: str = "https://textshift--textshift-humanizer-humanize-api.modal.run"
+    MODAL_ENDPOINT_URL: str = "https://textshift--textshift-humanizer-humanizermodel-humanize-api.modal.run"
 
     # iDrive e2 (alternate env var names)
     IDRIVE_ACCESS_KEY: str = ""
