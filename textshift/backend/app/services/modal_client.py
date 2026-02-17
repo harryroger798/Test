@@ -54,13 +54,22 @@ class ModalHumanizerClient:
     
     Singleton pattern ensures single instance across the application.
     Supports both batch and single-text humanization with automatic fallback.
+    Uses a persistent httpx.Client for connection pooling/reuse.
     """
     _instance = None
+    _http_client: Optional[httpx.Client] = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._http_client = httpx.Client(timeout=180.0)
         return cls._instance
+
+    def _get_client(self) -> httpx.Client:
+        """Get or create persistent HTTP client for connection reuse."""
+        if self._http_client is None:
+            self._http_client = httpx.Client(timeout=180.0)
+        return self._http_client
 
     def _get_endpoint_url(self) -> str:
         """Get Modal endpoint URL from settings or use default."""
@@ -92,8 +101,9 @@ class ModalHumanizerClient:
             payload["parameters"] = parameters
 
         try:
+            client = self._get_client()
             t0 = time.time()
-            response = httpx.post(url, json=payload, timeout=timeout)
+            response = client.post(url, json=payload, timeout=timeout)
             elapsed = time.time() - t0
 
             if response.status_code != 200:
@@ -144,8 +154,9 @@ class ModalHumanizerClient:
             payload["parameters"] = parameters
 
         try:
+            client = self._get_client()
             t0 = time.time()
-            response = httpx.post(url, json=payload, timeout=timeout)
+            response = client.post(url, json=payload, timeout=timeout)
             elapsed = time.time() - t0
 
             if response.status_code != 200:
@@ -169,7 +180,8 @@ class ModalHumanizerClient:
         if not url:
             return False
         try:
-            response = httpx.post(
+            client = self._get_client()
+            response = client.post(
                 url,
                 json={"text": "humanize: test", "parameters": {"max_new_tokens": 10}},
                 timeout=30.0,

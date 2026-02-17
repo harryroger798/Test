@@ -1516,7 +1516,9 @@ class MLModelService:
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
         return result.strip()
 
-    def _humanize_chunk_via_modal(self, chunk: str, parameters: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    _MODE_TEMPS = {'academic': 0.7, 'professional': 0.75, 'casual': 0.85}
+
+    def _humanize_chunk_via_modal(self, chunk: str, parameters: Optional[Dict[str, Any]] = None, mode: str = 'casual') -> Optional[str]:
         """Humanize a single chunk via Modal serverless GPU endpoint."""
         try:
             input_text = f"humanize: {chunk}"
@@ -1526,7 +1528,7 @@ class MLModelService:
                 "max_new_tokens": max_new,
                 "num_beams": 1,
                 "do_sample": True,
-                "temperature": 1.0,
+                "temperature": self._MODE_TEMPS.get(mode, 0.85),
                 "top_p": 0.95,
                 "repetition_penalty": 2.5,
                 "no_repeat_ngram_size": 3,
