@@ -1,4 +1,3 @@
-import json
 import logging
 import time
 import httpx
@@ -19,6 +18,7 @@ PEAK_END_MINUTE = 15
 
 
 def is_peak_hours() -> bool:
+    """Check if current IST time is within peak hours (21:00-22:15 IST)."""
     now_ist = datetime.now(IST)
     start = now_ist.replace(hour=PEAK_START_HOUR, minute=PEAK_START_MINUTE, second=0, microsecond=0)
     end = now_ist.replace(hour=PEAK_END_HOUR, minute=PEAK_END_MINUTE, second=0, microsecond=0)
@@ -26,6 +26,13 @@ def is_peak_hours() -> bool:
 
 
 def get_inference_backend() -> str:
+    """Determine which inference backend to use based on time and availability.
+    
+    Returns:
+        'sagemaker' during peak hours (21:00-22:15 IST) if AWS credentials available,
+        'modal' during off-peak if Modal URL configured,
+        'hf_api' as final fallback.
+    """
     has_sagemaker = bool(
         getattr(settings, "AWS_ACCESS_KEY_ID", "") and
         getattr(settings, "AWS_SECRET_ACCESS_KEY", "")
@@ -43,6 +50,11 @@ def get_inference_backend() -> str:
 
 
 class ModalHumanizerClient:
+    """HTTP client for Modal.com serverless GPU humanizer endpoint.
+    
+    Singleton pattern ensures single instance across the application.
+    Supports both batch and single-text humanization with automatic fallback.
+    """
     _instance = None
 
     def __new__(cls):
@@ -51,6 +63,7 @@ class ModalHumanizerClient:
         return cls._instance
 
     def _get_endpoint_url(self) -> str:
+        """Get Modal endpoint URL from settings or use default."""
         return getattr(settings, "MODAL_ENDPOINT_URL", MODAL_ENDPOINT_URL)
 
     def humanize_batch(
@@ -59,6 +72,16 @@ class ModalHumanizerClient:
         parameters: Optional[Dict[str, Any]] = None,
         timeout: float = 180.0,
     ) -> List[Optional[str]]:
+        """Humanize multiple texts in a single batch request.
+        
+        Args:
+            texts: List of texts to humanize (with 'humanize: ' prefix).
+            parameters: Optional generation parameters (max_new_tokens, temperature, etc.).
+            timeout: Request timeout in seconds.
+            
+        Returns:
+            List of humanized texts, with None for any failed items.
+        """
         url = self._get_endpoint_url()
         if not url:
             logger.warning("Modal endpoint URL not configured")
@@ -102,6 +125,16 @@ class ModalHumanizerClient:
         parameters: Optional[Dict[str, Any]] = None,
         timeout: float = 120.0,
     ) -> Optional[str]:
+        """Humanize a single text via Modal endpoint.
+        
+        Args:
+            text: Text to humanize (with 'humanize: ' prefix).
+            parameters: Optional generation parameters.
+            timeout: Request timeout in seconds.
+            
+        Returns:
+            Humanized text or None if request failed.
+        """
         url = self._get_endpoint_url()
         if not url:
             return None
@@ -131,6 +164,7 @@ class ModalHumanizerClient:
             return None
 
     def health_check(self) -> bool:
+        """Check if Modal endpoint is responsive."""
         url = self._get_endpoint_url()
         if not url:
             return False

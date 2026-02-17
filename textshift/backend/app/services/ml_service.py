@@ -2292,7 +2292,7 @@ class MLModelService:
         return chunks
 
     def _humanize_paragraph(self, paragraph: str, use_post_processor: bool, passes: int, mode: str) -> tuple:
-        """Humanize a single paragraph, returning (humanized_text, chunk_count, gpu_used).
+        """Humanize a single paragraph, returning (humanized_text, chunk_count, gpu_used, actual_backend).
 
         Uses hybrid routing: Modal (off-peak) > SageMaker (peak) > local ONNX.
         """
@@ -2300,6 +2300,7 @@ class MLModelService:
         if word_count > self._CHUNK_WORD_LIMIT:
             chunks = self._build_chunks(paragraph)
             backend = get_inference_backend()
+            actual_backend = backend
             logger.info(f"Paragraph has {word_count} words, split into {len(chunks)} chunks, backend={backend}")
 
             result_chunks: List[str] = [None] * len(chunks)
@@ -2341,13 +2342,14 @@ class MLModelService:
                     gpu_used = True
                 except Exception as e:
                     logger.warning(f"Modal batch failed: {e}, falling back to SageMaker")
-                    backend = "sagemaker"
+                    actual_backend = "sagemaker"
 
             use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
             has_unfilled = any(r is None for r in result_chunks)
 
             if has_unfilled and use_sagemaker:
-                logger.info(f"Attempting SageMaker batch for remaining chunks")
+                logger.info("Attempting SageMaker batch for remaining chunks")
+                actual_backend = "sagemaker"
                 try:
                     unfilled = [i for i, r in enumerate(result_chunks) if r is None]
                     sm_inputs = [batch_inputs[i] for i in unfilled]
@@ -2381,10 +2383,10 @@ class MLModelService:
 
             output = ' '.join(result_chunks)
             output = self._clean_model_output(output)
-            return output, len(chunks), gpu_used
+            return output, len(chunks), gpu_used, actual_backend
 
         output = self._humanize_single(paragraph, use_post_processor=False, passes=passes, mode=mode)
-        return output, 1, False
+        return output, 1, False, get_inference_backend()
 
     def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
         """Humanize AI text using Stealthwriter T5 Chaos model.
@@ -2425,6 +2427,7 @@ class MLModelService:
 
         total_chunks = 0
         any_sagemaker = False
+        backends_used: List[str] = []
         humanized_paragraphs: List[str] = []
 
         for p_idx, paragraph in enumerate(content_paragraphs):
@@ -2433,10 +2436,11 @@ class MLModelService:
                 humanized_paragraphs.append('')
                 continue
             logger.info(f"Humanizing paragraph {p_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
-            h_text, chunk_count, sm_used = self._humanize_paragraph(stripped, use_post_processor, passes, mode)
+            h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(stripped, use_post_processor, passes, mode)
             total_chunks += chunk_count
             if sm_used:
                 any_sagemaker = True
+            backends_used.append(actual_be)
             humanized_paragraphs.append(h_text)
 
         if has_paragraph_breaks:
@@ -2469,7 +2473,7 @@ class MLModelService:
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
         is_chunked = total_chunks > len(content_paragraphs) or len(content_paragraphs) > 1
-        backend = get_inference_backend()
+        actual_backend = backends_used[-1] if backends_used else get_inference_backend()
         return {
             "original_text": text,
             "model_output": model_output,
@@ -2486,7 +2490,7 @@ class MLModelService:
             "chunk_count": total_chunks,
             "paragraph_count": len(content_paragraphs),
             "sagemaker_used": any_sagemaker,
-            "inference_backend": backend,
+            "inference_backend": actual_backend,
             "is_peak_hours": is_peak_hours(),
         }
     
