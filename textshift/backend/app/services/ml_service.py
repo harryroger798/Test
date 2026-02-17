@@ -1506,7 +1506,7 @@ class MLModelService:
     
     @staticmethod
     def _clean_model_output(text: str) -> str:
-        """Strip task-prefix leakage and clean up raw model output."""
+        """Strip task-prefix leakage and clean up raw model output and simple loops."""
         result = text.strip()
         prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
         for prefix in prefixes:
@@ -1514,6 +1514,34 @@ class MLModelService:
                 result = result[len(prefix):].strip()
             result = result.replace(f" {prefix} ", " ")
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        tokens = re.split(r'(\s+)', result)
+        word_tokens = [t for t in tokens if t.strip()]
+        n = len(word_tokens)
+        changed = True
+        while changed:
+            changed = False
+            i = 0
+            out = []
+            while i < n:
+                collapsed = False
+                for w in range(12, 4, -1):
+                    if i + 2*w <= n:
+                        seg = word_tokens[i:i+w]
+                        if word_tokens[i+w:i+2*w] == seg:
+                            j = i + w
+                            while j + w <= n and word_tokens[j:j+w] == seg:
+                                j += w
+                            out.extend(seg)
+                            i = j
+                            collapsed = True
+                            changed = True
+                            break
+                if not collapsed:
+                    out.append(word_tokens[i])
+                    i += 1
+            word_tokens = out
+            n = len(word_tokens)
+        result = ' '.join(word_tokens)
         return result.strip()
 
     _MODE_TEMPS = {'academic': 0.7, 'professional': 0.75, 'casual': 0.85}
