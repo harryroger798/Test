@@ -7,7 +7,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-MODAL_ENDPOINT_URL = "https://textshift--textshift-humanizer-humanize-api.modal.run"
+MODAL_ENDPOINT_URL = "https://textshift--textshift-humanizer-humanizermodel-humanize-api.modal.run"
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
