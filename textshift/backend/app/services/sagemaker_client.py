@@ -330,6 +330,7 @@ class SageMakerClient:
                         results.append(None)
                 return results
 
+            logger.warning(f"Server batch [{endpoint_key}] returned unexpected response type: {type(body)}")
             return [None] * len(inputs)
         except Exception as e:
             logger.warning(f"Server batch [{endpoint_key}] failed: {e}, falling back to parallel HTTP")

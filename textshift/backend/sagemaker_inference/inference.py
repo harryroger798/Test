@@ -31,13 +31,27 @@ def _download_s3_model(s3_key, target_dir):
     logger.info(f"Downloading s3://{S3_BUCKET}/{s3_key} -> {local_tar}")
     s3.download_file(S3_BUCKET, s3_key, local_tar)
     os.makedirs(target_dir, exist_ok=True)
+    abs_target = os.path.abspath(target_dir)
     with tarfile.open(local_tar, "r:gz") as tar:
+        for member in tar.getmembers():
+            member_path = os.path.abspath(os.path.join(target_dir, member.name))
+            if not member_path.startswith(abs_target + os.sep) and member_path != abs_target:
+                raise Exception(f"Attempted path traversal in tar file: {member.name}")
         tar.extractall(target_dir)
     os.remove(local_tar)
     logger.info(f"Extracted to {target_dir}, contents: {os.listdir(target_dir)}")
 
 
 def model_fn(model_dir):
+    """Load all models for the multi-model endpoint.
+
+    Args:
+        model_dir: SageMaker model directory (unused — models are downloaded
+                   from S3 to enable dynamic updates without redeploying).
+
+    Returns:
+        Dict mapping model names to their tokenizer, model, and task info.
+    """
     t0 = time.time()
     models = {}
 
@@ -278,7 +292,7 @@ def predict_fn(data, models):
             return {"error": f"Unknown task: {task}"}
 
     except Exception as e:
-        logger.error(f"Prediction error for {model_name}: {e}")
+        logger.exception(f"Prediction error for {model_name}: {e}")
         return {"error": str(e)}
 
 

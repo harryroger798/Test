@@ -2,6 +2,7 @@ import os
 import gc
 import re
 import json
+import time
 import hashlib
 import torch
 import torch.nn as nn
@@ -2360,8 +2361,7 @@ class MLModelService:
         - Option A: all paragraphs processed in parallel via batch SageMaker (max 15 workers)
         - Option B: adjacent small paragraphs merged into single SageMaker inputs where safe
         """
-        import time as _time
-        t_start = _time.time()
+        t_start = time.time()
 
         mode_config = {
             'academic': {'temperature': 0.7, 'top_p': 0.9},
@@ -2487,11 +2487,11 @@ class MLModelService:
                 "no_repeat_ngram_size": 3,
             }
 
-            t_batch_start = _time.time()
+            t_batch_start = time.time()
             batch_results = sagemaker_client.invoke_text2text_server_batch(
                 "humanizer", batch_inputs, parameters
             )
-            t_batch_end = _time.time()
+            t_batch_end = time.time()
             logger.info(f"Batch SageMaker inference for {len(batch_inputs)} paragraphs took {t_batch_end - t_batch_start:.1f}s")
 
             retry_indices: List[int] = []
@@ -2593,7 +2593,7 @@ class MLModelService:
         changes = len(set(original_words).symmetric_difference(set(final_words)))
         is_chunked = total_chunks > 1 or len(content_paragraphs) > 1
 
-        t_end = _time.time()
+        t_end = time.time()
         logger.info(f"Humanizer total time: {t_end - t_start:.1f}s ({len(content_paragraphs)} paragraphs, {len(batch_inputs)} batched, mode={mode})")
 
         return {
