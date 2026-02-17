@@ -42,7 +42,7 @@ class SageMakerClient:
     def _get_runtime(self):
         if self._runtime is None:
             config = Config(
-                read_timeout=120,
+                read_timeout=180,
                 connect_timeout=10,
                 retries={"max_attempts": 1},
             )
@@ -288,6 +288,52 @@ class SageMakerClient:
         succeeded = sum(1 for r in results if r is not None)
         logger.info(f"Batch optimized [{endpoint_key}]: {succeeded}/{len(inputs)} in {elapsed:.1f}s ({len(batches)} sub-batches, max_concurrent={max_concurrent})")
         return results
+
+    def invoke_text2text_server_batch(
+        self,
+        endpoint_key: str,
+        inputs: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> List[Optional[str]]:
+        if not inputs:
+            return []
+
+        payload: Dict[str, Any] = {
+            "model_name": endpoint_key,
+            "inputs": inputs,
+        }
+        if parameters:
+            payload["parameters"] = parameters
+
+        try:
+            t0 = time.time()
+            response = self._get_runtime().invoke_endpoint(
+                EndpointName=MULTIMODEL_ENDPOINT,
+                ContentType="application/json",
+                Body=json.dumps(payload),
+            )
+            body = json.loads(response["Body"].read())
+            elapsed = time.time() - t0
+            logger.info(f"Server batch [{endpoint_key}]: {len(inputs)} inputs in {elapsed:.1f}s")
+
+            if isinstance(body, dict) and "error" in body:
+                logger.error(f"Server batch [{endpoint_key}] error: {body['error']}")
+                logger.info(f"Falling back to parallel HTTP batch for {endpoint_key}")
+                return self.invoke_text2text_batch(endpoint_key, inputs, parameters, max_workers=15)
+
+            if isinstance(body, list):
+                results: List[Optional[str]] = []
+                for item in body:
+                    if isinstance(item, dict):
+                        results.append(item.get("generated_text"))
+                    else:
+                        results.append(None)
+                return results
+
+            return [None] * len(inputs)
+        except Exception as e:
+            logger.warning(f"Server batch [{endpoint_key}] failed: {e}, falling back to parallel HTTP")
+            return self.invoke_text2text_batch(endpoint_key, inputs, parameters, max_workers=15)
 
     def invoke_embedding(
         self,

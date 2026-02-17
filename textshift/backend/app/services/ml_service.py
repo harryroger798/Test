@@ -13,7 +13,7 @@ import boto3
 import pickle
 from botocore.config import Config
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, T5Tokenizer, T5ForConditionalGeneration
 from optimum.onnxruntime import ORTModelForSeq2SeqLM
@@ -1505,7 +1505,7 @@ class MLModelService:
     
     @staticmethod
     def _clean_model_output(text: str) -> str:
-        """Strip task-prefix leakage and clean up raw model output."""
+        """Strip task-prefix leakage and clean up raw model output and simple loops."""
         result = text.strip()
         prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
         for prefix in prefixes:
@@ -1513,6 +1513,40 @@ class MLModelService:
                 result = result[len(prefix):].strip()
             result = result.replace(f" {prefix} ", " ")
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        # Collapse obvious repeated substrings like: "I was ... I was ... I was ..."
+        words = result.split()
+        n = len(words)
+        changed = True
+        # Try windows 5..12 words for up to ~3 consecutive repeats
+        while changed:
+            changed = False
+            i = 0
+            out = []
+            while i < n:
+                collapsed = False
+                # limit window so i+2*w <= n
+                for w in range(12, 4, -1):
+                    if i + 2*w <= n:
+                        seg = words[i:i+w]
+                        if words[i+w:i+2*w] == seg:
+                            # count repeats
+                            j = i + w
+                            repeats = 1
+                            while j + w <= n and words[j:j+w] == seg:
+                                repeats += 1
+                                j += w
+                            # keep only one
+                            out.extend(seg)
+                            i = j
+                            collapsed = True
+                            changed = True
+                            break
+                if not collapsed:
+                    out.append(words[i])
+                    i += 1
+            words = out
+            n = len(words)
+        result = ' '.join(words)
         return result.strip()
 
     def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
@@ -1860,7 +1894,7 @@ class MLModelService:
         - Weighting is confidence-based: when RoBERTa is confident, trust it more
         - Chunked RoBERTa processes full text (no 512-token truncation loss)
         """
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=15) as executor:
             triboost_future = executor.submit(self._get_triboost_predictions, text)
             roberta_chunked_future = executor.submit(self._get_roberta_chunked_prediction, text)
             triboost_results = triboost_future.result()
@@ -2313,15 +2347,22 @@ class MLModelService:
 
     def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
         """Humanize AI text using Stealthwriter T5 Chaos model.
-        
+
         If preserved_indices is provided, only humanize sentences NOT in the list.
         Preserved sentences are kept exactly as-is in the output.
         Mode controls temperature and post-processing: 'academic', 'professional', or 'casual'.
-        
+
         Paragraph structure is preserved: text is split on blank lines, each paragraph
         is humanized independently, then paragraphs are rejoined with the original breaks.
         Long paragraphs (>500 words) are further split into chunks at sentence boundaries.
+
+        Performance optimizations (PR #101):
+        - Option A: all paragraphs processed in parallel via batch SageMaker (max 15 workers)
+        - Option B: adjacent small paragraphs merged into single SageMaker inputs where safe
         """
+        import time as _time
+        t_start = _time.time()
+
         mode_config = {
             'academic': {'temperature': 0.7, 'top_p': 0.9},
             'professional': {'temperature': 0.75, 'top_p': 0.92},
@@ -2331,9 +2372,12 @@ class MLModelService:
         if preserved_indices is not None:
             return self._humanize_selective(text, preserved_indices, use_post_processor, passes, mode=mode)
 
+        MIN_HUMANIZE_WORDS = 8
+        TARGET_GROUP_WORDS = 200
+
         paragraphs = re.split(r'(\n\s*\n)', text)
-        content_paragraphs = []
-        separators = []
+        content_paragraphs: List[str] = []
+        separators: List[str] = []
         for i, part in enumerate(paragraphs):
             if i % 2 == 0:
                 content_paragraphs.append(part)
@@ -2342,35 +2386,189 @@ class MLModelService:
 
         has_paragraph_breaks = len(content_paragraphs) > 1
         if not has_paragraph_breaks:
-            single_newline_parts = text.split('\n')
-            if len(single_newline_parts) > 1:
-                content_paragraphs = single_newline_parts
-                separators = ['\n'] * (len(content_paragraphs) - 1)
-                has_paragraph_breaks = True
+            lines = text.split('\n')
+            if len(lines) > 1:
+                groups: List[str] = []
+                group_seps: List[str] = []
+                current_lines: List[str] = []
+                current_word_count = 0
 
-        total_chunks = 0
-        any_sagemaker = False
-        humanized_paragraphs: List[str] = []
+                for line in lines:
+                    stripped = line.strip()
+                    if not stripped:
+                        if current_lines:
+                            groups.append(' '.join(current_lines))
+                            current_lines = []
+                            current_word_count = 0
+                        if groups and len(group_seps) < len(groups):
+                            group_seps.append('\n\n')
+                        continue
 
-        for p_idx, paragraph in enumerate(content_paragraphs):
-            stripped = paragraph.strip()
+                    words = len(stripped.split())
+                    if current_lines and current_word_count >= TARGET_GROUP_WORDS and words >= 15:
+                        groups.append(' '.join(current_lines))
+                        group_seps.append('\n\n')
+                        current_lines = [stripped]
+                        current_word_count = words
+                    else:
+                        current_lines.append(stripped)
+                        current_word_count += words
+
+                if current_lines:
+                    groups.append(' '.join(current_lines))
+
+                content_paragraphs = groups
+                separators = group_seps
+                has_paragraph_breaks = len(content_paragraphs) > 1
+        else:
+            merged_groups: List[str] = []
+            merged_seps: List[str] = []
+            current_group: List[str] = []
+            current_wc = 0
+            for para in content_paragraphs:
+                stripped = para.strip()
+                if not stripped:
+                    continue
+                wc = len(stripped.split())
+                if current_group and current_wc >= TARGET_GROUP_WORDS:
+                    merged_groups.append(' '.join(current_group))
+                    if merged_groups and len(merged_seps) < len(merged_groups) - 1:
+                        merged_seps.append('\n\n')
+                    current_group = [stripped]
+                    current_wc = wc
+                else:
+                    current_group.append(stripped)
+                    current_wc += wc
+            if current_group:
+                merged_groups.append(' '.join(current_group))
+            while len(merged_seps) < len(merged_groups) - 1:
+                merged_seps.append('\n\n')
+            content_paragraphs = merged_groups
+            separators = merged_seps
+
+        skip_indices: set = set()
+        batch_inputs: List[str] = []
+        batch_indices: List[int] = []
+        for idx, para in enumerate(content_paragraphs):
+            stripped = para.strip()
             if not stripped:
-                humanized_paragraphs.append('')
                 continue
-            logger.info(f"Humanizing paragraph {p_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
-            h_text, chunk_count, sm_used = self._humanize_paragraph(stripped, use_post_processor, passes, mode)
-            total_chunks += chunk_count
-            if sm_used:
-                any_sagemaker = True
-            humanized_paragraphs.append(h_text)
+            word_count = len(stripped.split())
+            if word_count < MIN_HUMANIZE_WORDS:
+                skip_indices.add(idx)
+                continue
+            batch_inputs.append(f"humanize: {stripped}")
+            batch_indices.append(idx)
+
+        logger.info(
+            f"Humanizer: {len(content_paragraphs)} groups, "
+            f"{len(batch_inputs)} to humanize, {len(skip_indices)} kept as-is (short), "
+            f"sending in parallel batch"
+        )
+
+        humanized_paragraphs: List[str] = [''] * len(content_paragraphs)
+        for idx in skip_indices:
+            humanized_paragraphs[idx] = content_paragraphs[idx].strip()
+        total_chunks = len(batch_inputs)
+        any_sagemaker = False
+
+        use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+
+        if use_sagemaker and batch_inputs:
+            word_counts = [len(inp.replace("humanize: ", "").split()) for inp in batch_inputs]
+            max_new = min(int(max(word_counts) * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": config["temperature"],
+                "top_p": config["top_p"],
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+
+            t_batch_start = _time.time()
+            batch_results = sagemaker_client.invoke_text2text_server_batch(
+                "humanizer", batch_inputs, parameters
+            )
+            t_batch_end = _time.time()
+            logger.info(f"Batch SageMaker inference for {len(batch_inputs)} paragraphs took {t_batch_end - t_batch_start:.1f}s")
+
+            retry_indices: List[int] = []
+            for i, result in enumerate(batch_results):
+                para_idx = batch_indices[i]
+                if result and len(result) > 10:
+                    cleaned = self._clean_model_output(result)
+                    input_wc = len(content_paragraphs[para_idx].strip().split())
+                    output_wc = len(cleaned.split())
+                    ratio = output_wc / max(input_wc, 1)
+                    words_out = cleaned.lower().split()
+                    ngram_repeat = False
+                    if len(words_out) > 20:
+                        for ng in range(4, 8):
+                            seen: dict = {}
+                            for k in range(len(words_out) - ng + 1):
+                                gram = tuple(words_out[k:k+ng])
+                                seen[gram] = seen.get(gram, 0) + 1
+                                if seen[gram] >= 4:
+                                    ngram_repeat = True
+                                    break
+                            if ngram_repeat:
+                                break
+                    if ratio < 0.3 or ratio > 3.0 or ngram_repeat:
+                        logger.warning(f"Batch para {para_idx}: quality issue (ratio={ratio:.2f}, ngram_repeat={ngram_repeat}), will retry individually")
+                        retry_indices.append(para_idx)
+                    else:
+                        humanized_paragraphs[para_idx] = cleaned
+                        any_sagemaker = True
+                else:
+                    retry_indices.append(para_idx)
+
+            if retry_indices:
+                logger.info(f"Re-running {len(retry_indices)} paragraphs individually with safer settings")
+                safe_params = {
+                    "max_new_tokens": 512,
+                    "num_beams": 1,
+                    "do_sample": True,
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "repetition_penalty": 3.0,
+                    "no_repeat_ngram_size": 4,
+                }
+                for para_idx in retry_indices:
+                    stripped = content_paragraphs[para_idx].strip()
+                    if not stripped:
+                        continue
+                    retry_input = f"humanize: {stripped}"
+                    retry_result = sagemaker_client.invoke_text2text("humanizer", retry_input, safe_params)
+                    if retry_result and len(retry_result) > 10:
+                        humanized_paragraphs[para_idx] = self._clean_model_output(retry_result)
+                        any_sagemaker = True
+                    else:
+                        humanized_paragraphs[para_idx] = self._humanize_single(
+                            stripped, use_post_processor=False, passes=passes, mode=mode
+                        )
+        else:
+            for p_idx, paragraph in enumerate(content_paragraphs):
+                if p_idx in skip_indices:
+                    continue
+                stripped = paragraph.strip()
+                if not stripped:
+                    continue
+                logger.info(f"Humanizing paragraph {p_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
+                h_text, chunk_count, sm_used = self._humanize_paragraph(stripped, use_post_processor, passes, mode)
+                total_chunks += chunk_count
+                if sm_used:
+                    any_sagemaker = True
+                humanized_paragraphs[p_idx] = h_text
 
         if has_paragraph_breaks:
-            parts: List[str] = []
+            parts_list: List[str] = []
             for i, h_para in enumerate(humanized_paragraphs):
-                parts.append(h_para)
+                parts_list.append(h_para)
                 if i < len(separators):
-                    parts.append(separators[i])
-            model_output = ''.join(parts)
+                    parts_list.append(separators[i])
+            model_output = ''.join(parts_list)
         else:
             model_output = humanized_paragraphs[0] if humanized_paragraphs else ''
 
@@ -2393,7 +2591,11 @@ class MLModelService:
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
-        is_chunked = total_chunks > len(content_paragraphs) or len(content_paragraphs) > 1
+        is_chunked = total_chunks > 1 or len(content_paragraphs) > 1
+
+        t_end = _time.time()
+        logger.info(f"Humanizer total time: {t_end - t_start:.1f}s ({len(content_paragraphs)} paragraphs, {len(batch_inputs)} batched, mode={mode})")
+
         return {
             "original_text": text,
             "model_output": model_output,
