@@ -143,8 +143,8 @@ export const authApi = {
   },
 };
 
-// 5 minute timeout for all scan/processing endpoints (ML operations can take time)
-const SCAN_TIMEOUT = 300000;
+// 10 minute timeout for all scan/processing endpoints (ML operations can take time for long texts)
+const SCAN_TIMEOUT = 600000;
 
 // Scan API
 export const scanApi = {
