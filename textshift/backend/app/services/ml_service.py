@@ -2526,6 +2526,64 @@ class MLModelService:
                     if sm_used:
                         any_sagemaker = True
                     backends_used.append(actual_be)
+        elif backend == "sagemaker" and len(non_empty_texts) > 1:
+            temp = self._MODE_TEMPS.get(mode, 0.85)
+            batch_inputs = [f"humanize: {t}" for t in non_empty_texts]
+            word_counts = [len(t.split()) for t in non_empty_texts]
+            max_new = min(int(max(word_counts) * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": temp,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            try:
+                import time as _time
+                t0 = _time.time()
+                batch_results = sagemaker_client.invoke_text2text_server_batch(
+                    "humanizer", batch_inputs, parameters
+                )
+                elapsed = _time.time() - t0
+                logger.info(f"SageMaker server batch completed: {len(non_empty_texts)} paragraphs in {elapsed:.1f}s")
+                failed_indices = []
+                for j, result in enumerate(batch_results):
+                    orig_idx = non_empty_indices[j]
+                    if result and len(result) > 20:
+                        humanized_paragraphs[orig_idx] = self._clean_model_output(result)
+                        backends_used.append("sagemaker")
+                        any_sagemaker = True
+                    else:
+                        failed_indices.append(j)
+
+                if failed_indices:
+                    logger.info(f"SageMaker batch: {len(failed_indices)} paragraphs failed, falling back to sequential")
+                    for j in failed_indices:
+                        orig_idx = non_empty_indices[j]
+                        h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                            non_empty_texts[j], use_post_processor, passes, mode
+                        )
+                        humanized_paragraphs[orig_idx] = h_text
+                        total_chunks += chunk_count
+                        if sm_used:
+                            any_sagemaker = True
+                        backends_used.append(actual_be)
+                total_chunks = len(non_empty_texts)
+            except Exception as e:
+                logger.warning(f"SageMaker server batch failed: {e}, falling back to sequential")
+                for j, stripped in enumerate(non_empty_texts):
+                    orig_idx = non_empty_indices[j]
+                    logger.info(f"Humanizing paragraph {orig_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
+                    h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                        stripped, use_post_processor, passes, mode
+                    )
+                    humanized_paragraphs[orig_idx] = h_text
+                    total_chunks += chunk_count
+                    if sm_used:
+                        any_sagemaker = True
+                    backends_used.append(actual_be)
         else:
             for j, stripped in enumerate(non_empty_texts):
                 orig_idx = non_empty_indices[j]
