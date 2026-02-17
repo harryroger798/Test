@@ -1514,40 +1514,34 @@ class MLModelService:
                 result = result[len(prefix):].strip()
             result = result.replace(f" {prefix} ", " ")
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
-        # Collapse obvious repeated substrings like: "I was ... I was ... I was ..."
-        words = result.split()
-        n = len(words)
+        tokens = re.split(r'(\s+)', result)
+        word_tokens = [t for t in tokens if t.strip()]
+        n = len(word_tokens)
         changed = True
-        # Try windows 5..12 words for up to ~3 consecutive repeats
         while changed:
             changed = False
             i = 0
             out = []
             while i < n:
                 collapsed = False
-                # limit window so i+2*w <= n
                 for w in range(12, 4, -1):
                     if i + 2*w <= n:
-                        seg = words[i:i+w]
-                        if words[i+w:i+2*w] == seg:
-                            # count repeats
+                        seg = word_tokens[i:i+w]
+                        if word_tokens[i+w:i+2*w] == seg:
                             j = i + w
-                            repeats = 1
-                            while j + w <= n and words[j:j+w] == seg:
-                                repeats += 1
+                            while j + w <= n and word_tokens[j:j+w] == seg:
                                 j += w
-                            # keep only one
                             out.extend(seg)
                             i = j
                             collapsed = True
                             changed = True
                             break
                 if not collapsed:
-                    out.append(words[i])
+                    out.append(word_tokens[i])
                     i += 1
-            words = out
-            n = len(words)
-        result = ' '.join(words)
+            word_tokens = out
+            n = len(word_tokens)
+        result = ' '.join(word_tokens)
         return result.strip()
 
     def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
@@ -1895,7 +1889,7 @@ class MLModelService:
         - Weighting is confidence-based: when RoBERTa is confident, trust it more
         - Chunked RoBERTa processes full text (no 512-token truncation loss)
         """
-        with ThreadPoolExecutor(max_workers=15) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             triboost_future = executor.submit(self._get_triboost_predictions, text)
             roberta_chunked_future = executor.submit(self._get_roberta_chunked_prediction, text)
             triboost_results = triboost_future.result()
@@ -2446,7 +2440,9 @@ class MLModelService:
             content_paragraphs = merged_groups
             separators = merged_seps
 
+        CHUNK_WORD_LIMIT = 500
         skip_indices: set = set()
+        long_indices: set = set()
         batch_inputs: List[str] = []
         batch_indices: List[int] = []
         for idx, para in enumerate(content_paragraphs):
@@ -2457,12 +2453,16 @@ class MLModelService:
             if word_count < MIN_HUMANIZE_WORDS:
                 skip_indices.add(idx)
                 continue
+            if word_count > CHUNK_WORD_LIMIT:
+                long_indices.add(idx)
+                continue
             batch_inputs.append(f"humanize: {stripped}")
             batch_indices.append(idx)
 
         logger.info(
             f"Humanizer: {len(content_paragraphs)} groups, "
             f"{len(batch_inputs)} to humanize, {len(skip_indices)} kept as-is (short), "
+            f"{len(long_indices)} long (chunked separately), "
             f"sending in parallel batch"
         )
 
@@ -2471,6 +2471,18 @@ class MLModelService:
             humanized_paragraphs[idx] = content_paragraphs[idx].strip()
         total_chunks = len(batch_inputs)
         any_sagemaker = False
+
+        for idx in long_indices:
+            stripped = content_paragraphs[idx].strip()
+            if not stripped:
+                continue
+            h_text, chunk_count, sm_used = self._humanize_paragraph(
+                stripped, use_post_processor=False, passes=passes, mode=mode
+            )
+            humanized_paragraphs[idx] = h_text
+            total_chunks += chunk_count
+            if sm_used:
+                any_sagemaker = True
 
         use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
 

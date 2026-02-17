@@ -328,10 +328,15 @@ class SageMakerClient:
                         results.append(item.get("generated_text"))
                     else:
                         results.append(None)
+                if len(results) != len(inputs):
+                    logger.warning(
+                        f"Server batch [{endpoint_key}] result length {len(results)} != inputs {len(inputs)}; falling back"
+                    )
+                    return self.invoke_text2text_batch(endpoint_key, inputs, parameters, max_workers=15)
                 return results
 
             logger.warning(f"Server batch [{endpoint_key}] returned unexpected response type: {type(body)}")
-            return [None] * len(inputs)
+            return self.invoke_text2text_batch(endpoint_key, inputs, parameters, max_workers=15)
         except Exception as e:
             logger.warning(f"Server batch [{endpoint_key}] failed: {e}, falling back to parallel HTTP")
             return self.invoke_text2text_batch(endpoint_key, inputs, parameters, max_workers=15)

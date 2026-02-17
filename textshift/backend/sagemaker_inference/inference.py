@@ -31,13 +31,20 @@ def _download_s3_model(s3_key, target_dir):
     logger.info(f"Downloading s3://{S3_BUCKET}/{s3_key} -> {local_tar}")
     s3.download_file(S3_BUCKET, s3_key, local_tar)
     os.makedirs(target_dir, exist_ok=True)
-    abs_target = os.path.abspath(target_dir)
+    abs_target = os.path.realpath(target_dir)
     with tarfile.open(local_tar, "r:gz") as tar:
         for member in tar.getmembers():
-            member_path = os.path.abspath(os.path.join(target_dir, member.name))
-            if not member_path.startswith(abs_target + os.sep) and member_path != abs_target:
+            if member.issym() or member.islnk():
+                raise Exception(f"Refusing symlink/hardlink in tar: {member.name}")
+            dest = os.path.realpath(os.path.join(target_dir, member.name))
+            if not (dest == abs_target or dest.startswith(abs_target + os.sep)):
                 raise Exception(f"Attempted path traversal in tar file: {member.name}")
-        tar.extractall(target_dir)
+            if member.isdir():
+                os.makedirs(dest, exist_ok=True)
+            elif member.isfile():
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with tar.extractfile(member) as src, open(dest, "wb") as dst:
+                    dst.write(src.read())
     os.remove(local_tar)
     logger.info(f"Extracted to {target_dir}, contents: {os.listdir(target_dir)}")
 
@@ -138,6 +145,7 @@ def input_fn(request_body, content_type):
 
 
 def _build_gen_kwargs(parameters):
+    parameters = parameters or {}
     gen_kwargs = {
         "max_new_tokens": parameters.get("max_new_tokens", 256),
         "num_beams": parameters.get("num_beams", 4),
@@ -231,13 +239,21 @@ def predict_fn(data, models):
                     encoded = tokenizer(
                         batch, return_tensors="pt", max_length=512,
                         truncation=True, padding=True
-                    ).input_ids.to(DEVICE)
+                    ).to(DEVICE)
                     with torch.no_grad():
                         if DEVICE == "cuda":
                             with torch.amp.autocast("cuda"):
-                                out = model.generate(encoded, max_length=512)
+                                out = model.generate(
+                                    input_ids=encoded.input_ids,
+                                    attention_mask=encoded.attention_mask,
+                                    max_length=512,
+                                )
                         else:
-                            out = model.generate(encoded, max_length=512)
+                            out = model.generate(
+                                input_ids=encoded.input_ids,
+                                attention_mask=encoded.attention_mask,
+                                max_length=512,
+                            )
                     for j in range(len(batch)):
                         text = tokenizer.decode(out[j], skip_special_tokens=True)
                         all_results.append({"translation_text": text})
