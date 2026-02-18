@@ -246,7 +246,6 @@ def api_plugin_detail(slug: str):
         "thumbnail_url": plugin.get("thumbnail_url", ""),
         "is_plugin": plugin.get("is_plugin", 1),
         "file_size_bytes": plugin.get("file_size_bytes", 0),
-        "source_url": plugin.get("source_url", ""),
         "created_at": plugin.get("created_at"),
         "updated_at": plugin.get("updated_at"),
     }

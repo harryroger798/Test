@@ -1,240 +1,126 @@
 {% extends "base.html" %}
-{% block title %}Admin - WPVault{% endblock %}
+{% block title %}Admin Panel - WPVault{% endblock %}
 {% block content %}
 <section class="admin-section">
     <div class="container">
-        <div id="adminDenied" style="display:none;">
-            <h2>Access Denied</h2>
-            <p>You do not have admin access.</p>
-            <a href="/" class="btn">Go Home</a>
+        <h2>Admin Dashboard</h2>
+        <div class="stats-grid admin-stats" id="statsGrid">
+            <div class="stat-card"><div class="stat-number" id="statPlugins">-</div><div class="stat-label">Plugins</div></div>
+            <div class="stat-card"><div class="stat-number" id="statUsers">-</div><div class="stat-label">Users</div></div>
+            <div class="stat-card"><div class="stat-number" id="statOrders">-</div><div class="stat-label">Orders</div></div>
+            <div class="stat-card"><div class="stat-number" id="statDownloads">-</div><div class="stat-label">Downloads</div></div>
         </div>
-
-        <div id="adminContent" style="display:none;">
-            <h2>Admin Dashboard</h2>
-
-            <div class="stats-grid admin-stats">
-                <div class="stat-card">
-                    <span class="stat-number" id="statPlugins">0</span>
-                    <span class="stat-label">Plugins</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number" id="statUsers">0</span>
-                    <span class="stat-label">Users</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number" id="statOrders">0</span>
-                    <span class="stat-label">Orders</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-number" id="statDownloads">0</span>
-                    <span class="stat-label">Downloads</span>
-                </div>
-            </div>
-
-            <div class="admin-actions">
-                <button class="btn" onclick="triggerSync()" id="syncBtn">Trigger Sync Now</button>
-            </div>
-
-            <div class="admin-panel">
-                <h3>Recent Sync Logs</h3>
-                <div id="syncLogsLoading" class="loading">Loading...</div>
-                <table class="data-table" id="syncLogsTable" style="display:none;">
-                    <thead>
-                        <tr>
-                            <th>Slug</th>
-                            <th>Status</th>
-                            <th>Message</th>
-                            <th>Time</th>
-                        </tr>
-                    </thead>
-                    <tbody id="syncLogsBody"></tbody>
-                </table>
-            </div>
-
-            <div class="admin-panel">
-                <h3>Plugin Management</h3>
-                <div id="pluginsLoading" class="loading">Loading...</div>
-                <table class="data-table" id="adminPluginsTable" style="display:none;">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Slug</th>
-                            <th>Version</th>
-                            <th>Category</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="adminPluginsBody"></tbody>
-                </table>
-            </div>
+        <div class="admin-actions">
+            <button class="btn" id="syncBtn" onclick="triggerSync()">Trigger Sync Now</button>
+        </div>
+        <div class="admin-panel">
+            <h3>Recent Sync Logs</h3>
+            <table class="data-table">
+                <thead><tr><th>Slug</th><th>Status</th><th>Message</th><th>Time</th></tr></thead>
+                <tbody id="syncLogs"><tr><td colspan="4" class="text-muted">Loading...</td></tr></tbody>
+            </table>
+        </div>
+        <div class="admin-panel">
+            <h3>Plugin Management</h3>
+            <table class="data-table">
+                <thead><tr><th>Name</th><th>Slug</th><th>Version</th><th>Category</th><th>Action</th></tr></thead>
+                <tbody id="pluginsList"><tr><td colspan="5" class="text-muted">Loading...</td></tr></tbody>
+            </table>
+            <div class="pagination" id="adminPagination" style="margin-top:20px;"></div>
         </div>
     </div>
 </section>
-
+{% endblock %}
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var token = localStorage.getItem('token');
-    var user = JSON.parse(localStorage.getItem('user') || 'null');
+var token = localStorage.getItem('token');
+if(!token) window.location.href = '/login';
 
-    if (!token || !user || !user.is_admin) {
-        document.getElementById('adminDenied').style.display = 'block';
-        return;
-    }
+function loadStats(){
+    fetch('/api/admin/stats', {headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){return r.json()}).then(function(d){
+        if(!d.success){ window.location.href = '/dashboard'; return; }
+        var s = d.data;
+        document.getElementById('statPlugins').textContent = (s.total_plugins||0).toLocaleString();
+        document.getElementById('statUsers').textContent = (s.total_users||0).toLocaleString();
+        document.getElementById('statOrders').textContent = (s.total_orders||0).toLocaleString();
+        document.getElementById('statDownloads').textContent = (s.total_downloads||0).toLocaleString();
 
-    document.getElementById('adminContent').style.display = 'block';
-    loadAdminStats();
-    loadAdminPlugins();
-});
-
-function loadAdminStats() {
-    var token = localStorage.getItem('token');
-    fetch('/api/admin/stats', {
-        headers: {'Authorization': 'Bearer ' + token}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (!data.success) {
-            document.getElementById('syncLogsLoading').textContent = 'Failed to load stats.';
+        var tbody = document.getElementById('syncLogs');
+        if(!s.recent_sync_logs || s.recent_sync_logs.length === 0){
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted">No sync logs yet</td></tr>';
             return;
         }
-        var d = data.data;
-        document.getElementById('statPlugins').textContent = d.total_plugins;
-        document.getElementById('statUsers').textContent = d.total_users;
-        document.getElementById('statOrders').textContent = d.total_orders;
-        document.getElementById('statDownloads').textContent = d.total_downloads;
+        var html = '';
+        s.recent_sync_logs.forEach(function(l){
+            var statusClass = 'status-' + (l.status||'').toLowerCase().replace(' ','');
+            html += '<tr><td>' + (l.slug||'-') + '</td>';
+            html += '<td><span class="status-badge ' + statusClass + '">' + (l.status||'-') + '</span></td>';
+            html += '<td>' + (l.message||'-') + '</td>';
+            html += '<td>' + formatDate(l.synced_at) + '</td></tr>';
+        });
+        tbody.innerHTML = html;
+    }).catch(function(){ window.location.href = '/dashboard'; });
+}
 
-        document.getElementById('syncLogsLoading').style.display = 'none';
-        if (d.recent_sync_logs && d.recent_sync_logs.length > 0) {
-            document.getElementById('syncLogsTable').style.display = 'table';
-            var tbody = document.getElementById('syncLogsBody');
-            tbody.innerHTML = '';
-            d.recent_sync_logs.forEach(function(log) {
-                var row = document.createElement('tr');
-
-                var slugCell = document.createElement('td');
-                slugCell.textContent = log.slug || '-';
-
-                var statusCell = document.createElement('td');
-                var badge = document.createElement('span');
-                badge.className = 'status-badge status-' + (log.status || '');
-                badge.textContent = log.status || '-';
-                statusCell.appendChild(badge);
-
-                var msgCell = document.createElement('td');
-                msgCell.textContent = log.message || '-';
-
-                var timeCell = document.createElement('td');
-                timeCell.textContent = log.synced_at ? new Date(log.synced_at).toLocaleString() : '-';
-
-                row.append(slugCell, statusCell, msgCell, timeCell);
-                tbody.appendChild(row);
-            });
+function loadAdminPlugins(page){
+    page = page || 1;
+    fetch('/api/admin/plugins?page=' + page, {headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){return r.json()}).then(function(d){
+        if(!d.success) return;
+        var tbody = document.getElementById('pluginsList');
+        if(!d.data.plugins || d.data.plugins.length === 0){
+            tbody.innerHTML = '<tr><td colspan="5" class="text-muted">No plugins</td></tr>';
+            return;
         }
-    })
-    .catch(function() {
-        document.getElementById('syncLogsLoading').textContent = 'Failed to load stats.';
+        var html = '';
+        d.data.plugins.forEach(function(p){
+            html += '<tr><td>' + (p.name||'-') + '</td>';
+            html += '<td>' + (p.slug||'-') + '</td>';
+            html += '<td>' + (p.version||'-') + '</td>';
+            html += '<td>' + (p.category||'-') + '</td>';
+            html += '<td><button class="btn btn-sm btn-danger" onclick="deletePlugin(\'' + p.slug + '\')">Delete</button></td></tr>';
+        });
+        tbody.innerHTML = html;
+
+        var totalPages = Math.ceil((d.data.total||0) / 100);
+        var pag = document.getElementById('adminPagination');
+        if(totalPages <= 1){ pag.innerHTML = ''; return; }
+        var ph = '';
+        for(var i=1;i<=Math.min(totalPages,10);i++){
+            ph += '<button class="page-btn' + (i===page?' active':'') + '" onclick="loadAdminPlugins(' + i + ')">' + i + '</button>';
+        }
+        pag.innerHTML = ph;
     });
 }
 
-function loadAdminPlugins() {
-    var token = localStorage.getItem('token');
-    fetch('/api/admin/plugins', {
-        headers: {'Authorization': 'Bearer ' + token}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        document.getElementById('pluginsLoading').style.display = 'none';
-        if (!data.success) {
-            document.getElementById('pluginsLoading').style.display = 'block';
-            document.getElementById('pluginsLoading').textContent = 'Failed to load plugins.';
-            return;
-        }
-
-        var plugins = data.data.plugins;
-        if (plugins.length > 0) {
-            document.getElementById('adminPluginsTable').style.display = 'table';
-            var tbody = document.getElementById('adminPluginsBody');
-            tbody.innerHTML = '';
-            plugins.forEach(function(p) {
-                var row = document.createElement('tr');
-
-                var nameCell = document.createElement('td');
-                nameCell.textContent = p.name || '-';
-
-                var slugCell = document.createElement('td');
-                slugCell.textContent = p.slug || '-';
-
-                var versionCell = document.createElement('td');
-                versionCell.textContent = p.version || '-';
-
-                var categoryCell = document.createElement('td');
-                categoryCell.textContent = p.category || '-';
-
-                var actionCell = document.createElement('td');
-                var btn = document.createElement('button');
-                btn.className = 'btn btn-sm btn-danger';
-                btn.textContent = 'Delete';
-                btn.addEventListener('click', function () { deletePlugin(p.slug); });
-                actionCell.appendChild(btn);
-
-                row.append(nameCell, slugCell, versionCell, categoryCell, actionCell);
-                tbody.appendChild(row);
-            });
-        }
-    })
-    .catch(function() {
-        document.getElementById('pluginsLoading').textContent = 'Failed to load plugins.';
-    });
-}
-
-function triggerSync() {
-    var token = localStorage.getItem('token');
+function triggerSync(){
     var btn = document.getElementById('syncBtn');
-    btn.disabled = true;
-    btn.textContent = 'Starting sync...';
-
-    fetch('/api/admin/sync', {
-        method: 'POST',
-        headers: {'Authorization': 'Bearer ' + token}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            btn.textContent = 'Sync started!';
-            setTimeout(function() {
-                btn.disabled = false;
-                btn.textContent = 'Trigger Sync Now';
-            }, 5000);
+    btn.disabled = true; btn.textContent = 'Syncing...';
+    fetch('/api/admin/sync', {method:'POST', headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.success){
+            btn.textContent = 'Sync Started';
+            setTimeout(function(){ loadStats(); btn.disabled = false; btn.textContent = 'Trigger Sync Now'; }, 5000);
         } else {
-            btn.textContent = 'Failed to start sync';
-            btn.disabled = false;
+            alert(d.error || 'Sync failed');
+            btn.disabled = false; btn.textContent = 'Trigger Sync Now';
         }
-    })
-    .catch(function() {
-        btn.textContent = 'Error';
-        btn.disabled = false;
+    }).catch(function(){
+        btn.disabled = false; btn.textContent = 'Trigger Sync Now';
     });
 }
 
-function deletePlugin(slug) {
-    if (!confirm('Delete plugin "' + slug + '"? This cannot be undone.')) return;
-    var token = localStorage.getItem('token');
-    fetch('/api/admin/plugins/' + encodeURIComponent(slug), {
-        method: 'DELETE',
-        headers: {'Authorization': 'Bearer ' + token}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            loadAdminPlugins();
-            loadAdminStats();
-        } else {
-            alert(data.error || 'Delete failed');
-        }
-    })
-    .catch(function() {
-        alert('Network error');
+function deletePlugin(slug){
+    if(!confirm('Delete plugin: ' + slug + '?')) return;
+    fetch('/api/admin/plugins/' + slug, {method:'DELETE', headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){return r.json()}).then(function(d){
+        if(d.success){ loadAdminPlugins(1); loadStats(); }
+        else alert(d.error || 'Delete failed');
     });
 }
+
+loadStats();
+loadAdminPlugins(1);
 </script>
 {% endblock %}

@@ -1,193 +1,120 @@
 {% extends "base.html" %}
-{% block title %}Plugins - WPVault{% endblock %}
+{% block title %}Browse Plugins & Themes - WPVault{% endblock %}
 {% block content %}
 <section class="plugins-section">
     <div class="container">
-        <h2>Browse Plugins & Themes</h2>
-
+        <div class="plugins-header">
+            <h2>Browse Collection</h2>
+            <p><span class="plugins-count" id="totalCount">Loading...</span> premium plugins & themes available</p>
+        </div>
         <div class="filters">
-            <input type="text" id="searchInput" placeholder="Search plugins..." class="search-input">
-            <select id="categoryFilter" class="category-select">
+            <input type="text" class="search-input" id="searchInput" placeholder="Search plugins and themes..." oninput="debouncedSearch()">
+            <select class="category-select" id="categorySelect" onchange="loadPlugins(1)">
                 <option value="">All Categories</option>
             </select>
         </div>
-
-        <div id="pluginsLoading" class="loading">Loading plugins...</div>
-        <div class="plugins-grid" id="pluginsGrid"></div>
-
+        <div class="plugins-grid" id="pluginsGrid">
+            <div class="loading">Loading plugins...</div>
+        </div>
         <div class="pagination" id="pagination"></div>
     </div>
 </section>
-
+{% endblock %}
+{% block scripts %}
 <script>
 var currentPage = 1;
-var currentSearch = '';
-var currentCategory = '';
+var searchTimer = null;
 
-function loadPlugins(page) {
-    currentPage = page || 1;
-    var search = document.getElementById('searchInput').value;
-    var category = document.getElementById('categoryFilter').value;
-    currentSearch = search;
-    currentCategory = category;
+function debouncedSearch(){
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function(){ loadPlugins(1); }, 350);
+}
 
-    var url = '/api/plugins?page=' + currentPage;
-    if (search) url += '&search=' + encodeURIComponent(search);
-    if (category) url += '&category=' + encodeURIComponent(category);
+function loadPlugins(page){
+    currentPage = page;
+    var search = document.getElementById('searchInput').value.trim();
+    var category = document.getElementById('categorySelect').value;
+    var url = '/api/plugins?page=' + page;
+    if(search) url += '&search=' + encodeURIComponent(search);
+    if(category) url += '&category=' + encodeURIComponent(category);
 
-    document.getElementById('pluginsLoading').style.display = 'block';
-    document.getElementById('pluginsGrid').innerHTML = '';
+    document.getElementById('pluginsGrid').innerHTML = '<div class="loading">Loading...</div>';
 
-    fetch(url)
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        document.getElementById('pluginsLoading').style.display = 'none';
-        if (!data.success) return;
+    fetch(url).then(function(r){return r.json()}).then(function(d){
+        if(!d.success) return;
+        var data = d.data;
+        document.getElementById('totalCount').textContent = data.total.toLocaleString();
 
-        var grid = document.getElementById('pluginsGrid');
-        var plugins = data.data.plugins;
-        var total = data.data.total;
-        var perPage = data.data.per_page;
-
-        if (data.data.categories) {
-            var select = document.getElementById('categoryFilter');
-            var currentVal = select.value;
-            while (select.firstChild) {
-                select.removeChild(select.firstChild);
-            }
-            var defaultOpt = document.createElement('option');
-            defaultOpt.value = '';
-            defaultOpt.textContent = 'All Categories';
-            select.appendChild(defaultOpt);
-
-            data.data.categories.forEach(function(cat) {
-                var opt = document.createElement('option');
-                opt.value = cat;
-                opt.textContent = cat;
-                if (cat === currentVal) opt.selected = true;
-                select.appendChild(opt);
+        var sel = document.getElementById('categorySelect');
+        if(sel.options.length <= 1 && data.categories){
+            data.categories.forEach(function(c){
+                var o = document.createElement('option');
+                o.value = c; o.textContent = c;
+                sel.appendChild(o);
             });
         }
 
-        if (plugins.length === 0) {
-            var msg = document.createElement('p');
-            msg.className = 'text-muted';
-            msg.textContent = 'No plugins found.';
-            grid.appendChild(msg);
+        var grid = document.getElementById('pluginsGrid');
+        if(!data.plugins || data.plugins.length === 0){
+            grid.innerHTML = '<div class="empty-state"><p>No plugins found</p></div>';
+            document.getElementById('pagination').innerHTML = '';
             return;
         }
 
-        plugins.forEach(function(p) {
-            var card = document.createElement('div');
-            card.className = 'plugin-card';
-
-            var sizeKB = p.file_size_bytes ? Math.round(p.file_size_bytes / 1024) : 0;
+        var html = '';
+        data.plugins.forEach(function(p){
             var typeLabel = p.is_plugin ? 'Plugin' : 'Theme';
-            var slug = p.slug || '';
-            var encodedSlug = encodeURIComponent(slug);
-
-            var thumb = document.createElement('div');
-            thumb.className = 'plugin-thumb';
-            if (p.thumbnail_url) {
-                var img = document.createElement('img');
-                img.src = p.thumbnail_url;
-                img.alt = p.name || 'Plugin thumbnail';
-                thumb.appendChild(img);
+            var typeClass = p.is_plugin ? 'type-plugin' : 'type-theme';
+            var thumb = '';
+            if(p.thumbnail_url){
+                thumb = '<img src="' + p.thumbnail_url + '" alt="' + (p.name||'').replace(/"/g,'&quot;') + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder>' + (p.name||'?')[0].toUpperCase() + '</span>\';">';
             } else {
-                var placeholder = document.createElement('div');
-                placeholder.className = 'thumb-placeholder';
-                placeholder.textContent = typeLabel.charAt(0);
-                thumb.appendChild(placeholder);
+                thumb = '<span class="thumb-placeholder">' + (p.name||'?')[0].toUpperCase() + '</span>';
             }
-
-            var info = document.createElement('div');
-            info.className = 'plugin-info';
-
-            var title = document.createElement('h3');
-            title.className = 'plugin-name';
-            var titleLink = document.createElement('a');
-            titleLink.href = '/plugins/' + encodedSlug;
-            titleLink.textContent = p.name || '-';
-            title.appendChild(titleLink);
-
-            var versionSpan = document.createElement('span');
-            versionSpan.className = 'plugin-version';
-            versionSpan.textContent = 'v' + (p.version || '?');
-
-            info.appendChild(title);
-            info.appendChild(versionSpan);
-
-            if (p.category) {
-                var catSpan = document.createElement('span');
-                catSpan.className = 'plugin-category';
-                catSpan.textContent = p.category;
-                info.appendChild(catSpan);
-            }
-
-            var typeSpan = document.createElement('span');
-            typeSpan.className = 'plugin-type';
-            typeSpan.textContent = typeLabel;
-            info.appendChild(typeSpan);
-
-            if (sizeKB > 0) {
-                var sizeSpan = document.createElement('span');
-                sizeSpan.className = 'plugin-size';
-                sizeSpan.textContent = sizeKB + ' KB';
-                info.appendChild(sizeSpan);
-            }
-
-            var action = document.createElement('a');
-            action.href = '/plugins/' + encodedSlug;
-            action.className = 'btn btn-sm btn-full';
-            action.textContent = 'View Details';
-
-            card.appendChild(thumb);
-            card.appendChild(info);
-            card.appendChild(action);
-
-            grid.appendChild(card);
+            html += '<div class="plugin-card">';
+            html += '<div class="plugin-thumb"><span class="plugin-type-badge ' + typeClass + '">' + typeLabel + '</span>' + thumb + '</div>';
+            html += '<div class="plugin-info">';
+            html += '<div class="plugin-name"><a href="/plugins/' + p.slug + '">' + (p.name||p.slug) + '</a></div>';
+            html += '<div class="plugin-meta-row">';
+            if(p.version && p.version !== 'unknown') html += '<span class="plugin-meta-tag">v' + p.version + '</span>';
+            if(p.category) html += '<span class="plugin-meta-tag">' + p.category + '</span>';
+            html += '</div></div></div>';
         });
+        grid.innerHTML = html;
 
-        var totalPages = Math.ceil(total / perPage);
-        renderPagination(totalPages);
-    })
-    .catch(function() {
-        document.getElementById('pluginsLoading').style.display = 'none';
+        renderPagination(data.total, data.page, data.per_page);
+    }).catch(function(err){
+        document.getElementById('pluginsGrid').innerHTML = '<div class="empty-state"><p>Error loading plugins</p></div>';
     });
 }
 
-function renderPagination(totalPages) {
-    var pag = document.getElementById('pagination');
-    pag.innerHTML = '';
-    if (totalPages <= 1) return;
+function renderPagination(total, page, perPage){
+    var totalPages = Math.ceil(total / perPage);
+    var el = document.getElementById('pagination');
+    if(totalPages <= 1){ el.innerHTML = ''; return; }
 
-    for (var i = 1; i <= totalPages; i++) {
-        var btn = document.createElement('button');
-        btn.textContent = i;
-        btn.className = 'page-btn' + (i === currentPage ? ' active' : '');
-        btn.onclick = (function(pg) { return function() { loadPlugins(pg); }; })(i);
-        pag.appendChild(btn);
+    var html = '';
+    if(page > 1) html += '<button class="page-btn" onclick="loadPlugins(' + (page-1) + ')">&laquo;</button>';
+
+    var start = Math.max(1, page - 3);
+    var end = Math.min(totalPages, page + 3);
+
+    if(start > 1){
+        html += '<button class="page-btn" onclick="loadPlugins(1)">1</button>';
+        if(start > 2) html += '<span class="page-ellipsis">...</span>';
     }
+    for(var i = start; i <= end; i++){
+        html += '<button class="page-btn' + (i===page?' active':'') + '" onclick="loadPlugins(' + i + ')">' + i + '</button>';
+    }
+    if(end < totalPages){
+        if(end < totalPages - 1) html += '<span class="page-ellipsis">...</span>';
+        html += '<button class="page-btn" onclick="loadPlugins(' + totalPages + ')">' + totalPages + '</button>';
+    }
+
+    if(page < totalPages) html += '<button class="page-btn" onclick="loadPlugins(' + (page+1) + ')">&raquo;</button>';
+    el.innerHTML = html;
 }
 
-document.getElementById('searchInput').addEventListener('input', debounce(function() {
-    loadPlugins(1);
-}, 400));
-
-document.getElementById('categoryFilter').addEventListener('change', function() {
-    loadPlugins(1);
-});
-
-function debounce(fn, delay) {
-    var timer;
-    return function() {
-        clearTimeout(timer);
-        timer = setTimeout(fn, delay);
-    };
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    loadPlugins(1);
-});
+loadPlugins(1);
 </script>
 {% endblock %}

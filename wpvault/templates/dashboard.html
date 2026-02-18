@@ -3,109 +3,68 @@
 {% block content %}
 <section class="dashboard-section">
     <div class="container">
-        <div id="dashboardContent" style="display:none;">
-            <h2>Welcome, <span id="userEmail"></span></h2>
-
-            <div class="plan-card">
+        <h2 class="dash-greeting" id="greeting">Welcome back</h2>
+        <div class="plan-card" id="planCard">
+            <div class="plan-info">
                 <h3>Your Plan</h3>
-                <div class="plan-info">
-                    <span class="plan-badge" id="planBadge">Free</span>
-                    <span id="planExpiry"></span>
-                </div>
-                <div id="upgradeSection">
-                    <p>Upgrade to Premium for unlimited downloads.</p>
-                    <a href="/checkout" class="btn">Upgrade to Premium - $9.99/year</a>
-                </div>
+                <span class="plan-badge" id="planBadge">Free</span>
             </div>
-
-            <div class="downloads-section">
-                <h3>Download History</h3>
-                <div id="downloadsLoading" class="loading">Loading...</div>
-                <table class="data-table" id="downloadsTable" style="display:none;">
-                    <thead>
-                        <tr>
-                            <th>Plugin</th>
-                            <th>Version</th>
-                            <th>Downloaded</th>
-                        </tr>
-                    </thead>
-                    <tbody id="downloadsBody"></tbody>
-                </table>
-                <p id="noDownloads" style="display:none;" class="text-muted">No downloads yet.</p>
+            <p class="plan-expiry" id="planExpiry"></p>
+            <div style="margin-top:16px;" id="upgradeWrap">
+                <a href="/checkout" class="btn">Upgrade to Premium</a>
             </div>
         </div>
-
-        <div id="loginPrompt" style="display:none;">
-            <h2>Please Login</h2>
-            <p>You need to be logged in to view your dashboard.</p>
-            <a href="/login" class="btn">Login</a>
+        <div class="downloads-section">
+            <h3>Download History</h3>
+            <table class="data-table" id="downloadsTable">
+                <thead><tr><th>Plugin</th><th>Downloaded</th></tr></thead>
+                <tbody id="downloadsBody">
+                    <tr><td colspan="2" class="text-muted">Loading...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </section>
-
+{% endblock %}
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function(){
     var token = localStorage.getItem('token');
-    var user = JSON.parse(localStorage.getItem('user') || 'null');
+    if(!token){ window.location.href = '/login'; return; }
 
-    if (!token || !user) {
-        document.getElementById('loginPrompt').style.display = 'block';
-        return;
-    }
-
-    document.getElementById('dashboardContent').style.display = 'block';
-    document.getElementById('userEmail').textContent = user.email;
-
-    var planBadge = document.getElementById('planBadge');
-    var planExpiry = document.getElementById('planExpiry');
-    var upgradeSection = document.getElementById('upgradeSection');
-
-    if (user.plan === 'premium') {
-        planBadge.textContent = 'Premium';
-        planBadge.classList.add('premium');
-        var expiry = user.plan_expires_at ? new Date(user.plan_expires_at).toLocaleDateString() : 'N/A';
-        planExpiry.textContent = 'Expires: ' + expiry;
-        upgradeSection.style.display = 'none';
-    } else {
-        planBadge.textContent = 'Free';
-        upgradeSection.style.display = 'block';
-    }
-
-    fetch('/api/user/downloads', {
-        headers: {'Authorization': 'Bearer ' + token}
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        document.getElementById('downloadsLoading').style.display = 'none';
-        if (data.success && data.data.downloads.length > 0) {
-            document.getElementById('downloadsTable').style.display = 'table';
-            var tbody = document.getElementById('downloadsBody');
-            data.data.downloads.forEach(function(d) {
-                var row = document.createElement('tr');
-
-                var nameTd = document.createElement('td');
-                var link = document.createElement('a');
-                link.href = '/plugins/' + encodeURIComponent(d.plugin_slug || '');
-                link.textContent = d.plugin_name || 'Unknown';
-                nameTd.appendChild(link);
-
-                var versionTd = document.createElement('td');
-                versionTd.textContent = d.plugin_version || '-';
-
-                var dateTd = document.createElement('td');
-                dateTd.textContent = new Date(d.downloaded_at).toLocaleDateString();
-
-                row.append(nameTd, versionTd, dateTd);
-                tbody.appendChild(row);
-            });
+    fetch('/api/me', {headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){return r.json()}).then(function(d){
+        if(!d.success){ window.location.href = '/login'; return; }
+        var u = d.data;
+        document.getElementById('greeting').textContent = 'Welcome, ' + u.email.split('@')[0];
+        var badge = document.getElementById('planBadge');
+        if(u.plan === 'premium'){
+            badge.textContent = 'Premium';
+            badge.classList.add('premium');
+            document.getElementById('upgradeWrap').style.display = 'none';
+            if(u.plan_expires_at){
+                document.getElementById('planExpiry').textContent = 'Expires: ' + formatDate(u.plan_expires_at);
+            }
         } else {
-            document.getElementById('noDownloads').style.display = 'block';
+            badge.textContent = 'Free';
+            document.getElementById('planExpiry').textContent = 'Upgrade to download plugins and themes.';
         }
-    })
-    .catch(function() {
-        document.getElementById('downloadsLoading').style.display = 'none';
-        document.getElementById('noDownloads').style.display = 'block';
-    });
-});
+    }).catch(function(){ window.location.href = '/login'; });
+
+    fetch('/api/user/downloads', {headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){return r.json()}).then(function(d){
+        var tbody = document.getElementById('downloadsBody');
+        if(!d.success || !d.data.downloads || d.data.downloads.length === 0){
+            tbody.innerHTML = '<tr><td colspan="2" class="text-muted">No downloads yet</td></tr>';
+            return;
+        }
+        var html = '';
+        d.data.downloads.forEach(function(dl){
+            html += '<tr><td>' + (dl.plugin_name || dl.plugin_id || '-') + '</td>';
+            html += '<td>' + formatDate(dl.downloaded_at) + '</td></tr>';
+        });
+        tbody.innerHTML = html;
+    }).catch(function(){});
+})();
 </script>
 {% endblock %}
