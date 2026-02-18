@@ -154,6 +154,7 @@ def process_single_item(item: dict) -> str:
         if existing:
             old_version = existing.get("version", "unknown")
             if not database.update_plugin(slug, plugin_data):
+                storage.delete_file(object_key)
                 database.log_sync(slug, "failed", "DB update failed")
                 return "failed"
             if old_key_to_delete:
@@ -162,7 +163,10 @@ def process_single_item(item: dict) -> str:
             notifier.notify_updated_plugin(name, old_version, version)
             status = "updated"
         else:
-            database.insert_plugin(plugin_data)
+            if not database.insert_plugin(plugin_data):
+                storage.delete_file(object_key)
+                database.log_sync(slug, "failed", "DB insert failed")
+                return "failed"
             database.log_sync(slug, "new", f"New plugin added: {name} v{version}")
             notifier.notify_new_plugin(name, version, item.get("category", ""))
             status = "new"

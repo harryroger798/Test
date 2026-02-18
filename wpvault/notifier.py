@@ -30,9 +30,9 @@ def notify(message: str) -> None:
 def notify_new_plugin(name: str, version: str, category: str) -> None:
     message = (
         f"<b>New Plugin Added</b>\n"
-        f"Name: {name}\n"
-        f"Version: {version}\n"
-        f"Category: {category}"
+        f"Name: {html.escape(name)}\n"
+        f"Version: {html.escape(version)}\n"
+        f"Category: {html.escape(category)}"
     )
     notify(message)
 
@@ -40,8 +40,8 @@ def notify_new_plugin(name: str, version: str, category: str) -> None:
 def notify_updated_plugin(name: str, old_version: str, new_version: str) -> None:
     message = (
         f"<b>Plugin Updated</b>\n"
-        f"Name: {name}\n"
-        f"Version: {old_version} -> {new_version}"
+        f"Name: {html.escape(name)}\n"
+        f"Version: {html.escape(old_version)} -> {html.escape(new_version)}"
     )
     notify(message)
 
@@ -76,7 +76,7 @@ def notify_session_failed() -> None:
 def notify_corrupt_file(slug: str) -> None:
     message = (
         f"<b>Corrupt File Detected</b>\n"
-        f"Plugin: {slug}\n"
+        f"Plugin: {html.escape(slug)}\n"
         f"File deleted, skipping upload"
     )
     notify(message)

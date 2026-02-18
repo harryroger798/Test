@@ -93,7 +93,10 @@ function loadAdminStats() {
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (!data.success) return;
+        if (!data.success) {
+            document.getElementById('syncLogsLoading').textContent = 'Failed to load stats.';
+            return;
+        }
         var d = data.data;
         document.getElementById('statPlugins').textContent = d.total_plugins;
         document.getElementById('statUsers').textContent = d.total_users;
@@ -141,7 +144,11 @@ function loadAdminPlugins() {
     .then(function(r) { return r.json(); })
     .then(function(data) {
         document.getElementById('pluginsLoading').style.display = 'none';
-        if (!data.success) return;
+        if (!data.success) {
+            document.getElementById('pluginsLoading').style.display = 'block';
+            document.getElementById('pluginsLoading').textContent = 'Failed to load plugins.';
+            return;
+        }
 
         var plugins = data.data.plugins;
         if (plugins.length > 0) {

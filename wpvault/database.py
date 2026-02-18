@@ -1,7 +1,10 @@
 import sqlite3
 import os
+import logging
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -81,24 +84,31 @@ def init_db():
                 on_delete = (r["on_delete"] or "").upper()
                 if on_delete != "CASCADE":
                     cursor.execute("PRAGMA foreign_keys=OFF")
-                    cursor.execute("ALTER TABLE downloads RENAME TO downloads_old")
-                    cursor.execute(
-                        "CREATE TABLE downloads (\n"
-                        "    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n"
-                        "    user_id TEXT REFERENCES users(id),\n"
-                        "    plugin_id TEXT REFERENCES plugins(id) ON DELETE CASCADE,\n"
-                        "    downloaded_at TEXT DEFAULT (datetime('now'))\n"
-                        ");"
-                    )
-                    cursor.execute(
-                        "INSERT INTO downloads (id, user_id, plugin_id, downloaded_at) "
-                        "SELECT id, user_id, plugin_id, downloaded_at FROM downloads_old"
-                    )
-                    cursor.execute("DROP TABLE downloads_old")
-                    cursor.execute("PRAGMA foreign_keys=ON")
-                    conn.commit()
+                    try:
+                        conn.execute("BEGIN IMMEDIATE")
+                        cursor.execute("ALTER TABLE downloads RENAME TO downloads_old")
+                        cursor.execute(
+                            "CREATE TABLE downloads (\n"
+                            "    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n"
+                            "    user_id TEXT REFERENCES users(id),\n"
+                            "    plugin_id TEXT REFERENCES plugins(id) ON DELETE CASCADE,\n"
+                            "    downloaded_at TEXT DEFAULT (datetime('now'))\n"
+                            ");"
+                        )
+                        cursor.execute(
+                            "INSERT INTO downloads (id, user_id, plugin_id, downloaded_at) "
+                            "SELECT id, user_id, plugin_id, downloaded_at FROM downloads_old"
+                        )
+                        cursor.execute("DROP TABLE downloads_old")
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()
+                        logger.exception("FK migration failed, rolled back")
+                    finally:
+                        cursor.execute("PRAGMA foreign_keys=ON")
                 break
     except Exception:
+        logger.exception("FK migration check failed")
         try:
             cursor.execute("PRAGMA foreign_keys=ON")
         except Exception:
@@ -107,6 +117,10 @@ def init_db():
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_password = os.getenv("ADMIN_PASSWORD")
     if admin_email and admin_password and not get_user_by_email(admin_email):
+        if len(admin_password) < 12:
+            logger.warning(
+                "ADMIN_PASSWORD is shorter than 12 characters - consider using a stronger password"
+            )
         from auth import hash_password
         hashed = hash_password(admin_password)
         cursor.execute(

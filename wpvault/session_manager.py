@@ -1,6 +1,10 @@
 import os
 import json
+import logging
+from contextlib import contextmanager
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -59,12 +63,13 @@ def login_and_save_session() -> bool:
                 browser.close()
                 return False
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Login failed")
         try:
             import notifier
             notifier.notify_session_failed()
         except Exception:
-            pass
+            logger.exception("Failed to send session failure notification")
         return False
 
 
@@ -120,6 +125,7 @@ def is_session_valid() -> bool:
         return False
 
 
+@contextmanager
 def get_authenticated_page():
     from playwright.sync_api import sync_playwright
     from playwright_stealth import stealth_sync
@@ -127,7 +133,8 @@ def get_authenticated_page():
     if not is_session_valid():
         success = login_and_save_session()
         if not success:
-            return None, None, None, None
+            yield None, None, None, None
+            return
 
     p = None
     browser = None
@@ -141,8 +148,11 @@ def get_authenticated_page():
         load_session(context)
         page = context.new_page()
         stealth_sync(page)
-        return p, browser, context, page
+        yield p, browser, context, page
     except Exception:
+        logger.exception("Failed to create authenticated page")
+        yield None, None, None, None
+    finally:
         try:
             if browser:
                 browser.close()
@@ -153,4 +163,3 @@ def get_authenticated_page():
                 p.stop()
         except Exception:
             pass
-        return None, None, None, None

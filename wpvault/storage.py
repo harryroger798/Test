@@ -15,6 +15,19 @@ IDRIVE_ENDPOINT = os.getenv("IDRIVE_ENDPOINT", "")
 IDRIVE_BUCKET = os.getenv("IDRIVE_BUCKET", "plugins-store")
 DB_PATH = os.getenv("DB_PATH", "/home/app/database.db")
 
+_missing_config = []
+if not IDRIVE_ACCESS_KEY:
+    _missing_config.append("IDRIVE_ACCESS_KEY")
+if not IDRIVE_SECRET_KEY:
+    _missing_config.append("IDRIVE_SECRET_KEY")
+if not IDRIVE_ENDPOINT:
+    _missing_config.append("IDRIVE_ENDPOINT")
+if _missing_config:
+    logger.warning(
+        "Missing storage configuration: %s. Storage operations will fail.",
+        ", ".join(_missing_config),
+    )
+
 
 def _get_client():
     return boto3.client(

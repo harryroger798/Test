@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 import threading
 from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException, Depends
@@ -21,11 +22,15 @@ import watcher
 app = FastAPI(title="WPVault", version="1.0.0")
 
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
-cors_origins = ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"]
+if not ALLOWED_ORIGINS:
+    logging.getLogger(__name__).warning(
+        "CORS_ALLOW_ORIGINS not set - CORS will reject cross-origin requests. "
+        "Set CORS_ALLOW_ORIGINS to allow specific origins."
+    )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=bool(ALLOWED_ORIGINS),
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,6 +83,11 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+PLAN_PRICING = {
+    "yearly": {"amount": 9.99, "days": 365},
+}
 
 
 class CheckoutRequest(BaseModel):
@@ -284,8 +294,14 @@ def api_plugin_download(slug: str, request: Request):
 def api_checkout(body: CheckoutRequest, request: Request):
     user = get_current_user_from_request(request)
 
-    amount = 9.99
-    days = 365
+    pricing = PLAN_PRICING.get(body.plan)
+    if not pricing:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": f"Unknown plan: {body.plan}. Available: {', '.join(PLAN_PRICING)}"}
+        )
+    amount = pricing["amount"]
+    days = pricing["days"]
 
     result = payments.create_invoice(user["id"], amount, days)
     if "error" in result:
@@ -326,10 +342,14 @@ async def webhook_btcpay(request: Request):
     return JSONResponse(content={"success": True, "data": {"status": "ok"}})
 
 
+_sync_lock = threading.Lock()
+_sync_running = False
+
+
 @app.get("/api/admin/stats")
 def api_admin_stats(request: Request):
-    user = get_admin_user(request)
-    total_plugins = database.get_plugin_count()
+    _ = get_admin_user(request)
+    total_plugins= database.get_plugin_count()
     total_users = database.get_total_users()
     total_orders = database.get_total_orders()
     total_downloads = database.get_total_downloads()
@@ -349,7 +369,7 @@ def api_admin_stats(request: Request):
 
 @app.get("/api/admin/plugins")
 def api_admin_plugins(request: Request, page: int = 1):
-    user = get_admin_user(request)
+    _ = get_admin_user(request)
     plugins = database.get_all_plugins(page=page, per_page=100)
     total = database.get_plugin_count()
     return JSONResponse(content={
@@ -360,7 +380,7 @@ def api_admin_plugins(request: Request, page: int = 1):
 
 @app.delete("/api/admin/plugins/{slug}")
 def api_admin_delete_plugin(slug: str, request: Request):
-    user = get_admin_user(request)
+    _ = get_admin_user(request)
     plugin = database.get_plugin_by_slug(slug)
     if not plugin:
         return JSONResponse(
@@ -384,15 +404,39 @@ def api_admin_delete_plugin(slug: str, request: Request):
 
 @app.post("/api/admin/sync")
 def api_admin_sync(request: Request):
-    user = get_admin_user(request)
-    thread = threading.Thread(target=watcher.run_sync, daemon=True)
+    global _sync_running
+    _ = get_admin_user(request)
+
+    if not _sync_lock.acquire(blocking=False):
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error": "Sync already in progress"}
+        )
+
+    if _sync_running:
+        _sync_lock.release()
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error": "Sync already in progress"}
+        )
+
+    def _run_sync_with_lock():
+        global _sync_running
+        try:
+            _sync_running = True
+            watcher.run_sync()
+        finally:
+            _sync_running = False
+            _sync_lock.release()
+
+    thread = threading.Thread(target=_run_sync_with_lock, daemon=True)
     thread.start()
     return JSONResponse(content={"success": True, "data": {"status": "sync started"}})
 
 
 @app.get("/api/admin/files")
 def api_admin_files(request: Request):
-    user = get_admin_user(request)
+    _ = get_admin_user(request)
     files = storage.list_all_files()
     return JSONResponse(content={"success": True, "data": {"files": files}})
 
