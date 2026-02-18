@@ -1908,12 +1908,18 @@ class MLModelService:
             chunk_scores = list(executor.map(_score_chunk, chunks))
         
         chunked_ai = float(np.mean(chunk_scores))
+        divergence = abs(single_ai - chunked_ai)
         if len(chunks) > 3:
-            blended_ai = 0.15 * single_ai + 0.85 * chunked_ai
+            if single_ai > 0.85 and chunked_ai < 0.15 and divergence > 0.70:
+                blended_ai = 0.60 * single_ai + 0.40 * chunked_ai
+            elif single_ai < 0.15 and chunked_ai > 0.85 and divergence > 0.70:
+                blended_ai = 0.30 * single_ai + 0.70 * chunked_ai
+            else:
+                blended_ai = 0.15 * single_ai + 0.85 * chunked_ai
         else:
             blended_ai = (single_ai + chunked_ai) / 2.0
         
-        logger.info(f"RoBERTa chunked: single={single_ai*100:.1f}%, chunked_avg={chunked_ai*100:.1f}% ({len(chunks)} chunks), blended={blended_ai*100:.1f}%")
+        logger.info(f"RoBERTa chunked: single={single_ai*100:.1f}%, chunked_avg={chunked_ai*100:.1f}% ({len(chunks)} chunks), divergence={divergence*100:.1f}%, blended={blended_ai*100:.1f}%")
         logger.info(f"Chunk scores: {[round(s*100, 1) for s in chunk_scores]}")
         
         return {
@@ -1960,12 +1966,20 @@ class MLModelService:
         triboost_all_high = all(p > 0.90 for p in triboost_ai_probs)
         chunk_gap = roberta_chunked_score - roberta_single
         
-        if triboost_all_high and num_chunks > 3 and roberta_chunked_score > 0.30:
+        if triboost_all_high and roberta_single > 0.85 and roberta_chunked_score < 0.15:
+            w_roberta, w_triboost = 0.25, 0.75
+            roberta_blended = roberta_single
+            strategy_used = "consensus_ai_single_triboost_agree"
+        elif triboost_all_high and num_chunks > 3 and roberta_chunked_score > 0.30:
             w_roberta, w_triboost = 0.40, 0.60
             strategy_used = "consensus_ai_strong_chunks"
         elif triboost_all_high and num_chunks > 3 and chunk_gap > 0.03 and roberta_chunked_score > 0.05:
             w_roberta, w_triboost = 0.30, 0.70
             strategy_used = "consensus_ai_body_gap"
+        elif triboost_all_high and roberta_single > 0.70 and roberta_blended < 0.30:
+            w_roberta, w_triboost = 0.30, 0.70
+            roberta_blended = roberta_single
+            strategy_used = "consensus_ai_single_override"
         elif roberta_blended < 0.10:
             w_roberta, w_triboost = 0.98, 0.02
             strategy_used = "roberta_primary_confident_human"
