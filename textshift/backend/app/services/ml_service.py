@@ -1602,7 +1602,7 @@ class MLModelService:
         logger.info(f"Humanize single: backend={backend}, peak={is_peak_hours()}")
 
         if backend == "modal":
-            modal_result = self._humanize_chunk_via_modal(sentence)
+            modal_result = self._humanize_chunk_via_modal(sentence, mode=mode)
             if modal_result:
                 model_output = modal_result
                 if use_post_processor:

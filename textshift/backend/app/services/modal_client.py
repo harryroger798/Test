@@ -174,6 +174,12 @@ class ModalHumanizerClient:
             logger.warning(f"Modal single humanize failed: {e}")
             return None
 
+    def close(self) -> None:
+        """Close the persistent HTTP client to release sockets."""
+        if self._http_client is not None:
+            self._http_client.close()
+            self._http_client = None
+
     def health_check(self) -> bool:
         """Check if Modal endpoint is responsive."""
         url = self._get_endpoint_url()
