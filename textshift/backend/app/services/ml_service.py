@@ -2,6 +2,7 @@ import os
 import gc
 import re
 import json
+import time
 import hashlib
 import torch
 import torch.nn as nn
@@ -11,6 +12,7 @@ import httpx
 import asyncio
 import boto3
 import pickle
+from types import MappingProxyType
 from botocore.config import Config
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
@@ -1544,7 +1546,7 @@ class MLModelService:
         result = ' '.join(word_tokens)
         return result.strip()
 
-    _MODE_TEMPS: dict = {'academic': 0.7, 'professional': 0.75, 'casual': 0.85}
+    _MODE_TEMPS: MappingProxyType = MappingProxyType({'academic': 0.7, 'professional': 0.75, 'casual': 0.85})
 
     def _humanize_chunk_via_modal(self, chunk: str, parameters: Optional[Dict[str, Any]] = None, mode: str = 'casual') -> Optional[str]:
         """Humanize a single chunk via Modal serverless GPU endpoint."""
@@ -2603,10 +2605,9 @@ class MLModelService:
                 "no_repeat_ngram_size": 3,
             }
             try:
-                import time as _time
-                t0 = _time.time()
+                t0 = time.time()
                 batch_results = modal_client.humanize_batch(batch_inputs, parameters, timeout=300.0)
-                elapsed = _time.time() - t0
+                elapsed = time.time() - t0
                 logger.info(f"Modal batch completed: {len(non_empty_texts)} paragraphs in {elapsed:.1f}s")
                 failed_indices = []
                 for j, result in enumerate(batch_results):
@@ -2660,12 +2661,11 @@ class MLModelService:
                 "no_repeat_ngram_size": 3,
             }
             try:
-                import time as _time
-                t0 = _time.time()
+                t0 = time.time()
                 batch_results = sagemaker_client.invoke_text2text_server_batch(
                     "humanizer", batch_inputs, parameters
                 )
-                elapsed = _time.time() - t0
+                elapsed = time.time() - t0
                 logger.info(f"SageMaker server batch completed: {len(non_empty_texts)} paragraphs in {elapsed:.1f}s")
                 failed_indices = []
                 for j, result in enumerate(batch_results):
