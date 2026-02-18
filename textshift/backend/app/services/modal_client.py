@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 import httpx
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
@@ -59,11 +60,14 @@ class ModalHumanizerClient:
     """
     _instance = None
     _http_client: Optional[httpx.Client] = None
+    _lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._http_client = httpx.Client(timeout=180.0)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._http_client = httpx.Client(timeout=180.0)
         return cls._instance
 
     def _get_client(self) -> httpx.Client:
@@ -74,7 +78,7 @@ class ModalHumanizerClient:
 
     def _get_endpoint_url(self) -> str:
         """Get Modal endpoint URL from settings or use default."""
-        return getattr(settings, "MODAL_ENDPOINT_URL", MODAL_HUMANIZER_URL)
+        return getattr(settings, "MODAL_HUMANIZER_URL", MODAL_HUMANIZER_URL)
 
     def humanize_batch(
         self,
@@ -204,11 +208,14 @@ modal_client = ModalHumanizerClient()
 class ModalMultiModelClient:
     _instance = None
     _http_client: Optional[httpx.Client] = None
+    _lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._http_client = httpx.Client(timeout=180.0)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._http_client = httpx.Client(timeout=180.0)
         return cls._instance
 
     def _get_client(self) -> httpx.Client:
@@ -268,8 +275,14 @@ class ModalMultiModelClient:
             return results[0].get("translation_text", "")
         return None
 
-    def invoke_embedding(self, input_text: str) -> Optional[List[float]]:
-        results = self._invoke("sbert", input_text)
+    def close(self) -> None:
+        """Close the persistent HTTP client to release sockets."""
+        if self._http_client is not None:
+            self._http_client.close()
+            self._http_client = None
+
+    def invoke_embedding(self, input_text: str, model_name: str = "sbert") -> Optional[List[float]]:
+        results = self._invoke(model_name, input_text)
         if results and isinstance(results, list) and len(results) > 0:
             return results[0].get("embedding")
         return None
