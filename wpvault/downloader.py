@@ -1,7 +1,7 @@
 import os
 import re
 import tempfile
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -78,6 +78,7 @@ def download_plugin(page_url: str, slug: str) -> str | None:
                 if href and href.endswith(".zip") and context is not None:
                     import requests
 
+                    href = urljoin(page_url, href)
                     page_host = urlparse(page_url).netloc
                     href_host = urlparse(href).netloc
                     cookies = context.cookies()

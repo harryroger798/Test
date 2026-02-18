@@ -193,7 +193,7 @@ def api_me(request: Request):
 
 
 @app.get("/api/plugins")
-def api_plugins(page: int = 1, search: str = None, category: str = None):
+def api_plugins(page: int = 1, search: str | None = None, category: str | None = None):
     plugins = database.get_all_plugins(page=page, per_page=20, search=search, category=category)
     total = database.get_plugin_count(search=search, category=category)
     categories = database.get_all_categories()
@@ -327,7 +327,7 @@ async def webhook_btcpay(request: Request):
     try:
         import json
         payload = json.loads(raw_body)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return JSONResponse(
             status_code=400,
             content={"success": False, "error": "Invalid payload"}

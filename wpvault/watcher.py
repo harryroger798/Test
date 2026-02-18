@@ -118,66 +118,68 @@ def process_single_item(item: dict) -> str:
         if not filepath:
             return "failed"
 
-        result = file_processor.process_file(filepath, slug)
-        if not result:
-            return "duplicate"
-
-        version = result.get("version", "unknown")
-        file_hash = result.get("file_hash", "")
-        file_size = result.get("file_size_bytes", 0)
-
-        object_key = f"plugins/{slug}/{slug}-{version}.zip"
-
-        upload_ok = storage.upload_file(filepath, object_key)
-        if not upload_ok:
-            database.log_sync(slug, "failed", "Upload to storage failed")
-            return "failed"
-
-        old_key_to_delete = ""
-        if existing and existing.get("file_key") and existing.get("file_hash") != file_hash:
-            old_key_to_delete = existing.get("file_key", "") or ""
-
-        plugin_data = {
-            "slug": slug,
-            "name": name,
-            "description": item.get("description", ""),
-            "version": version,
-            "category": item.get("category", ""),
-            "source_url": source_url,
-            "file_key": object_key,
-            "file_hash": file_hash,
-            "file_size_bytes": file_size,
-            "thumbnail_url": item.get("thumbnail_url", ""),
-            "is_plugin": 1 if item.get("is_plugin", True) else 0,
-        }
-
-        if existing:
-            old_version = existing.get("version", "unknown")
-            if not database.update_plugin(slug, plugin_data):
-                storage.delete_file(object_key)
-                database.log_sync(slug, "failed", "DB update failed")
-                return "failed"
-            if old_key_to_delete:
-                storage.delete_file(old_key_to_delete)
-            database.log_sync(slug, "updated", f"Updated from {old_version} to {version}")
-            notifier.notify_updated_plugin(name, old_version, version)
-            status = "updated"
-        else:
-            if not database.insert_plugin(plugin_data):
-                storage.delete_file(object_key)
-                database.log_sync(slug, "failed", "DB insert failed")
-                return "failed"
-            database.log_sync(slug, "new", f"New plugin added: {name} v{version}")
-            notifier.notify_new_plugin(name, version, item.get("category", ""))
-            status = "new"
-
         try:
-            import os
-            os.remove(filepath)
-        except Exception:
-            pass
+            result = file_processor.process_file(filepath, slug)
+            if not result:
+                return "duplicate"
 
-        return status
+            version = result.get("version", "unknown")
+            file_hash = result.get("file_hash", "")
+            file_size = result.get("file_size_bytes", 0)
+
+            object_key = f"plugins/{slug}/{slug}-{version}.zip"
+
+            upload_ok = storage.upload_file(filepath, object_key)
+            if not upload_ok:
+                database.log_sync(slug, "failed", "Upload to storage failed")
+                return "failed"
+
+            old_key_to_delete = ""
+            if existing and existing.get("file_key") and existing.get("file_hash") != file_hash:
+                old_key_to_delete = existing.get("file_key", "") or ""
+
+            plugin_data = {
+                "slug": slug,
+                "name": name,
+                "description": item.get("description", ""),
+                "version": version,
+                "category": item.get("category", ""),
+                "source_url": source_url,
+                "file_key": object_key,
+                "file_hash": file_hash,
+                "file_size_bytes": file_size,
+                "thumbnail_url": item.get("thumbnail_url", ""),
+                "is_plugin": 1 if item.get("is_plugin", True) else 0,
+            }
+
+            if existing:
+                old_version = existing.get("version", "unknown")
+                if not database.update_plugin(slug, plugin_data):
+                    storage.delete_file(object_key)
+                    database.log_sync(slug, "failed", "DB update failed")
+                    return "failed"
+                if old_key_to_delete:
+                    storage.delete_file(old_key_to_delete)
+                database.log_sync(slug, "updated", f"Updated from {old_version} to {version}")
+                notifier.notify_updated_plugin(name, old_version, version)
+                status = "updated"
+            else:
+                if not database.insert_plugin(plugin_data):
+                    storage.delete_file(object_key)
+                    database.log_sync(slug, "failed", "DB insert failed")
+                    return "failed"
+                database.log_sync(slug, "new", f"New plugin added: {name} v{version}")
+                notifier.notify_new_plugin(name, version, item.get("category", ""))
+                status = "new"
+
+            return status
+        finally:
+            try:
+                import os
+                if filepath and os.path.exists(filepath):
+                    os.remove(filepath)
+            except Exception:
+                pass
 
     except Exception as e:
         database.log_sync(slug, "failed", f"Exception: {str(e)}")
