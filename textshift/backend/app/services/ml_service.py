@@ -1568,7 +1568,7 @@ class MLModelService:
                 return self._clean_model_output(result)
             return None
         except Exception as e:
-            logger.warning(f"Modal humanize chunk failed: {e}")
+            logger.warning(f"Modal humanize chunk failed ({type(e).__name__}): {e}")
             return None
 
     def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
@@ -2486,7 +2486,7 @@ class MLModelService:
                                 actual_backend = "mixed"
                     gpu_used = True
                 except Exception as e:
-                    logger.warning(f"Modal batch failed: {e}, falling back to SageMaker")
+                    logger.warning(f"Modal batch failed ({type(e).__name__}): {e}, falling back to SageMaker")
                     use_sagemaker_check = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
                     actual_backend = "sagemaker" if use_sagemaker_check else "local"
 
@@ -2517,7 +2517,7 @@ class MLModelService:
                             result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
                     gpu_used = True
                 except Exception as e:
-                    logger.warning(f"SageMaker batch failed: {e}, falling back to local ONNX")
+                    logger.warning(f"SageMaker batch failed ({type(e).__name__}): {e}, falling back to local ONNX")
                     for idx, chunk in enumerate(chunks):
                         if result_chunks[idx] is None:
                             result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
@@ -2631,7 +2631,7 @@ class MLModelService:
                         backends_used.append(actual_be)
                 total_chunks += len(non_empty_texts) - len(failed_indices)
             except Exception as e:
-                logger.warning(f"Modal batch failed: {e}, falling back to sequential")
+                logger.warning(f"Modal batch failed ({type(e).__name__}): {e}, falling back to sequential")
                 for j, stripped in enumerate(non_empty_texts):
                     orig_idx = non_empty_indices[j]
                     logger.info(f"Humanizing paragraph {orig_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
@@ -2690,7 +2690,7 @@ class MLModelService:
                         backends_used.append(actual_be)
                 total_chunks += len(non_empty_texts) - len(failed_indices)
             except Exception as e:
-                logger.warning(f"SageMaker server batch failed: {e}, falling back to sequential")
+                logger.warning(f"SageMaker server batch failed ({type(e).__name__}): {e}, falling back to sequential")
                 for j, stripped in enumerate(non_empty_texts):
                     orig_idx = non_empty_indices[j]
                     logger.info(f"Humanizing paragraph {orig_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
