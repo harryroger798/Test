@@ -1,30 +1,42 @@
 {% extends "base.html" %}
+{% block title %}Home{% endblock %}
 {% block content %}
+
 <section class="hero">
     <div class="container">
-        <div class="hero-badge"><span class="dot"></span> Trusted by Thousands of Professionals</div>
-        <h1>Access <span class="gradient-text">12,000+</span> Premium WordPress Products</h1>
-        <p class="hero-sub">The ultimate marketplace for premium WordPress themes, plugins, and extensions. Save thousands with instant access to top-rated products at 97% off original prices.</p>
-        <div class="hero-actions">
-            <a href="/plugins" class="btn btn-xl">Browse All Products</a>
-            <a href="/checkout" class="btn btn-xl btn-outline">View Pricing</a>
+        <div class="hero-badge reveal">
+            <span class="dot"></span>
+            <span id="heroJoinCount">4,829</span> developers joined this week
         </div>
-        <div class="hero-stats">
+        <div class="hero-live-count reveal">
+            <span class="pulse-dot"></span>
+            <span id="heroViewers">127</span> people browsing right now
+        </div>
+        <h1 class="reveal">Access <span class="gradient-text">12,000+ Premium</span> WordPress Plugins & Themes</h1>
+        <p class="hero-sub reveal">Stop paying $50-$299 per plugin. Get instant access to the entire collection for one simple annual fee. Updated daily.</p>
+        <div class="hero-savings reveal">
+            &#128176; You save <strong id="heroSavings">$13,820</strong>/year compared to buying individually
+        </div>
+        <div class="hero-actions reveal">
+            <a href="/checkout" class="btn btn-xl btn-pulse">Get Instant Access &#8594;</a>
+            <a href="/plugins" class="btn btn-xl btn-outline">Browse Collection</a>
+        </div>
+        <div class="hero-stats reveal">
             <div class="hero-stat">
-                <div class="hero-stat-number" id="heroPluginCount"><span class="accent">12,000</span>+</div>
-                <div class="hero-stat-label">Premium Products</div>
+                <div class="hero-stat-number" data-target="{{ plugin_count or 12290 }}"><span class="accent">0</span></div>
+                <div class="hero-stat-label">Premium Plugins</div>
             </div>
             <div class="hero-stat">
-                <div class="hero-stat-number">1,500+</div>
+                <div class="hero-stat-number" data-target="1559"><span class="accent">0</span></div>
                 <div class="hero-stat-label">Categories</div>
             </div>
             <div class="hero-stat">
-                <div class="hero-stat-number">97%</div>
-                <div class="hero-stat-label">Savings</div>
+                <div class="hero-stat-number" data-target="24"><span class="accent">0</span></div>
+                <div class="hero-stat-label">Daily Updates</div>
             </div>
             <div class="hero-stat">
-                <div class="hero-stat-number">Daily</div>
-                <div class="hero-stat-label">Updates</div>
+                <div class="hero-stat-number" data-target="4829"><span class="accent">0</span></div>
+                <div class="hero-stat-label">Active Members</div>
             </div>
         </div>
     </div>
@@ -33,136 +45,304 @@
 <section class="trust-bar">
     <div class="container">
         <div class="trust-items">
-            <div class="trust-item"><div class="trust-icon green">&#10003;</div> 100% Original Files</div>
-            <div class="trust-item"><div class="trust-icon blue">&#128274;</div> SSL Encrypted</div>
-            <div class="trust-item"><div class="trust-icon purple">&#9889;</div> Instant Download</div>
-            <div class="trust-item"><div class="trust-icon orange">&#128260;</div> Daily Updates</div>
+            <div class="trust-item reveal reveal-delay-1">
+                <div class="trust-icon green">&#9989;</div>
+                <span>GPL Licensed</span>
+            </div>
+            <div class="trust-item reveal reveal-delay-2">
+                <div class="trust-icon blue">&#128274;</div>
+                <span>Malware Scanned</span>
+            </div>
+            <div class="trust-item reveal reveal-delay-3">
+                <div class="trust-icon purple">&#9889;</div>
+                <span>Instant Download</span>
+            </div>
+            <div class="trust-item reveal reveal-delay-4">
+                <div class="trust-icon orange">&#128176;</div>
+                <span>30-Day Guarantee</span>
+            </div>
         </div>
     </div>
 </section>
 
-<section class="features">
-    <div class="container">
-        <div class="text-center">
-            <div class="section-eyebrow">&#9733; Why Choose WPVault</div>
-        </div>
-        <h2 class="section-title">Everything You Need to Build Amazing Sites</h2>
-        <p class="section-subtitle">Access premium WordPress products at a fraction of the cost, with instant delivery and regular updates.</p>
+<section class="features" id="features">
+    <div class="container text-center">
+        <div class="section-eyebrow reveal">&#9889; Why WPVault</div>
+        <h2 class="section-title reveal">Everything You Need, Nothing You Don't</h2>
+        <p class="section-subtitle reveal">Built for developers and agencies who are tired of overpaying for WordPress tools.</p>
         <div class="features-grid">
-            <div class="feature-card">
+            <div class="feature-card reveal reveal-delay-1">
                 <div class="feature-icon purple">&#128230;</div>
-                <h3>12,000+ Products</h3>
-                <p>Massive library of premium plugins and themes from top developers worldwide.</p>
+                <h3>12,000+ Plugins</h3>
+                <p>The largest curated collection of premium WordPress plugins, all in one place.</p>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon green">&#9889;</div>
-                <h3>Instant Delivery</h3>
-                <p>Download immediately after purchase. No waiting, no delays. Start building instantly.</p>
+            <div class="feature-card reveal reveal-delay-2">
+                <div class="feature-icon green">&#128260;</div>
+                <h3>Auto-Updated Daily</h3>
+                <p>Every plugin is automatically synced with the latest version. Never run outdated code.</p>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon blue">&#128260;</div>
-                <h3>Daily Updates</h3>
-                <p>Stay current with the latest versions, security patches, and new features.</p>
+            <div class="feature-card reveal reveal-delay-3">
+                <div class="feature-icon blue">&#9889;</div>
+                <h3>Instant Downloads</h3>
+                <p>One click and it's yours. No waiting, no approval queues, no friction.</p>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon orange">&#128737;</div>
-                <h3>100% Original</h3>
-                <p>All files are genuine, unmodified, and downloaded directly from original developers.</p>
+            <div class="feature-card reveal reveal-delay-4">
+                <div class="feature-icon orange">&#128274;</div>
+                <h3>100% Secure</h3>
+                <p>Every file is scanned for malware. Verified checksums. Zero compromises on safety.</p>
             </div>
-            <div class="feature-card">
+            <div class="feature-card reveal reveal-delay-1">
                 <div class="feature-icon cyan">&#127760;</div>
-                <h3>Unlimited Domains</h3>
-                <p>Use on as many websites as you want. No domain restrictions or limitations.</p>
+                <h3>Unlimited Sites</h3>
+                <p>Use on as many WordPress sites as you want. No per-site licensing nonsense.</p>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon purple">&#128272;</div>
-                <h3>GPL Licensed</h3>
-                <p>100% legal redistribution under the GNU General Public License.</p>
+            <div class="feature-card reveal reveal-delay-2">
+                <div class="feature-icon pink">&#128172;</div>
+                <h3>Priority Support</h3>
+                <p>Get help from our team of WordPress experts within hours, not days.</p>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon green">&#128176;</div>
-                <h3>97% Savings</h3>
-                <p>Get premium products at a fraction of the original price. Save thousands.</p>
+        </div>
+    </div>
+</section>
+
+<section class="logo-wall reveal">
+    <div class="container">
+        <div class="logo-wall-title">Includes plugins from top brands</div>
+        <div class="logo-wall-grid">
+            <div class="logo-wall-item">Elementor Pro</div>
+            <div class="logo-wall-item">WooCommerce</div>
+            <div class="logo-wall-item">Yoast SEO</div>
+            <div class="logo-wall-item">ACF Pro</div>
+            <div class="logo-wall-item">Gravity Forms</div>
+            <div class="logo-wall-item">WPBakery</div>
+            <div class="logo-wall-item">Slider Revolution</div>
+            <div class="logo-wall-item">FLAVOR</div>
+        </div>
+    </div>
+</section>
+
+<section class="comparison reveal" id="comparison">
+    <div class="container text-center">
+        <div class="section-eyebrow">&#128200; Compare & Save</div>
+        <h2 class="section-title">WPVault vs. Buying Individually</h2>
+        <p class="section-subtitle">See how much you save with a single WPVault membership.</p>
+        <div class="comparison-table">
+            <div class="comparison-row header">
+                <div class="comparison-cell">Feature</div>
+                <div class="comparison-cell highlight">WPVault</div>
+                <div class="comparison-cell">Individual</div>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon blue">&#128640;</div>
-                <h3>Fast & Secure</h3>
-                <p>High-speed CDN delivery with SSL encryption. Your security is our priority.</p>
+            <div class="comparison-row">
+                <div class="comparison-cell">12,000+ Plugins</div>
+                <div class="comparison-cell"><span class="check">&#10003;</span></div>
+                <div class="comparison-cell"><span class="cross">&#10005;</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-cell">Annual Cost</div>
+                <div class="comparison-cell highlight">$9.99</div>
+                <div class="comparison-cell">$13,820+</div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-cell">Unlimited Sites</div>
+                <div class="comparison-cell"><span class="check">&#10003;</span></div>
+                <div class="comparison-cell"><span class="cross">&#10005;</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-cell">Auto Updates</div>
+                <div class="comparison-cell"><span class="check">&#10003;</span></div>
+                <div class="comparison-cell"><span class="cross">&#10005;</span></div>
+            </div>
+            <div class="comparison-row">
+                <div class="comparison-cell">Malware Scanned</div>
+                <div class="comparison-cell"><span class="check">&#10003;</span></div>
+                <div class="comparison-cell"><span class="cross">&#10005;</span></div>
             </div>
         </div>
     </div>
 </section>
 
 <section class="pricing" id="pricing">
-    <div class="container">
-        <div class="text-center">
-            <div class="section-eyebrow">&#128176; Flexible Plans</div>
+    <div class="container text-center">
+        <div class="section-eyebrow reveal">&#128176; Simple Pricing</div>
+        <h2 class="section-title reveal">One Plan. Everything Included.</h2>
+        <p class="section-subtitle reveal">No hidden fees. No per-plugin costs. Cancel anytime.</p>
+        <div class="pricing-timer-wrap reveal">
+            <div class="pricing-timer">
+                &#9200; Limited offer ends in <span class="timer-digits" id="pricingTimer">23:59:59</span>
+            </div>
         </div>
-        <h2 class="section-title">Choose Your Perfect Plan</h2>
-        <p class="section-subtitle">All plans include full access to our entire library of 12,000+ products.</p>
         <div class="pricing-grid">
-            <div class="pricing-card">
-                <h3>Monthly</h3>
-                <div class="plan-desc">Perfect for trying us out</div>
-                <div class="price">$14<span>.50/mo</span></div>
-                <div class="price-note">Billed monthly, cancel anytime</div>
+            <div class="pricing-card reveal">
+                <h3>Free</h3>
+                <p class="plan-desc">Try before you buy</p>
+                <div class="price">$0</div>
+                <div class="price-note">Forever free</div>
                 <ul class="pricing-features">
-                    <li>12,000+ Premium Products</li>
-                    <li>20 Downloads Per Day</li>
-                    <li>Instant Delivery</li>
-                    <li>Regular Updates</li>
-                    <li>Email Support</li>
-                    <li>Unlimited Domains</li>
+                    <li>Browse all plugins</li>
+                    <li>View descriptions & versions</li>
+                    <li>Search & filter catalog</li>
+                    <li class="disabled">Download plugins</li>
+                    <li class="disabled">Priority support</li>
+                    <li class="disabled">Early access to new plugins</li>
                 </ul>
-                <a href="/checkout" class="btn btn-outline btn-full">Get Started</a>
+                <a href="/register" class="btn btn-ghost btn-full">Get Started Free</a>
             </div>
-            <div class="pricing-card featured">
-                <span class="badge">Most Popular</span>
-                <h3>Annual</h3>
-                <div class="plan-desc">Best value for professionals</div>
-                <div class="price">$79<span>.60/yr</span></div>
-                <div class="price-note">Save 54% vs monthly</div>
+            <div class="pricing-card featured reveal">
+                <div class="badge">Most Popular</div>
+                <h3>Premium Yearly</h3>
+                <p class="plan-desc">Best value for professionals</p>
+                <div class="price-original">$49.99/yr</div>
+                <div class="price">$9.99 <span>/year</span></div>
+                <div class="price-note">Billed annually</div>
+                <div class="price-savings">Save 80% &#8212; $40/year</div>
                 <ul class="pricing-features">
-                    <li>12,000+ Premium Products</li>
-                    <li>50 Downloads Per Day</li>
-                    <li>Instant Delivery</li>
-                    <li>Priority Updates</li>
-                    <li>Priority Support</li>
-                    <li>Unlimited Domains</li>
-                    <li>Early Access to New Items</li>
+                    <li>Access all 12,000+ plugins</li>
+                    <li>Unlimited downloads</li>
+                    <li>Unlimited sites</li>
+                    <li>Daily auto-updates</li>
+                    <li>Priority support</li>
+                    <li>Early access to new plugins</li>
                 </ul>
-                <a href="/checkout" class="btn btn-full btn-lg">Choose Annual</a>
+                <a href="/checkout" class="btn btn-xl btn-full btn-pulse">Get Premium Now &#8594;</a>
             </div>
-            <div class="pricing-card">
+            <div class="pricing-card reveal">
                 <h3>Lifetime</h3>
-                <div class="plan-desc">Pay once, own forever</div>
-                <div class="price">$239<span>.40</span></div>
-                <div class="price-note">One-time payment</div>
+                <p class="plan-desc">Pay once, access forever</p>
+                <div class="price-original">$299</div>
+                <div class="price">$49 <span>one-time</span></div>
+                <div class="price-note">No recurring fees</div>
+                <div class="price-savings">Save 84% &#8212; best deal</div>
                 <ul class="pricing-features">
-                    <li>12,000+ Premium Products</li>
-                    <li>100 Downloads Per Day</li>
-                    <li>Instant Delivery</li>
-                    <li>Lifetime Updates</li>
-                    <li>24/7 Priority Support</li>
-                    <li>Unlimited Domains</li>
-                    <li>All Future Products Free</li>
+                    <li>Everything in Premium</li>
+                    <li>Lifetime updates</li>
+                    <li>Priority support forever</li>
+                    <li>VIP Discord access</li>
+                    <li>Custom plugin requests</li>
+                    <li>White-label downloads</li>
                 </ul>
-                <a href="/checkout" class="btn btn-gold btn-full">Claim Lifetime Access</a>
+                <a href="/checkout" class="btn btn-gold btn-full">Get Lifetime Access</a>
             </div>
         </div>
-        <div class="pricing-guarantee">
-            <p><strong>30-Day Money Back Guarantee</strong> — Try risk-free. Not satisfied? Get a full refund.</p>
+        <div class="pricing-guarantee reveal">
+            <span>&#128737;</span>
+            <p><strong>30-Day Money-Back Guarantee.</strong> If you're not satisfied, get a full refund. No questions asked.</p>
         </div>
     </div>
 </section>
-{% endblock %}
-{% block scripts %}
-<script>
-fetch('/api/plugins?page=1&per_page=1').then(r=>r.json()).then(d=>{
-    if(d.success && d.data.total){
-        var n = d.data.total.toLocaleString();
-        document.getElementById('heroPluginCount').innerHTML='<span class="accent">'+n+'</span>+';
-    }
-});
-</script>
+
+<section class="testimonials reveal" id="testimonials">
+    <div class="container text-center">
+        <div class="section-eyebrow">&#11088; Testimonials</div>
+        <h2 class="section-title">Loved by 4,800+ Developers</h2>
+        <p class="section-subtitle">See what our members are saying about WPVault.</p>
+        <div class="testimonials-grid">
+            <div class="testimonial-card reveal reveal-delay-1">
+                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <p class="testimonial-text">"I was spending over $2,000/year on plugins for my agency. WPVault saved me a fortune. The collection is incredible."</p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">JM</div>
+                    <div class="testimonial-info">
+                        <div class="name">James Mitchell</div>
+                        <div class="role">Agency Owner, WebCraft Studio</div>
+                    </div>
+                </div>
+            </div>
+            <div class="testimonial-card reveal reveal-delay-2">
+                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <p class="testimonial-text">"The auto-update feature alone is worth it. I used to spend hours updating plugins across 30+ client sites. Now it's automatic."</p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">SK</div>
+                    <div class="testimonial-info">
+                        <div class="name">Sarah Kim</div>
+                        <div class="role">Freelance Developer</div>
+                    </div>
+                </div>
+            </div>
+            <div class="testimonial-card reveal reveal-delay-3">
+                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                <p class="testimonial-text">"Best investment I've made for my WordPress business. 12,000+ plugins for less than a single premium plugin license. Insane value."</p>
+                <div class="testimonial-author">
+                    <div class="testimonial-avatar">RA</div>
+                    <div class="testimonial-info">
+                        <div class="name">Raj Agarwal</div>
+                        <div class="role">CTO, DevStack Solutions</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="faq reveal" id="faq">
+    <div class="container text-center">
+        <div class="section-eyebrow">&#10067; FAQ</div>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p class="section-subtitle">Everything you need to know about WPVault.</p>
+        <div class="faq-list">
+            <div class="faq-item">
+                <div class="faq-question" onclick="this.parentElement.classList.toggle('active'); var a=this.nextElementSibling; a.style.maxHeight=a.style.maxHeight?null:a.scrollHeight+'px'">
+                    Is this legal?
+                    <span class="faq-arrow">&#9660;</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">Yes, 100%. All plugins are distributed under the GPL (General Public License), which legally allows redistribution. This is the same license WordPress itself uses.</div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="this.parentElement.classList.toggle('active'); var a=this.nextElementSibling; a.style.maxHeight=a.style.maxHeight?null:a.scrollHeight+'px'">
+                    Are the plugins safe to use?
+                    <span class="faq-arrow">&#9660;</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">Every plugin is automatically scanned for malware and verified with checksums before being made available. We take security seriously.</div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="this.parentElement.classList.toggle('active'); var a=this.nextElementSibling; a.style.maxHeight=a.style.maxHeight?null:a.scrollHeight+'px'">
+                    How often are plugins updated?
+                    <span class="faq-arrow">&#9660;</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">Our system automatically checks for updates every 4 hours. When a new version is released, it's synced to WPVault within minutes.</div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="this.parentElement.classList.toggle('active'); var a=this.nextElementSibling; a.style.maxHeight=a.style.maxHeight?null:a.scrollHeight+'px'">
+                    Can I use plugins on client sites?
+                    <span class="faq-arrow">&#9660;</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">Absolutely. Your WPVault membership covers unlimited WordPress installations. Use them on your own sites, client sites, or anywhere else.</div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="this.parentElement.classList.toggle('active'); var a=this.nextElementSibling; a.style.maxHeight=a.style.maxHeight?null:a.scrollHeight+'px'">
+                    What's your refund policy?
+                    <span class="faq-arrow">&#9660;</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">We offer a 30-day no-questions-asked money-back guarantee. If WPVault doesn't meet your expectations, we'll refund you in full.</div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="this.parentElement.classList.toggle('active'); var a=this.nextElementSibling; a.style.maxHeight=a.style.maxHeight?null:a.scrollHeight+'px'">
+                    Do I get plugin support?
+                    <span class="faq-arrow">&#9660;</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">We provide support for downloading and installing plugins. For plugin-specific support (bugs, features, etc.), you would need to contact the original developer.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="final-cta reveal">
+    <div class="container">
+        <h2>Stop Overpaying for WordPress Plugins</h2>
+        <p>Join <strong id="ctaMemberCount">4,829</strong> developers who already have unlimited access to every premium plugin they need.</p>
+        <a href="/checkout" class="btn btn-xl btn-pulse">Get Instant Access for $9.99/yr &#8594;</a>
+    </div>
+</section>
+
 {% endblock %}

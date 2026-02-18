@@ -35,6 +35,7 @@ def _img_token_to_url(token: str) -> str | None:
         return None
 
 
+import random
 import database
 import auth
 import payments
@@ -111,6 +112,7 @@ class LoginRequest(BaseModel):
 
 PLAN_PRICING = {
     "yearly": {"amount": 9.99, "days": 365},
+    "premium_yearly": {"amount": 9.99, "days": 365},
 }
 
 
@@ -598,6 +600,72 @@ def api_user_downloads(request: Request):
     return JSONResponse(content={"success": True, "data": {"downloads": downloads}})
 
 
+@app.get("/api/my-downloads")
+def api_my_downloads(request: Request):
+    user = get_current_user_from_request(request)
+    downloads = database.get_user_downloads(user["id"])
+    return JSONResponse(content={"success": True, "data": downloads})
+
+
+@app.post("/api/create-order")
+def api_create_order(body: CheckoutRequest, request: Request):
+    user = get_current_user_from_request(request)
+    pricing = PLAN_PRICING.get(body.plan)
+    if not pricing:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": f"Unknown plan: {body.plan}"}
+        )
+    result = payments.create_invoice(user["id"], pricing["amount"], pricing["days"])
+    if "error" in result:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": result["error"]}
+        )
+    return JSONResponse(content={
+        "success": True,
+        "data": {
+            "payment_url": result.get("checkout_url", ""),
+            "invoice_id": result.get("invoice_id", "")
+        }
+    })
+
+
+@app.get("/api/admin/sync-logs")
+def api_admin_sync_logs(request: Request):
+    _ = get_admin_user(request)
+    logs = database.get_recent_sync_logs(limit=20)
+    return JSONResponse(content={"success": True, "data": logs})
+
+
+@app.post("/api/admin/trigger-sync")
+def api_admin_trigger_sync(request: Request):
+    global _sync_running
+    _ = get_admin_user(request)
+    if not _sync_lock.acquire(blocking=False):
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error": "Sync already in progress"}
+        )
+
+    def _run():
+        global _sync_running
+        try:
+            _sync_running = True
+            watcher.run_sync()
+        finally:
+            _sync_running = False
+            _sync_lock.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return JSONResponse(content={"success": True, "data": {"status": "sync started"}})
+
+
+@app.get("/api/download/{slug}")
+def api_download_shortcut(slug: str, request: Request):
+    return api_plugin_download(slug, request)
+
+
 _image_cache_dir = os.path.join(os.path.dirname(__file__), "static", "_imgcache")
 os.makedirs(_image_cache_dir, exist_ok=True)
 
@@ -665,7 +733,8 @@ async def proxy_image(t: str | None = None, url: str | None = None):
 
 @app.get("/", response_class=HTMLResponse)
 def page_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    total = database.get_plugin_count()
+    return templates.TemplateResponse("index.html", {"request": request, "total_plugins": total})
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -684,13 +753,60 @@ def page_dashboard(request: Request):
 
 
 @app.get("/plugins", response_class=HTMLResponse)
-def page_plugins(request: Request):
-    return templates.TemplateResponse("plugins.html", {"request": request})
+def page_plugins(request: Request, page: int = 1, search: str = "", category: str = ""):
+    per_page = 20
+    if page < 1:
+        page = 1
+    plugins_raw = database.get_all_plugins(page=page, per_page=per_page, search=search or None, category=category or None)
+    total = database.get_plugin_count(search=search or None, category=category or None)
+    categories = database.get_all_categories()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    plugins = []
+    for p in plugins_raw:
+        thumb = p.get("thumbnail_url", "") or ""
+        plugins.append({
+            "slug": p.get("slug"),
+            "name": p.get("name"),
+            "description": p.get("description", ""),
+            "version": p.get("version"),
+            "category": p.get("category"),
+            "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",
+            "updated_at": p.get("updated_at"),
+        })
+
+    return templates.TemplateResponse("plugins.html", {
+        "request": request,
+        "plugins": plugins,
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
+        "search": search,
+        "category": category,
+        "categories": categories,
+    })
 
 
-@app.get("/plugins/{slug}", response_class=HTMLResponse)
+@app.get("/plugin/{slug}", response_class=HTMLResponse)
 def page_plugin_detail(request: Request, slug: str):
-    return templates.TemplateResponse("plugin_detail.html", {"request": request, "slug": slug})
+    plugin = database.get_plugin_by_slug(slug)
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+    thumb = plugin.get("thumbnail_url", "") or ""
+    plugin_data = {
+        "slug": plugin.get("slug"),
+        "name": plugin.get("name"),
+        "description": plugin.get("description", ""),
+        "version": plugin.get("version"),
+        "category": plugin.get("category"),
+        "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",
+        "updated_at": plugin.get("updated_at"),
+        "created_at": plugin.get("created_at"),
+    }
+    return templates.TemplateResponse("plugin_detail.html", {
+        "request": request,
+        "plugin": plugin_data,
+    })
 
 
 @app.get("/checkout", response_class=HTMLResponse)

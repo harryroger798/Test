@@ -1,40 +1,65 @@
 {% extends "base.html" %}
+{% block title %}Login{% endblock %}
 {% block content %}
+
 <section class="auth-section">
     <div class="auth-card">
         <h2>Welcome Back</h2>
         <p class="auth-subtitle">Sign in to access your premium plugins</p>
-        <div id="loginError" class="alert alert-error" style="display:none;"></div>
-        <form id="loginForm" onsubmit="return doLogin(event)">
+        <div id="loginError"></div>
+        <form onsubmit="return handleLogin(event)">
             <div class="form-group">
-                <label>Email Address</label>
+                <label for="email">Email Address</label>
                 <input type="email" id="email" placeholder="you@example.com" required>
             </div>
             <div class="form-group">
-                <label>Password</label>
+                <label for="password">Password</label>
                 <input type="password" id="password" placeholder="Enter your password" required>
+                <button type="button" class="password-toggle" onclick="togglePassword('password', this)">Show</button>
             </div>
-            <button type="submit" class="btn btn-full btn-lg" id="loginBtn">Sign In</button>
+            <button type="submit" class="btn btn-full btn-lg" id="loginBtn">Sign In &#8594;</button>
         </form>
         <div class="auth-footer">
             Don't have an account? <a href="/register">Create one free</a>
         </div>
     </div>
 </section>
+
 {% endblock %}
+
 {% block scripts %}
 <script>
-function doLogin(e){
+function togglePassword(id, btn) {
+    var inp = document.getElementById(id);
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
+    else { inp.type = 'password'; btn.textContent = 'Show'; }
+}
+function handleLogin(e) {
     e.preventDefault();
-    var btn=document.getElementById('loginBtn');
-    btn.disabled=true; btn.textContent='Signing in...';
-    fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value})
-    }).then(r=>r.json()).then(d=>{
-        if(d.success){localStorage.setItem('token',d.data.token);location.href='/dashboard';}
-        else{document.getElementById('loginError').style.display='block';document.getElementById('loginError').textContent=d.error||'Login failed';}
-        btn.disabled=false;btn.textContent='Sign In';
-    }).catch(()=>{btn.disabled=false;btn.textContent='Sign In';});
+    var btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.innerHTML = '&#9203; Signing in...';
+    fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.success) {
+            localStorage.setItem('token', d.data.token);
+            if (typeof WPVault !== 'undefined') WPVault.toast('Welcome back!', 'success');
+            window.location = '/dashboard';
+        } else {
+            document.getElementById('loginError').innerHTML = '<div class="alert alert-error">' + (d.error || 'Login failed') + '</div>';
+            btn.disabled = false;
+            btn.innerHTML = 'Sign In &#8594;';
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In &#8594;';
+    });
     return false;
 }
 </script>

@@ -1,42 +1,89 @@
 {% extends "base.html" %}
+{% block title %}Checkout{% endblock %}
 {% block content %}
+
 <section class="checkout-section">
-    <div class="checkout-card">
-        <h2>Upgrade to Premium</h2>
-        <p class="checkout-subtitle">Unlock unlimited access to 12,000+ premium products</p>
-        <div class="plan-summary">
-            <div class="plan-detail">
-                <span class="plan-name">Premium Annual</span>
-                <span class="plan-price">$79.60</span>
+    <div class="container">
+        <div class="checkout-card">
+            <h2>Upgrade to <span class="gradient-text">Premium</span></h2>
+            <p class="checkout-subtitle">Unlock instant access to 12,000+ premium plugins</p>
+
+            <div class="checkout-timer">
+                &#9200; This price expires in <span class="timer-digits" id="checkoutTimer">23:59:59</span>
             </div>
-            <ul class="plan-perks">
-                <li>12,000+ Premium Plugins & Themes</li>
-                <li>50 Downloads Per Day</li>
-                <li>Priority Updates & Support</li>
-                <li>Unlimited Domain Usage</li>
-                <li>Early Access to New Products</li>
-                <li>30-Day Money Back Guarantee</li>
-            </ul>
+
+            <div class="plan-summary">
+                <div class="plan-detail">
+                    <span class="plan-name">Premium Yearly</span>
+                    <span class="plan-price">$9.99</span>
+                </div>
+                <ul class="plan-perks">
+                    <li>Access all 12,000+ plugins & themes</li>
+                    <li>Unlimited downloads</li>
+                    <li>Use on unlimited WordPress sites</li>
+                    <li>Daily auto-updates</li>
+                    <li>Priority support</li>
+                    <li>30-day money-back guarantee</li>
+                </ul>
+            </div>
+
+            <div style="margin-bottom: 16px">
+                <div class="price-savings" style="display:inline-block">You save $13,810/year vs buying individually</div>
+            </div>
+
+            <button class="btn btn-xl btn-full btn-pulse" id="payBtn" onclick="handlePayment()">
+                &#9889; Pay with Bitcoin &mdash; $9.99
+            </button>
+
+            <p class="checkout-note">
+                Secure payment processed via BTCPay Server. Your membership activates instantly after payment confirmation.
+            </p>
+            <div class="checkout-secure">
+                <span>&#128274;</span>
+                <span>256-bit SSL Encryption</span>
+                <span>&bull;</span>
+                <span>&#128737;</span>
+                <span>30-Day Guarantee</span>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06)">
+                <p style="color: var(--text-muted); font-size: 0.78rem">
+                    <strong style="color: var(--orange)">&#128293; 47 people</strong> upgraded in the last 24 hours
+                </p>
+            </div>
         </div>
-        <button class="btn btn-full btn-lg btn-gold" onclick="doCheckout()" id="checkoutBtn">&#9889; Pay with Bitcoin</button>
-        <div class="checkout-secure">&#128274; Secure payment via BTCPay Server</div>
-        <p class="checkout-note">Your subscription activates instantly after payment confirmation. Cancel anytime from your dashboard. All products are GPL licensed.</p>
     </div>
 </section>
+
 {% endblock %}
+
 {% block scripts %}
 <script>
-function doCheckout(){
-    var t=localStorage.getItem('token');
-    if(!t){location.href='/login';return;}
-    var btn=document.getElementById('checkoutBtn');
-    btn.disabled=true;btn.textContent='Processing...';
-    fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({plan:'yearly'})
-    }).then(r=>r.json()).then(d=>{
-        if(d.success&&d.data.checkout_url){window.location.href=d.data.checkout_url;}
-        else{alert(d.error||'Checkout failed');}
-        btn.disabled=false;btn.innerHTML='&#9889; Pay with Bitcoin';
-    }).catch(()=>{btn.disabled=false;btn.innerHTML='&#9889; Pay with Bitcoin';});
+function handlePayment() {
+    var token = localStorage.getItem('token');
+    if (!token) { window.location = '/login'; return; }
+    var btn = document.getElementById('payBtn');
+    btn.disabled = true;
+    btn.innerHTML = '&#9203; Creating invoice...';
+    fetch('/api/create-order', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: 'premium_yearly' })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (d.success && d.data && d.data.payment_url) {
+            window.location = d.data.payment_url;
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '&#9889; Pay with Bitcoin &mdash; $9.99';
+            if (typeof WPVault !== 'undefined') WPVault.toast(d.error || 'Payment failed', 'error');
+        }
+    })
+    .catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '&#9889; Pay with Bitcoin &mdash; $9.99';
+    });
 }
 </script>
 {% endblock %}

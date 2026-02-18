@@ -3,95 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WPVault — Premium WordPress Plugins & Themes</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="/static/style.css?v=5">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔒</text></svg>">
+    <title>{% block title %}WPVault{% endblock %} | Premium WordPress Plugins & Themes</title>
+    <meta name="description" content="Access 12,000+ premium WordPress plugins and themes for one low price. Save $13,820/year compared to buying individually.">
+    <link rel="stylesheet" href="/static/style.css?v=7">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9889;</text></svg>">
 </head>
 <body>
+    <div class="scroll-progress" id="scrollProgress"></div>
+
     <div class="top-bar">
         <div class="container">
-            <strong>12,000+</strong> Premium WordPress Plugins & Themes — Updated Daily — <strong>97% OFF</strong> Original Prices
+            <strong>Limited Time:</strong> Get lifetime access to <strong>12,000+ plugins</strong> &mdash; <span class="countdown-inline" id="topBarTimer">23:59:59</span> left at this price
         </div>
     </div>
-    <nav class="navbar">
+
+    <nav class="navbar" id="navbar">
         <div class="container nav-container">
             <a href="/" class="logo">
-                <span class="logo-icon">W</span>
+                <span class="logo-icon">&#9889;</span>
                 WPVault
             </a>
-            <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('active')">&#9776;</button>
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">&#9776;</button>
             <div class="nav-links" id="navLinks">
-                <a href="/plugins">Browse All</a>
-                <a href="/plugins">Plugins</a>
-                <a href="/plugins">Themes</a>
-                <a href="/checkout">Pricing</a>
-                <a href="/dashboard" id="navDash" style="display:none;">Dashboard</a>
-                <a href="/admin" id="navAdmin" style="display:none;">Admin</a>
-                <a href="/login" id="navLogin">Log In</a>
-                <a href="/register" id="navRegister" class="btn btn-sm" style="border-radius:8px;">Sign Up Free</a>
-                <a href="#" id="navLogout" style="display:none;" onclick="localStorage.removeItem('token');location.href='/login';">Logout</a>
+                <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Home</a>
+                <a href="/plugins" class="{% if '/plugins' in request.url.path %}active{% endif %}">Plugins</a>
+                <a href="/checkout" class="{% if request.url.path == '/checkout' %}active{% endif %}">Pricing</a>
+                <span id="navAuth"></span>
             </div>
         </div>
     </nav>
+
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
+
     <footer class="footer">
         <div class="container">
             <div class="footer-grid">
                 <div class="footer-brand">
-                    <h3>WPVault</h3>
-                    <p>The ultimate marketplace for premium WordPress themes, plugins, and extensions. Save thousands with instant access to top-rated products from industry-leading developers.</p>
+                    <h3>&#9889; WPVault</h3>
+                    <p>The largest collection of premium WordPress plugins and themes, available for instant download at a fraction of the cost.</p>
                 </div>
                 <div class="footer-col">
-                    <h4>Browse</h4>
-                    <a href="/plugins">All Plugins</a>
-                    <a href="/plugins">WordPress Themes</a>
-                    <a href="/plugins">WooCommerce</a>
-                    <a href="/plugins">Page Builders</a>
-                </div>
-                <div class="footer-col">
-                    <h4>Account</h4>
-                    <a href="/login">Log In</a>
-                    <a href="/register">Create Account</a>
-                    <a href="/dashboard">Dashboard</a>
+                    <h4>Product</h4>
+                    <a href="/plugins">Browse Plugins</a>
                     <a href="/checkout">Pricing</a>
+                    <a href="/dashboard">Dashboard</a>
+                </div>
+                <div class="footer-col">
+                    <h4>Support</h4>
+                    <a href="#">Help Center</a>
+                    <a href="#">Contact Us</a>
+                    <a href="#">FAQs</a>
                 </div>
                 <div class="footer-col">
                     <h4>Legal</h4>
                     <a href="#">Terms of Service</a>
                     <a href="#">Privacy Policy</a>
-                    <a href="#">GPL License</a>
                     <a href="#">Refund Policy</a>
                 </div>
             </div>
             <div class="footer-bottom">
-                <span>&copy; 2026 WPVault. All rights reserved. GPL Licensed.</span>
+                <span>&copy; <span id="footerYear"></span> WPVault. All rights reserved.</span>
                 <div class="footer-badges">
                     <span class="footer-badge">&#128274; SSL Secured</span>
-                    <span class="footer-badge">&#9989; GPL Licensed</span>
-                    <span class="footer-badge">&#128737; 100% Original</span>
+                    <span class="footer-badge">&#9889; Instant Downloads</span>
+                    <span class="footer-badge">&#128176; 30-Day Guarantee</span>
                 </div>
             </div>
         </div>
     </footer>
-    <script>
-    (function(){
-        var t=localStorage.getItem('token');
-        if(t){
-            try{
-                var p=JSON.parse(atob(t.split('.')[1]));
-                document.getElementById('navDash').style.display='';
-                document.getElementById('navLogin').style.display='none';
-                document.getElementById('navRegister').style.display='none';
-                document.getElementById('navLogout').style.display='';
-                if(p.is_admin) document.getElementById('navAdmin').style.display='';
-            }catch(e){}
-        }
-    })();
-    </script>
+
+    <div class="social-toast" id="socialToast">
+        <div class="social-toast-icon">&#11088;</div>
+        <div>
+            <div class="social-toast-text" id="socialToastText"></div>
+            <div class="social-toast-time" id="socialToastTime"></div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <button class="back-to-top" id="backToTop" aria-label="Back to top">&#8593;</button>
+
+    <script src="/static/app.js?v=7"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

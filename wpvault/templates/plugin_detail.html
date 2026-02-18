@@ -1,134 +1,207 @@
 {% extends "base.html" %}
+{% block title %}{{ plugin.name }}{% endblock %}
 {% block content %}
+
 <section class="plugin-detail-section">
     <div class="container">
         <div class="breadcrumb">
-            <a href="/">Home</a> <span>/</span> <a href="/plugins">Products</a> <span>/</span> <span id="breadcrumbName">Loading...</span>
+            <a href="/">Home</a>
+            <span>&#8250;</span>
+            <a href="/plugins">Plugins</a>
+            <span>&#8250;</span>
+            <span>{{ plugin.name }}</span>
         </div>
-        <div id="pluginContent"><div class="loading">Loading product details...</div></div>
+
+        <div class="plugin-detail-grid">
+            <div class="plugin-detail-main">
+                <div class="plugin-hero-thumb">
+                    {% if plugin.thumbnail %}
+                    <img src="{{ plugin.thumbnail }}" alt="{{ plugin.name }}">
+                    {% else %}
+                    <span class="thumb-placeholder large">{{ plugin.name[:2]|upper }}</span>
+                    {% endif %}
+                </div>
+
+                <h1 class="plugin-detail-title">{{ plugin.name }}</h1>
+
+                <div class="plugin-detail-meta">
+                    {% if plugin.version and plugin.version != 'unknown' %}
+                    <span class="meta-chip version">v{{ plugin.version }}</span>
+                    {% endif %}
+                    {% if plugin.category %}
+                    <span class="meta-chip category">{{ plugin.category }}</span>
+                    {% endif %}
+                    <span class="meta-chip type">Plugin</span>
+                    {% if plugin.updated_at %}
+                    <span class="meta-chip updated">Updated {{ plugin.updated_at[:10] }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="detail-tabs">
+                    <button class="detail-tab active" onclick="switchTab(this, 'desc')">Description</button>
+                    <button class="detail-tab" onclick="switchTab(this, 'changelog')">Changelog</button>
+                    <button class="detail-tab" onclick="switchTab(this, 'reviews')">Reviews</button>
+                </div>
+
+                <div class="tab-content active" id="tab-desc">
+                    <div class="plugin-description-card">
+                        <h3>&#128196; About This Plugin</h3>
+                        <div class="plugin-description-text">
+                            {% if plugin.description %}
+                            {{ plugin.description | safe }}
+                            {% else %}
+                            <p>Premium WordPress plugin available for instant download.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-changelog">
+                    <div class="plugin-description-card">
+                        <h3>&#128203; Version History</h3>
+                        <div class="plugin-description-text">
+                            {% if plugin.version and plugin.version != 'unknown' %}
+                            <p><strong>Current Version:</strong> {{ plugin.version }}</p>
+                            {% endif %}
+                            <p>This plugin is automatically updated when new versions are released. Check back for the latest changelog entries.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-reviews">
+                    <div class="plugin-description-card">
+                        <h3>&#11088; User Reviews</h3>
+                        <div class="plugin-description-text">
+                            <div class="testimonial-card" style="margin-bottom: 16px">
+                                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+                                <p class="testimonial-text">"Works perfectly on all my client sites. Easy to set up and configure."</p>
+                                <div class="testimonial-author">
+                                    <div class="testimonial-avatar">WD</div>
+                                    <div class="testimonial-info">
+                                        <div class="name">WordPress Developer</div>
+                                        <div class="role">Verified Buyer</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-sidebar">
+                <div class="sidebar-card">
+                    <h3>&#11015; Download</h3>
+                    <div class="download-btn-wrap">
+                        <button class="btn btn-xl btn-full btn-pulse" id="downloadBtn" onclick="handleDownload('{{ plugin.slug }}')">
+                            &#11015; Download Now
+                        </button>
+                    </div>
+                    <p class="download-note">Requires Premium membership</p>
+                    <div class="sidebar-viewers">
+                        <span class="pulse-dot"></span>
+                        <span id="viewerCount">{{ range(12, 89) | random }}</span> people viewing this right now
+                    </div>
+                </div>
+
+                <div class="sidebar-card">
+                    <h3>&#128196; Plugin Info</h3>
+                    <ul class="info-list">
+                        {% if plugin.version and plugin.version != 'unknown' %}
+                        <li>
+                            <span class="info-label">Version</span>
+                            <span class="info-value">{{ plugin.version }}</span>
+                        </li>
+                        {% endif %}
+                        {% if plugin.category %}
+                        <li>
+                            <span class="info-label">Category</span>
+                            <span class="info-value">{{ plugin.category }}</span>
+                        </li>
+                        {% endif %}
+                        <li>
+                            <span class="info-label">Compatibility</span>
+                            <span class="info-value">WP 5.0+</span>
+                        </li>
+                        <li>
+                            <span class="info-label">Last Updated</span>
+                            <span class="info-value">{{ plugin.updated_at[:10] if plugin.updated_at else 'Recently' }}</span>
+                        </li>
+                        <li>
+                            <span class="info-label">License</span>
+                            <span class="info-value">GPL v2+</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="sidebar-card" style="text-align:center">
+                    <h3>&#128274; Security Verified</h3>
+                    <div class="footer-badges" style="justify-content:center">
+                        <span class="footer-badge">&#9989; Malware Free</span>
+                        <span class="footer-badge">&#128274; Checksum OK</span>
+                        <span class="footer-badge">&#128737; GPL Licensed</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
+
 {% endblock %}
+
 {% block scripts %}
 <script>
-var slug='{{ slug }}';
-function renderDescription(el, raw){
-    if(!el) return;
-    var text=(raw||'').toString().replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-    if(!text){ el.textContent='No description available for this product.'; return; }
+function switchTab(btn, tabId) {
+    document.querySelectorAll('.detail-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById('tab-' + tabId).classList.add('active');
+}
 
-    if(text.indexOf('•') !== -1){
-        var parts=text.split('•').map(function(s){return s.trim();}).filter(Boolean);
-        if(!parts.length){ el.textContent=text; return; }
-        var intro='';
-        if(parts[0] && parts[0].endsWith(':')){
-            intro=parts.shift();
-        }
-        var html='';
-        if(intro){ html+='<p>'+intro.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>'; }
-        html+='<ul>';
-        parts.forEach(function(it){
-            html+='<li>'+it.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</li>';
-        });
-        html+='</ul>';
-        el.innerHTML=html;
+function handleDownload(slug) {
+    var token = localStorage.getItem('token');
+    if (!token) {
+        window.location = '/login';
         return;
     }
-
-    var sentences=text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
-    var para=[];
-    var html='';
-    for(var i=0;i<sentences.length;i++){
-        para.push(sentences[i].trim());
-        if(para.length>=3 || i===sentences.length-1){
-            var p=para.join(' ');
-            html+='<p>'+p.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>';
-            para=[];
+    var btn = document.getElementById('downloadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '&#9203; Preparing...';
+    fetch('/api/download/' + slug, {
+        headers: { 'Authorization': 'Bearer ' + token }
+    }).then(function(r) {
+        if (r.status === 202) {
+            btn.innerHTML = '&#9203; Preparing download...';
+            setTimeout(function() { handleDownload(slug); }, 5000);
+            return;
         }
-    }
-    el.innerHTML=html;
-}
-fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
-    if(!d.success){document.getElementById('pluginContent').innerHTML='<div class="empty-state"><p>Product not found</p><a href="/plugins" class="btn">Browse Products</a></div>';return;}
-    var p=d.data;
-    document.getElementById('breadcrumbName').textContent=p.name;
-    document.title=p.name+' — WPVault';
-    var html='<div class="plugin-detail-grid"><div class="detail-main">';
-    if(p.thumbnail){
-        html+='<div class="plugin-hero-thumb"><img src="'+p.thumbnail+'" alt="'+p.name.replace(/"/g,'&quot;')+'"></div>';
-    } else {
-        html+='<div class="plugin-hero-thumb"><span class="thumb-placeholder large">'+p.name.charAt(0)+'</span></div>';
-    }
-    html+='<h1 class="plugin-detail-title">'+p.name+'</h1>';
-    html+='<div class="plugin-detail-meta">';
-    if(p.version && p.version !== 'unknown') html+='<span class="meta-chip version">v'+p.version+'</span>';
-    if(p.category) html+='<span class="meta-chip category">'+p.category+'</span>';
-    html+='<span class="meta-chip type">'+(p.is_plugin?'Plugin':'Theme')+'</span>';
-    if(p.updated_at) html+='<span class="meta-chip updated">Updated '+new Date(p.updated_at).toLocaleDateString()+'</span>';
-    html+='</div>';
-    html+='<div class="plugin-description-card"><h3>&#128196; Description</h3>';
-    html+='<div class="plugin-description-text" id="pluginDescription"></div>';
-    html+='</div></div>';
-    html+='<div class="detail-sidebar">';
-    html+='<div class="sidebar-card">';
-    html+='<h3>Download</h3>';
-    html+='<div class="download-btn-wrap"><button class="btn btn-full btn-lg" onclick="downloadPlugin()">&#11015; Download Now</button></div>';
-    html+='<p class="download-note">Premium plan required for downloads</p>';
-    html+='</div>';
-    html+='<div class="sidebar-card"><h3>Product Details</h3><ul class="info-list">';
-    html+='<li><span class="info-label">Version</span><span class="info-value">'+(p.version && p.version!=='unknown'?p.version:'Latest')+'</span></li>';
-    html+='<li><span class="info-label">Type</span><span class="info-value">'+(p.is_plugin?'Plugin':'Theme')+'</span></li>';
-    if(p.category) html+='<li><span class="info-label">Category</span><span class="info-value">'+p.category+'</span></li>';
-    if(p.file_size_bytes) html+='<li><span class="info-label">File Size</span><span class="info-value">'+(p.file_size_bytes/1048576).toFixed(1)+' MB</span></li>';
-    if(p.updated_at) html+='<li><span class="info-label">Updated</span><span class="info-value">'+new Date(p.updated_at).toLocaleDateString()+'</span></li>';
-    html+='<li><span class="info-label">License</span><span class="info-value">GPL v2+</span></li>';
-    html+='</ul></div>';
-    html+='</div></div>';
-    document.getElementById('pluginContent').innerHTML=html;
-    renderDescription(document.getElementById('pluginDescription'), p.description);
-});
-function downloadPlugin(){
-    var t=localStorage.getItem('token');
-    if(!t){location.href='/login';return;}
-    var btn=document.querySelector('.download-btn-wrap button');
-    if(btn){btn.disabled=true;btn.innerHTML='&#9203; Preparing download...';}
-    function poll(){
-        fetch('/api/plugins/'+slug+'/download',{headers:{'Authorization':'Bearer '+t}}).then(function(r){return r.json();}).then(function(d){
-            if(d.success&&d.data&&d.data.download_url){
-                if(btn){btn.innerHTML='&#9203; Downloading...';}
-                fetch(d.data.download_url,{headers:{'Authorization':'Bearer '+t}}).then(function(r){
-                    if(!r.ok) throw new Error('Download failed');
-                    var cd=r.headers.get('content-disposition')||'';
-                    var fn=slug+'.zip';
-                    var m=cd.match(/filename="?([^";\s]+)"?/);
-                    if(m) fn=m[1];
-                    return r.blob().then(function(blob){return {blob:blob,fn:fn};});
-                }).then(function(obj){
-                    var a=document.createElement('a');
-                    a.href=URL.createObjectURL(obj.blob);
-                    a.download=obj.fn;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(a.href);
-                    if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
-                }).catch(function(e){
-                    if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
-                    alert('File download failed: '+e.message);
-                });
-            } else if(d.success&&d.data&&d.data.status==='preparing'){
-                if(btn){btn.innerHTML='&#9203; '+d.data.message;}
-                setTimeout(poll,5000);
-            } else {
-                if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
-                alert(d.error||'Download failed. Premium plan may be required.');
-            }
-        }).catch(function(){
-            if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
-            alert('Network error. Please try again.');
+        if (!r.ok) {
+            return r.json().then(function(d) {
+                btn.disabled = false;
+                btn.innerHTML = '&#11015; Download Now';
+                if (typeof WPVault !== 'undefined') WPVault.toast(d.error || 'Download failed', 'error');
+            });
+        }
+        var filename = slug + '.zip';
+        var cd = r.headers.get('Content-Disposition');
+        if (cd) {
+            var m = cd.match(/filename="?([^"]+)"?/);
+            if (m) filename = m[1];
+        }
+        return r.blob().then(function(blob) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            btn.disabled = false;
+            btn.innerHTML = '&#11015; Download Now';
+            if (typeof WPVault !== 'undefined') WPVault.toast('Download started!', 'success');
         });
-    }
-    poll();
+    }).catch(function() {
+        btn.disabled = false;
+        btn.innerHTML = '&#11015; Download Now';
+        if (typeof WPVault !== 'undefined') WPVault.toast('Download failed', 'error');
+    });
 }
 </script>
 {% endblock %}

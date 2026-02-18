@@ -1,91 +1,124 @@
 {% extends "base.html" %}
+{% block title %}Browse Plugins{% endblock %}
 {% block content %}
+
 <section class="plugins-section">
     <div class="container">
         <div class="plugins-header">
             <div>
-                <h2>Browse Premium Products</h2>
-                <p>Explore <span class="plugins-count" id="pluginTotal">12,000+</span> premium WordPress plugins and themes</p>
+                <h2>Browse <span class="gradient-text">Premium Plugins</span></h2>
+                <p>Explore <span class="plugins-count" id="totalPlugins">{{ total or 0 }}</span> premium WordPress plugins & themes</p>
+            </div>
+            <div class="view-toggle">
+                <button class="active" id="gridViewBtn" title="Grid view">&#9638;</button>
+                <button id="listViewBtn" title="List view">&#9776;</button>
             </div>
         </div>
+
         <div class="filters">
             <div class="search-wrap">
-                <input type="text" class="search-input" id="searchInput" placeholder="Search plugins and themes...">
+                <input type="text" class="search-input" id="searchInput" placeholder="Search 12,000+ plugins..." value="{{ search or '' }}">
             </div>
-            <select class="category-select" id="categorySelect"><option value="">All Categories</option></select>
+            <select class="category-select" id="categorySelect">
+                <option value="">All Categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}" {% if category == cat %}selected{% endif %}>{{ cat }}</option>
+                {% endfor %}
+            </select>
         </div>
+
+        <div class="quick-filters">
+            <button class="quick-filter active" data-filter="all">All</button>
+            <button class="quick-filter" data-filter="trending">&#128293; Trending</button>
+            <button class="quick-filter" data-filter="new">&#10024; New</button>
+            <button class="quick-filter" data-filter="popular">&#11088; Popular</button>
+        </div>
+
         <div class="plugins-grid" id="pluginsGrid">
-            <div class="loading">Loading products...</div>
+            {% if plugins %}
+            {% for p in plugins %}
+            <div class="plugin-card reveal" onclick="window.location='/plugin/{{ p.slug }}'">
+                {% if loop.index <= 3 %}
+                <span class="card-badge trending">&#128293; Trending</span>
+                {% elif loop.index <= 6 %}
+                <span class="card-badge new-badge">&#10024; New</span>
+                {% endif %}
+                <div class="plugin-thumb">
+                    {% if p.thumbnail %}
+                    <img src="{{ p.thumbnail }}" alt="{{ p.name }}" loading="lazy">
+                    {% else %}
+                    <span class="thumb-placeholder">{{ p.name[:2]|upper }}</span>
+                    {% endif %}
+                </div>
+                <div class="plugin-info">
+                    <div class="plugin-name"><a href="/plugin/{{ p.slug }}">{{ p.name }}</a></div>
+                    {% if p.description %}
+                    <div class="plugin-card-desc">{{ p.description[:100] }}</div>
+                    {% endif %}
+                    <div class="plugin-meta-row">
+                        {% if p.version and p.version != 'unknown' %}
+                        <span class="plugin-meta-tag version">v{{ p.version }}</span>
+                        {% endif %}
+                        {% if p.category %}
+                        <span class="plugin-meta-tag cat">{{ p.category[:20] }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state" style="grid-column: 1/-1">
+                <p>No plugins found matching your search.</p>
+                <a href="/plugins" class="btn btn-outline">Clear Filters</a>
+            </div>
+            {% endif %}
         </div>
-        <div class="pagination" id="pagination"></div>
+
+        {% if total_pages and total_pages > 1 %}
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="/plugins?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="page-btn">&laquo;</a>
+            {% endif %}
+
+            {% for p_num in range(1, total_pages + 1) %}
+                {% if p_num == page %}
+                <span class="page-btn active">{{ p_num }}</span>
+                {% elif p_num <= 3 or p_num > total_pages - 3 or (p_num >= page - 2 and p_num <= page + 2) %}
+                <a href="/plugins?page={{ p_num }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="page-btn">{{ p_num }}</a>
+                {% elif p_num == 4 or p_num == total_pages - 3 %}
+                <span class="page-ellipsis">...</span>
+                {% endif %}
+            {% endfor %}
+
+            {% if page < total_pages %}
+            <a href="/plugins?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="page-btn">&raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </section>
+
 {% endblock %}
+
 {% block scripts %}
 <script>
-var currentPage=1,totalPages=1,searchTimer=null;
-function loadPlugins(page,search,category){
-    currentPage=page||1;
-    var url='/api/plugins?page='+currentPage+'&per_page=20';
-    if(search) url+='&search='+encodeURIComponent(search);
-    if(category) url+='&category='+encodeURIComponent(category);
-    document.getElementById('pluginsGrid').innerHTML='<div class="loading">Loading products...</div>';
-    fetch(url).then(r=>r.json()).then(d=>{
-        if(!d.success) return;
-        var ps=d.data.plugins, total=d.data.total;
-        document.getElementById('pluginTotal').textContent=total.toLocaleString();
-        totalPages=Math.ceil(total/20);
-        var grid=document.getElementById('pluginsGrid');
-        if(!ps.length){grid.innerHTML='<div class="empty-state"><p>No products found</p></div>';document.getElementById('pagination').innerHTML='';return;}
-        var html='';
-        ps.forEach(function(p){
-            var thumbHtml='';
-            if(p.thumbnail){
-                thumbHtml='<img src="'+p.thumbnail+'" alt="'+((p.name||'').replace(/"/g,'&quot;'))+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder>\'+(p.name||\'?\').charAt(0)+\'</span>\'">';
-            } else {
-                thumbHtml='<span class="thumb-placeholder">'+(p.name||'?').charAt(0)+'</span>';
-            }
-            var typeBadge=p.is_plugin?'<span class="plugin-type-badge type-plugin">Plugin</span>':'<span class="plugin-type-badge type-theme">Theme</span>';
-            html+='<div class="plugin-card" onclick="location.href=\'/plugins/'+p.slug+'\'">';
-            html+='<div class="plugin-thumb">'+thumbHtml+typeBadge+'</div>';
-            html+='<div class="plugin-info">';
-            html+='<div class="plugin-name"><a href="/plugins/'+p.slug+'">'+p.name+'</a></div>';
-            if(p.description){
-                var desc=p.description.replace(/<[^>]*>/g,'').substring(0,80);
-                html+='<div class="plugin-card-desc">'+desc+'</div>';
-            }
-            html+='<div class="plugin-meta-row">';
-            if(p.version && p.version !== 'unknown') html+='<span class="plugin-meta-tag version">v'+p.version+'</span>';
-            if(p.category) html+='<span class="plugin-meta-tag cat">'+p.category+'</span>';
-            html+='</div></div></div>';
-        });
-        grid.innerHTML=html;
-        renderPagination();
-    });
-}
-function renderPagination(){
-    var el=document.getElementById('pagination');
-    if(totalPages<=1){el.innerHTML='';return;}
-    var html='';
-    if(currentPage>1) html+='<button class="page-btn" onclick="loadPlugins('+(currentPage-1)+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">&larr;</button>';
-    var start=Math.max(1,currentPage-3),end=Math.min(totalPages,currentPage+3);
-    if(start>1){html+='<button class="page-btn" onclick="loadPlugins(1,document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">1</button>';if(start>2)html+='<span class="page-ellipsis">...</span>';}
-    for(var i=start;i<=end;i++){html+='<button class="page-btn'+(i===currentPage?' active':'')+'" onclick="loadPlugins('+i+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">'+i+'</button>';}
-    if(end<totalPages){if(end<totalPages-1)html+='<span class="page-ellipsis">...</span>';html+='<button class="page-btn" onclick="loadPlugins('+totalPages+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">'+totalPages+'</button>';}
-    if(currentPage<totalPages) html+='<button class="page-btn" onclick="loadPlugins('+(currentPage+1)+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">&rarr;</button>';
-    el.innerHTML=html;
-}
-document.getElementById('searchInput').addEventListener('input',function(){
-    clearTimeout(searchTimer);
-    searchTimer=setTimeout(function(){loadPlugins(1,document.getElementById('searchInput').value,document.getElementById('categorySelect').value);},400);
-});
-document.getElementById('categorySelect').addEventListener('change',function(){loadPlugins(1,document.getElementById('searchInput').value,this.value);});
-fetch('/api/plugins?page=1&per_page=1').then(r=>r.json()).then(d=>{
-    if(d.success&&d.data.categories){
-        var sel=document.getElementById('categorySelect');
-        d.data.categories.forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+document.getElementById('searchInput').addEventListener('keyup', function(e) {
+    if (e.key === 'Enter') {
+        var s = this.value.trim();
+        var cat = document.getElementById('categorySelect').value;
+        var url = '/plugins?page=1';
+        if (s) url += '&search=' + encodeURIComponent(s);
+        if (cat) url += '&category=' + encodeURIComponent(cat);
+        window.location = url;
     }
 });
-loadPlugins(1);
+document.getElementById('categorySelect').addEventListener('change', function() {
+    var s = document.getElementById('searchInput').value.trim();
+    var cat = this.value;
+    var url = '/plugins?page=1';
+    if (s) url += '&search=' + encodeURIComponent(s);
+    if (cat) url += '&category=' + encodeURIComponent(cat);
+    window.location = url;
+});
 </script>
 {% endblock %}

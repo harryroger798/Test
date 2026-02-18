@@ -1,73 +1,135 @@
 {% extends "base.html" %}
+{% block title %}Admin{% endblock %}
 {% block content %}
+
 <section class="admin-section">
     <div class="container">
-        <h2>Admin Dashboard</h2>
-        <div class="admin-stats" id="adminStats"><div class="loading">Loading stats...</div></div>
+        <h2>&#9881; Admin Dashboard</h2>
+
+        <div class="admin-stats" id="adminStats">
+            <div class="stat-card">
+                <div class="stat-number" id="adminPlugins">0</div>
+                <div class="stat-label">Total Plugins</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="adminUsers">0</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="adminOrders">0</div>
+                <div class="stat-label">Total Orders</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="adminDownloads">0</div>
+                <div class="stat-label">Total Downloads</div>
+            </div>
+        </div>
+
         <div class="admin-actions">
-            <button class="btn" onclick="triggerSync()" id="syncBtn">&#128260; Trigger Sync Now</button>
+            <button class="btn" onclick="triggerSync()">&#128260; Trigger Sync</button>
         </div>
+
         <div class="admin-panel">
-            <h3>Recent Sync Logs</h3>
-            <table class="data-table"><thead><tr><th>Slug</th><th>Status</th><th>Message</th><th>Time</th></tr></thead>
-            <tbody id="syncLogs"><tr><td colspan="4" class="text-muted">Loading...</td></tr></tbody></table>
+            <h3>&#128203; Recent Sync Logs</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Plugin</th>
+                        <th>Status</th>
+                        <th>Message</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody id="syncLogs">
+                    <tr><td colspan="4" class="text-muted" style="text-align:center">Loading...</td></tr>
+                </tbody>
+            </table>
         </div>
+
         <div class="admin-panel">
-            <h3>Plugin Management</h3>
-            <table class="data-table"><thead><tr><th>Name</th><th>Slug</th><th>Category</th><th>Actions</th></tr></thead>
-            <tbody id="pluginsList"><tr><td colspan="4" class="text-muted">Loading...</td></tr></tbody></table>
+            <h3>&#128230; Plugin Management</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Version</th>
+                        <th>Category</th>
+                        <th>Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="adminPluginList">
+                    <tr><td colspan="4" class="text-muted" style="text-align:center">Loading...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </section>
+
 {% endblock %}
+
 {% block scripts %}
 <script>
-var t=localStorage.getItem('token');
-if(!t) location.href='/login';
-function loadStats(){
-    fetch('/api/admin/stats',{headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
-        if(!d.success){location.href='/login';return;}
-        var s=d.data;
-        document.getElementById('adminStats').innerHTML=
-            '<div class="stat-card"><div class="stat-number">'+s.total_plugins.toLocaleString()+'</div><div class="stat-label">Plugins</div></div>'+
-            '<div class="stat-card"><div class="stat-number">'+s.total_users+'</div><div class="stat-label">Users</div></div>'+
-            '<div class="stat-card"><div class="stat-number">'+s.total_orders+'</div><div class="stat-label">Orders</div></div>'+
-            '<div class="stat-card"><div class="stat-number">'+s.total_downloads+'</div><div class="stat-label">Downloads</div></div>';
-        var logsHtml='';
-        if(s.recent_sync_logs && s.recent_sync_logs.length){
-            s.recent_sync_logs.forEach(function(l){
-                var sc='status-'+l.status;
-                logsHtml+='<tr><td>'+l.slug+'</td><td><span class="status-badge '+sc+'">'+l.status+'</span></td><td>'+(l.message||'')+'</td><td>'+new Date(l.synced_at).toLocaleString()+'</td></tr>';
+(function() {
+    var token = localStorage.getItem('token');
+    if (!token) { window.location = '/login'; return; }
+
+    fetch('/api/admin/stats', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (!d.success) { window.location = '/dashboard'; return; }
+        document.getElementById('adminPlugins').textContent = (d.data.plugins || 0).toLocaleString();
+        document.getElementById('adminUsers').textContent = d.data.users || 0;
+        document.getElementById('adminOrders').textContent = d.data.orders || 0;
+        document.getElementById('adminDownloads').textContent = d.data.downloads || 0;
+    });
+
+    fetch('/api/admin/sync-logs', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var tbody = document.getElementById('syncLogs');
+        if (d.success && d.data && d.data.length > 0) {
+            tbody.innerHTML = '';
+            d.data.slice(0, 20).forEach(function(log) {
+                var tr = document.createElement('tr');
+                var cls = 'status-' + (log.status || 'new');
+                tr.innerHTML = '<td>' + (log.plugin_name || '-') + '</td><td><span class="status-badge ' + cls + '">' + (log.status || '-') + '</span></td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + (log.message || '-') + '</td><td>' + (log.synced_at || '').split('T')[0] + '</td>';
+                tbody.appendChild(tr);
             });
-        } else { logsHtml='<tr><td colspan="4" class="text-muted">No sync logs yet</td></tr>'; }
-        document.getElementById('syncLogs').innerHTML=logsHtml;
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted" style="text-align:center">No sync logs yet</td></tr>';
+        }
+    });
+
+    fetch('/api/plugins?per_page=10', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var tbody = document.getElementById('adminPluginList');
+        if (d.success && d.data && d.data.length > 0) {
+            tbody.innerHTML = '';
+            d.data.forEach(function(p) {
+                var tr = document.createElement('tr');
+                tr.innerHTML = '<td><a href="/plugin/' + p.slug + '">' + p.name + '</a></td><td>' + (p.version || '-') + '</td><td>' + (p.category || '-') + '</td><td>' + (p.updated_at || '').split('T')[0] + '</td>';
+                tbody.appendChild(tr);
+            });
+        }
+    });
+})();
+
+function triggerSync() {
+    var token = localStorage.getItem('token');
+    var btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '&#9203; Syncing...';
+    fetch('/api/admin/trigger-sync', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        btn.disabled = false;
+        btn.innerHTML = '&#128260; Trigger Sync';
+        if (typeof WPVault !== 'undefined') WPVault.toast(d.success ? 'Sync triggered!' : (d.error || 'Sync failed'), d.success ? 'success' : 'error');
     });
 }
-function loadPlugins(){
-    fetch('/api/admin/plugins?page=1',{headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
-        if(!d.success) return;
-        var html='';
-        d.data.plugins.slice(0,50).forEach(function(p){
-            html+='<tr><td>'+p.name+'</td><td>'+p.slug+'</td><td>'+(p.category||'-')+'</td><td><button class="btn btn-sm btn-danger" onclick="deletePlugin(\''+p.slug+'\')">Delete</button></td></tr>';
-        });
-        document.getElementById('pluginsList').innerHTML=html||'<tr><td colspan="4" class="text-muted">No plugins</td></tr>';
-    });
-}
-function triggerSync(){
-    var btn=document.getElementById('syncBtn');
-    btn.disabled=true;btn.textContent='Syncing...';
-    fetch('/api/admin/sync',{method:'POST',headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
-        alert(d.success?'Sync started!':d.error||'Sync failed');
-        btn.disabled=false;btn.innerHTML='&#128260; Trigger Sync Now';
-    });
-}
-function deletePlugin(slug){
-    if(!confirm('Delete '+slug+'?')) return;
-    fetch('/api/admin/plugins/'+slug,{method:'DELETE',headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
-        alert(d.success?'Deleted':'Failed: '+(d.error||''));
-        loadPlugins();loadStats();
-    });
-}
-loadStats();loadPlugins();
 </script>
 {% endblock %}
