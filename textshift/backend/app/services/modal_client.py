@@ -181,9 +181,11 @@ class ModalHumanizerClient:
 
     def close(self) -> None:
         """Close the persistent HTTP client to release sockets."""
-        if self._http_client is not None:
-            self._http_client.close()
+        with self._lock:
+            client = self._http_client
             self._http_client = None
+        if client is not None:
+            client.close()
 
     def health_check(self) -> bool:
         """Check if Modal endpoint is responsive."""
@@ -277,11 +279,13 @@ class ModalMultiModelClient:
 
     def close(self) -> None:
         """Close the persistent HTTP client to release sockets."""
-        if self._http_client is not None:
-            self._http_client.close()
+        with self._lock:
+            client = self._http_client
             self._http_client = None
+        if client is not None:
+            client.close()
 
-    def invoke_embedding(self, input_text: str, model_name: str = "sbert") -> Optional[List[float]]:
+    def invoke_embedding(self, model_name: str = "sbert", input_text: str = "") -> Optional[List[float]]:
         results = self._invoke(model_name, input_text)
         if results and isinstance(results, list) and len(results) > 0:
             return results[0].get("embedding")
