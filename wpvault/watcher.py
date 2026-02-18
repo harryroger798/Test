@@ -1,8 +1,10 @@
+import json
+import logging
+import os
 import re
-from defusedxml import ElementTree as ET
-import feedparser
-import requests
 from urllib.parse import urlparse
+
+from dotenv import load_dotenv
 
 import database
 import downloader
@@ -10,87 +12,134 @@ import file_processor
 import storage
 import notifier
 
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+EDD_API_BASE = "https://pluginsforwp.com/edd-api/v2/products/"
+PLUGINSFORWP_API_KEY = os.getenv("PLUGINSFORWP_API_KEY", "")
+PRODUCTS_PER_PAGE = 20
+MAX_PAGES = 5
+
+
+def _strip_html(text: str) -> str:
+    clean = re.sub(r"<[^>]+>", "", text or "")
+    clean = re.sub(r"\s+", " ", clean).strip()
+    return clean[:500]
+
+
+def _fetch_api_page(page_num: int, per_page: int = 20) -> list:
+    import requests as req
+
+    api_url = f"{EDD_API_BASE}?key={PLUGINSFORWP_API_KEY}&number={per_page}&page={page_num}"
+
+    try:
+        resp = req.get(api_url, timeout=30, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("products", [])
+        logger.warning("API returned status %d for page %d", resp.status_code, page_num)
+    except Exception:
+        logger.exception("requests fetch failed for page %d, trying Playwright", page_num)
+
+    return _fetch_api_page_playwright(page_num, per_page)
+
+
+def _fetch_api_page_playwright(page_num: int, per_page: int = 20) -> list:
+    from playwright.sync_api import sync_playwright
+    from playwright_stealth import stealth_sync
+
+    api_url = f"{EDD_API_BASE}?key={PLUGINSFORWP_API_KEY}&number={per_page}&page={page_num}"
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            viewport={"width": 1920, "height": 1080},
+        )
+        page = context.new_page()
+        stealth_sync(page)
+
+        page.goto(api_url, wait_until="domcontentloaded", timeout=60000)
+
+        for _ in range(30):
+            page.wait_for_timeout(2000)
+            body_text = page.inner_text("body").strip()
+            if body_text.startswith("{") and '"products"' in body_text:
+                break
+
+        body_text = page.inner_text("body").strip()
+        browser.close()
+
+        if body_text.startswith("{"):
+            data = json.loads(body_text)
+            return data.get("products", [])
+
+    return []
+
 
 def scrape_plugin_list() -> list:
     items = {}
 
-    try:
-        feed = feedparser.parse("https://pluginsforwp.com/feed/")
-        for entry in feed.entries:
-            url = entry.get("link", "")
-            if not url:
-                continue
-            slug = _extract_slug(url)
-            if not slug:
-                continue
+    if not PLUGINSFORWP_API_KEY:
+        logger.error("PLUGINSFORWP_API_KEY not set")
+        return []
 
-            category = ""
-            if hasattr(entry, "tags") and entry.tags:
-                category = entry.tags[0].get("term", "")
+    for page_num in range(1, MAX_PAGES + 1):
+        try:
+            products = _fetch_api_page(page_num, PRODUCTS_PER_PAGE)
+        except Exception:
+            logger.exception("Failed to fetch API page %d", page_num)
+            break
 
-            thumbnail = ""
-            if hasattr(entry, "media_content") and entry.media_content:
-                thumbnail = entry.media_content[0].get("url", "")
+        if not products:
+            break
 
-            is_plugin = "/themes/" not in url
-
-            items[slug] = {
-                "slug": slug,
-                "source_url": url,
-                "name": entry.get("title", slug),
-                "description": entry.get("summary", ""),
-                "thumbnail_url": thumbnail,
-                "category": category,
-                "is_plugin": is_plugin,
-            }
-    except Exception:
-        pass
-
-    try:
-        response = requests.get("https://pluginsforwp.com/sitemap.xml", timeout=30)
-        if response.status_code == 200:
-            root = ET.fromstring(response.text)
-            ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-
-            sitemap_urls = []
-            for sitemap in root.findall(".//sm:sitemap/sm:loc", ns):
-                sitemap_urls.append(sitemap.text)
-
-            loc_urls = []
-            for loc in root.findall(".//sm:url/sm:loc", ns):
-                loc_urls.append(loc.text)
-
-            for sub_url in sitemap_urls:
-                try:
-                    sub_resp = requests.get(sub_url, timeout=30)
-                    if sub_resp.status_code == 200:
-                        sub_root = ET.fromstring(sub_resp.text)
-                        for loc in sub_root.findall(".//sm:url/sm:loc", ns):
-                            loc_urls.append(loc.text)
-                except Exception:
-                    continue
-
-            for url in loc_urls:
-                if "/plugins/" not in url and "/themes/" not in url:
-                    continue
-                slug = _extract_slug(url)
+        for product in products:
+            try:
+                info = product.get("info", {})
+                slug = info.get("slug", "")
                 if not slug or slug in items:
                     continue
 
-                is_plugin = "/themes/" not in url
-                name = slug.replace("-", " ").title()
+                source_url = info.get("permalink", "") or info.get("link", "")
+                if not source_url:
+                    continue
+
+                name = info.get("title", slug.replace("-", " ").title())
+                description = _strip_html(info.get("content", ""))
+                thumbnail = info.get("thumbnail", "")
+
+                categories = info.get("category", [])
+                category = ""
+                for cat in categories:
+                    cat_name = cat.get("name", "")
+                    if cat_name and cat_name not in ("Basic Item",):
+                        category = cat_name
+                        break
+
+                is_plugin = True
+                for cat in categories:
+                    if cat.get("slug") == "themes":
+                        is_plugin = False
+                        break
 
                 items[slug] = {
                     "slug": slug,
-                    "source_url": url,
+                    "source_url": source_url,
                     "name": name,
-                    "description": "",
-                    "thumbnail_url": "",
-                    "category": "",
+                    "description": description,
+                    "thumbnail_url": thumbnail,
+                    "category": category,
                     "is_plugin": is_plugin,
                 }
-    except Exception:
-        pass
+            except Exception:
+                continue
+
+        if len(products) < PRODUCTS_PER_PAGE:
+            break
 
     return list(items.values())
 

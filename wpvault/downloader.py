@@ -33,18 +33,21 @@ def download_plugin(page_url: str, slug: str) -> str | None:
                 database.log_sync(slug, "failed", "Could not get authenticated session")
                 return None
 
-            page.goto(page_url, wait_until="networkidle", timeout=60000)
-            page.wait_for_timeout(3000)
+            page.goto(page_url, wait_until="domcontentloaded", timeout=60000)
+            page.wait_for_timeout(5000)
 
             download_link = None
             selectors = [
                 'a[href*=".zip"]',
+                'a.edd-free-download',
+                'a[class*="edd_download_file"]',
+                'a:has-text("Free for members")',
+                'a:has-text("Download")',
                 'a.download',
                 'a[class*="download"]',
-                'a:has-text("Download")',
-                'a:has-text("download")',
                 'button:has-text("Download")',
                 'a[href*="download"]',
+                'a[href*="edd_action=free_download"]',
             ]
 
             for selector in selectors:
