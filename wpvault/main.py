@@ -36,6 +36,7 @@ def _img_token_to_url(token: str) -> str | None:
 
 
 import random
+import html as html_mod
 import database
 import auth
 import payments
@@ -787,16 +788,34 @@ def page_plugins(request: Request, page: int = 1, search: str = "", category: st
     })
 
 
+def _format_description_html(text: str) -> str:
+    if not text:
+        return "<p>Premium WordPress plugin available for instant download.</p>"
+    escaped = html_mod.escape(text)
+    sentences = re.split(r'(?<=[.!?])\s+', escaped)
+    paragraphs = []
+    current: list[str] = []
+    for s in sentences:
+        current.append(s)
+        if len(current) >= 3:
+            paragraphs.append(" ".join(current))
+            current = []
+    if current:
+        paragraphs.append(" ".join(current))
+    return "".join(f"<p>{p}</p>" for p in paragraphs)
+
+
 @app.get("/plugin/{slug}", response_class=HTMLResponse)
 def page_plugin_detail(request: Request, slug: str):
     plugin = database.get_plugin_by_slug(slug)
     if not plugin:
         raise HTTPException(status_code=404, detail="Plugin not found")
     thumb = plugin.get("thumbnail_url", "") or ""
+    raw_desc = plugin.get("description", "") or ""
     plugin_data = {
         "slug": plugin.get("slug"),
         "name": plugin.get("name"),
-        "description": plugin.get("description", ""),
+        "description": _format_description_html(raw_desc),
         "version": plugin.get("version"),
         "category": plugin.get("category"),
         "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",

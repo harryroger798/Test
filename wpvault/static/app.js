@@ -188,17 +188,24 @@
                     observer.unobserve(entry.target);
                 }
             });
-        }, { threshold: 0.05, rootMargin: "0px 0px -20px 0px" });
+        }, { threshold: 0.01, rootMargin: "0px 0px 200px 0px" });
         reveals.forEach(function(el) { observer.observe(el); });
-        /* Force-reveal elements already in viewport on load */
-        setTimeout(function() {
-            reveals.forEach(function(el) {
+        function forceRevealVisible() {
+            document.querySelectorAll(".reveal:not(.visible)").forEach(function(el) {
                 var rect = el.getBoundingClientRect();
-                if (rect.top < window.innerHeight && rect.bottom > 0) {
+                if (rect.top < window.innerHeight + 100) {
                     el.classList.add("visible");
                 }
             });
-        }, 100);
+        }
+        setTimeout(forceRevealVisible, 100);
+        setTimeout(forceRevealVisible, 500);
+        window.addEventListener("scroll", forceRevealVisible, { passive: true });
+        setTimeout(function() {
+            document.querySelectorAll(".reveal:not(.visible)").forEach(function(el) {
+                el.classList.add("visible");
+            });
+        }, 2000);
     }
 
     /* ============================================

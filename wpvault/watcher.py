@@ -25,7 +25,7 @@ MAX_PAGES = 500
 def _strip_html(text: str) -> str:
     clean = re.sub(r"<[^>]+>", "", text or "")
     clean = re.sub(r"\s+", " ", clean).strip()
-    return clean[:500]
+    return clean
 
 
 def _fetch_api_page(page_num: int, per_page: int = 20) -> list:
