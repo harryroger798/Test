@@ -147,9 +147,9 @@
        ANIMATED STAT COUNTERS
        ============================================ */
     function animateCounters() {
-        var counters = document.querySelectorAll("[data-count]");
+        var counters = document.querySelectorAll("[data-count], [data-target]");
         counters.forEach(function(el) {
-            var target = parseInt(el.getAttribute("data-count"));
+            var target = parseInt(el.getAttribute("data-count") || el.getAttribute("data-target"));
             if (isNaN(target)) return;
             var suffix = el.getAttribute("data-suffix") || "";
             var prefix = el.getAttribute("data-prefix") || "";
@@ -182,16 +182,23 @@
         var reveals = document.querySelectorAll(".reveal");
         if (!reveals.length) return;
         var observer = new IntersectionObserver(function(entries) {
-            entries.forEach(function(entry, i) {
+            entries.forEach(function(entry) {
                 if (entry.isIntersecting) {
-                    setTimeout(function() {
-                        entry.target.classList.add("visible");
-                    }, i * 80);
+                    entry.target.classList.add("visible");
                     observer.unobserve(entry.target);
                 }
             });
-        }, { threshold: 0.1, rootMargin: "0px 0px -40px 0px" });
+        }, { threshold: 0.05, rootMargin: "0px 0px -20px 0px" });
         reveals.forEach(function(el) { observer.observe(el); });
+        /* Force-reveal elements already in viewport on load */
+        setTimeout(function() {
+            reveals.forEach(function(el) {
+                var rect = el.getBoundingClientRect();
+                if (rect.top < window.innerHeight && rect.bottom > 0) {
+                    el.classList.add("visible");
+                }
+            });
+        }, 100);
     }
 
     /* ============================================

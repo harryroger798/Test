@@ -217,11 +217,12 @@ img { max-width: 100%; height: auto; }
 .btn-xl { padding: 16px 36px; font-size: 1rem; border-radius: 14px; letter-spacing: 0.3px; }
 .btn-full { width: 100%; }
 .btn-outline {
-    background: transparent;
-    border: 1.5px solid var(--accent);
-    color: var(--accent-light);
+    background: rgba(139,92,246,0.12);
+    border: 2px solid var(--accent-light);
+    color: white;
+    font-weight: 700;
 }
-.btn-outline:hover { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-outline:hover { background: var(--accent); color: white; border-color: var(--accent); box-shadow: var(--shadow-accent); }
 .btn-ghost {
     background: rgba(255,255,255,0.04);
     color: var(--text-primary);
@@ -361,7 +362,7 @@ img { max-width: 100%; height: auto; }
     transition: var(--transition);
     pointer-events: none;
 }
-.back-to-top.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.back-to-top.show, .back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
 .back-to-top:hover { transform: translateY(-3px); box-shadow: var(--shadow-accent-lg); }
 
 /* FOOTER */
@@ -604,7 +605,7 @@ img { max-width: 100%; height: auto; }
 .features { padding: 80px 0; }
 .features-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 18px;
 }
 .feature-card {
@@ -1423,12 +1424,12 @@ img { max-width: 100%; height: auto; }
 .text-center { text-align: center; }
 
 /* SCROLL REVEAL */
-.reveal { opacity: 0; transform: translateY(30px); transition: all 0.6s cubic-bezier(0.4,0,0.2,1); }
-.reveal.visible { opacity: 1; transform: translateY(0); }
-.reveal-delay-1 { transition-delay: 0.1s; }
-.reveal-delay-2 { transition-delay: 0.2s; }
-.reveal-delay-3 { transition-delay: 0.3s; }
-.reveal-delay-4 { transition-delay: 0.4s; }
+.reveal { opacity: 0; transform: translateY(20px); transition: all 0.5s cubic-bezier(0.4,0,0.2,1); }
+.reveal.visible { opacity: 1 !important; transform: translateY(0) !important; }
+.reveal-delay-1 { transition-delay: 0.08s; }
+.reveal-delay-2 { transition-delay: 0.16s; }
+.reveal-delay-3 { transition-delay: 0.24s; }
+.reveal-delay-4 { transition-delay: 0.32s; }
 
 /* RESPONSIVE */
 @media (max-width: 1024px) {
