@@ -13,7 +13,14 @@ IDRIVE_ACCESS_KEY = os.getenv("IDRIVE_ACCESS_KEY", "")
 IDRIVE_SECRET_KEY = os.getenv("IDRIVE_SECRET_KEY", "")
 IDRIVE_ENDPOINT = os.getenv("IDRIVE_ENDPOINT", "")
 IDRIVE_BUCKET = os.getenv("IDRIVE_BUCKET", "plugins-store")
+IDRIVE_REGION = os.getenv("IDRIVE_REGION", "")
 DB_PATH = os.getenv("DB_PATH", "/home/app/database.db")
+
+if not IDRIVE_REGION and IDRIVE_ENDPOINT:
+    import re as _re
+    _m = _re.search(r"s3\.([a-z0-9-]+)\.", IDRIVE_ENDPOINT)
+    if _m:
+        IDRIVE_REGION = _m.group(1)
 
 _missing_config = []
 if not IDRIVE_ACCESS_KEY:
@@ -35,6 +42,7 @@ def _get_client():
         endpoint_url=IDRIVE_ENDPOINT,
         aws_access_key_id=IDRIVE_ACCESS_KEY,
         aws_secret_access_key=IDRIVE_SECRET_KEY,
+        region_name=IDRIVE_REGION or "us-east-1",
         config=Config(signature_version="s3v4"),
     )
 
@@ -66,6 +74,16 @@ def generate_presigned_url(object_key: str, expires_in: int = 3600) -> str:
     except Exception:
         logger.exception("Failed to generate presigned URL for %s", object_key)
         return ""
+
+
+def get_file_stream(object_key: str):
+    try:
+        client = _get_client()
+        resp = client.get_object(Bucket=IDRIVE_BUCKET, Key=object_key)
+        return resp["Body"], resp.get("ContentLength", 0)
+    except Exception:
+        logger.exception("Failed to stream %s", object_key)
+        return None, 0
 
 
 def delete_file(object_key: str) -> bool:

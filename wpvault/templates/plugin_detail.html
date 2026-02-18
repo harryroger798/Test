@@ -90,10 +90,45 @@ fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
 function downloadPlugin(){
     var t=localStorage.getItem('token');
     if(!t){location.href='/login';return;}
-    fetch('/api/plugins/'+slug+'/download',{headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
-        if(d.success&&d.data.download_url){window.open(d.data.download_url,'_blank');}
-        else{alert(d.error||'Download failed. Premium plan may be required.');}
-    });
+    var btn=document.querySelector('.download-btn-wrap button');
+    if(btn){btn.disabled=true;btn.innerHTML='&#9203; Preparing download...';}
+    function poll(){
+        fetch('/api/plugins/'+slug+'/download',{headers:{'Authorization':'Bearer '+t}}).then(function(r){return r.json();}).then(function(d){
+            if(d.success&&d.data&&d.data.download_url){
+                if(btn){btn.innerHTML='&#9203; Downloading...';}
+                fetch(d.data.download_url,{headers:{'Authorization':'Bearer '+t}}).then(function(r){
+                    if(!r.ok) throw new Error('Download failed');
+                    var cd=r.headers.get('content-disposition')||'';
+                    var fn=slug+'.zip';
+                    var m=cd.match(/filename="?([^";\s]+)"?/);
+                    if(m) fn=m[1];
+                    return r.blob().then(function(blob){return {blob:blob,fn:fn};});
+                }).then(function(obj){
+                    var a=document.createElement('a');
+                    a.href=URL.createObjectURL(obj.blob);
+                    a.download=obj.fn;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(a.href);
+                    if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
+                }).catch(function(e){
+                    if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
+                    alert('File download failed: '+e.message);
+                });
+            } else if(d.success&&d.data&&d.data.status==='preparing'){
+                if(btn){btn.innerHTML='&#9203; '+d.data.message;}
+                setTimeout(poll,5000);
+            } else {
+                if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
+                alert(d.error||'Download failed. Premium plan may be required.');
+            }
+        }).catch(function(){
+            if(btn){btn.disabled=false;btn.innerHTML='&#11015; Download Now';}
+            alert('Network error. Please try again.');
+        });
+    }
+    poll();
 }
 </script>
 {% endblock %}

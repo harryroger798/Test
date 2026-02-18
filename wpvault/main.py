@@ -40,6 +40,8 @@ import auth
 import payments
 import storage
 import watcher
+import downloader
+import file_processor
 
 app = FastAPI(title="WPVault", version="1.0.0")
 
@@ -294,28 +296,146 @@ def api_plugin_download(slug: str, request: Request):
         )
 
     file_key = plugin.get("file_key", "")
+
+    if file_key:
+        database.log_download(user["id"], plugin["id"])
+        if slug in _download_tasks:
+            del _download_tasks[slug]
+        return JSONResponse(content={
+            "success": True,
+            "data": {"download_url": f"/api/plugins/{slug}/file", "expires_in": 3600}
+        })
+
+    if slug in _download_tasks:
+        task = _download_tasks[slug]
+        if task["status"] == "ready":
+            plugin = database.get_plugin_by_slug(slug)
+            fk = plugin.get("file_key", "") if plugin else ""
+            if fk:
+                database.log_download(user["id"], plugin["id"])
+                del _download_tasks[slug]
+                return JSONResponse(content={
+                    "success": True,
+                    "data": {"download_url": f"/api/plugins/{slug}/file", "expires_in": 3600}
+                })
+            del _download_tasks[slug]
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": "Download completed but file not found. Please try again."}
+            )
+        elif task["status"] == "failed":
+            msg = task.get("message", "Download failed")
+            del _download_tasks[slug]
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": msg}
+            )
+        else:
+            return JSONResponse(content={
+                "success": True,
+                "data": {"status": "preparing", "message": "Download is being prepared. Please wait..."}
+            })
+
+    source_url = plugin.get("source_url", "")
+    if not source_url:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "No download source available for this plugin"}
+        )
+
+    _download_tasks[slug] = {"status": "preparing"}
+
+    def _bg_download(dl_slug: str, dl_source_url: str):
+        filepath = None
+        try:
+            filepath = downloader.download_plugin(dl_source_url, dl_slug)
+            if not filepath:
+                _download_tasks[dl_slug] = {"status": "failed", "message": "Could not download from source. Please try again later."}
+                return
+
+            result = file_processor.process_file(filepath, dl_slug)
+            version = result.get("version", "unknown") if result else "unknown"
+            file_hash = result.get("file_hash", "") if result else ""
+            file_size = result.get("file_size_bytes", 0) if result else 0
+
+            object_key = f"plugins/{dl_slug}/{dl_slug}-{version}.zip"
+            if storage.upload_file(filepath, object_key):
+                database.update_plugin(dl_slug, {
+                    "file_key": object_key,
+                    "file_hash": file_hash,
+                    "file_size_bytes": file_size,
+                    "version": version,
+                })
+                _download_tasks[dl_slug] = {"status": "ready"}
+            else:
+                _download_tasks[dl_slug] = {"status": "failed", "message": "Failed to store file. Please try again."}
+        except Exception as exc:
+            logging.getLogger(__name__).exception("Background download failed for %s", dl_slug)
+            _download_tasks[dl_slug] = {"status": "failed", "message": f"Download error: {exc}"}
+        finally:
+            if filepath:
+                try:
+                    os.remove(filepath)
+                except OSError:
+                    pass
+
+    thread = threading.Thread(target=_bg_download, args=(slug, source_url), daemon=True)
+    thread.start()
+
+    return JSONResponse(content={
+        "success": True,
+        "data": {"status": "preparing", "message": "Download is being prepared. This may take up to 2 minutes..."}
+    })
+
+
+@app.get("/api/plugins/{slug}/file")
+def api_plugin_file(slug: str, request: Request):
+    user = get_current_user_from_request(request)
+
+    if not auth.require_premium(user):
+        return JSONResponse(
+            status_code=403,
+            content={"success": False, "error": "Premium plan required"}
+        )
+
+    plugin = database.get_plugin_by_slug(slug)
+    if not plugin:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "Plugin not found"}
+        )
+
+    file_key = plugin.get("file_key", "")
     if not file_key:
         return JSONResponse(
             status_code=404,
             content={"success": False, "error": "File not available"}
         )
 
-    presigned_url = storage.generate_presigned_url(file_key, expires_in=3600)
-    if not presigned_url:
+    body, content_length = storage.get_file_stream(file_key)
+    if body is None:
         return JSONResponse(
             status_code=500,
-            content={"success": False, "error": "Could not generate download link"}
+            content={"success": False, "error": "Failed to retrieve file from storage"}
         )
 
-    database.log_download(user["id"], plugin["id"])
+    filename = file_key.rsplit("/", 1)[-1] if "/" in file_key else file_key
 
-    return JSONResponse(content={
-        "success": True,
-        "data": {
-            "download_url": presigned_url,
-            "expires_in": 3600
-        }
-    })
+    def _stream():
+        try:
+            for chunk in body.iter_chunks(chunk_size=65536):
+                yield chunk
+        finally:
+            body.close()
+
+    return StreamingResponse(
+        _stream(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(content_length),
+        },
+    )
 
 
 @app.post("/api/checkout")
@@ -372,6 +492,8 @@ async def webhook_btcpay(request: Request):
 
 _sync_lock = threading.Lock()
 _sync_running = False
+
+_download_tasks: dict[str, dict] = {}
 
 
 @app.get("/api/admin/stats")
