@@ -28,7 +28,7 @@ def download_plugin(page_url: str, slug: str) -> str | None:
     safe_slug = _sanitize_slug(slug)
 
     try:
-        with session_manager.get_authenticated_page() as (p, browser, context, page):
+        with session_manager.get_authenticated_page() as (_p, _browser, context, page):
             if not page:
                 database.log_sync(slug, "failed", "Could not get authenticated session")
                 return None

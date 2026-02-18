@@ -53,7 +53,9 @@ def login_and_save_session() -> bool:
 
             if login_success:
                 cookies = context.cookies()
-                os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
+                session_dir = os.path.dirname(SESSION_FILE)
+                if session_dir:
+                    os.makedirs(session_dir, exist_ok=True)
                 with open(SESSION_FILE, "w") as f:
                     json.dump(cookies, f, indent=2)
                 notifier.notify_session_refreshed()

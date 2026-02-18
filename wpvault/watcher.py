@@ -136,6 +136,7 @@ def scrape_plugin_list() -> list:
                     "is_plugin": is_plugin,
                 }
             except Exception:
+                logger.exception("Failed to parse product in page %d", page_num)
                 continue
 
         if len(products) < PRODUCTS_PER_PAGE:
