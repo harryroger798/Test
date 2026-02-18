@@ -1544,7 +1544,7 @@ class MLModelService:
         result = ' '.join(word_tokens)
         return result.strip()
 
-    _MODE_TEMPS = {'academic': 0.7, 'professional': 0.75, 'casual': 0.85}
+    _MODE_TEMPS: dict = {'academic': 0.7, 'professional': 0.75, 'casual': 0.85}
 
     def _humanize_chunk_via_modal(self, chunk: str, parameters: Optional[Dict[str, Any]] = None, mode: str = 'casual') -> Optional[str]:
         """Humanize a single chunk via Modal serverless GPU endpoint."""
@@ -1617,7 +1617,15 @@ class MLModelService:
                 if use_post_processor:
                     model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
                 return model_output
-            logger.info("SageMaker humanize failed for single sentence, falling back to local ONNX")
+            logger.info("SageMaker humanize failed for single sentence, trying Modal fallback")
+            if backend == "sagemaker":
+                modal_result = self._humanize_chunk_via_modal(sentence, mode=mode)
+                if modal_result:
+                    model_output = modal_result
+                    if use_post_processor:
+                        model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
+                    return model_output
+            logger.info("All remote backends failed, falling back to local ONNX")
         try:
             self._load_humanizer()
             input_text = f"humanize: {sentence}"
@@ -2351,7 +2359,10 @@ class MLModelService:
 
         for orig_sent in orig_sents:
             orig_lower = orig_sent.lower()
-            neg_patterns = list(re.finditer(r'\b(not|never)\s+(\w{4,})', orig_lower))
+            neg_patterns = [
+                m for m in re.finditer(r'\b(not|never)\s+([a-z]{2,})', orig_lower)
+                if m.group(2) not in self._STOPWORDS
+            ]
             if not neg_patterns:
                 continue
 
@@ -2439,11 +2450,12 @@ class MLModelService:
             batch_inputs = [f"humanize: {chunk}" for chunk in chunks]
             word_counts = [len(c.split()) for c in chunks]
             max_new = min(int(max(word_counts) * 2.5), 512)
+            temp = self._MODE_TEMPS.get(mode, 0.85)
             parameters = {
                 "max_new_tokens": max_new,
                 "num_beams": 1,
                 "do_sample": True,
-                "temperature": 1.0,
+                "temperature": temp,
                 "top_p": 0.95,
                 "repetition_penalty": 2.5,
                 "no_repeat_ngram_size": 3,
@@ -2467,12 +2479,15 @@ class MLModelService:
                             sm_result = self._humanize_chunk_via_sagemaker(chunks[idx])
                             if sm_result:
                                 result_chunks[idx] = sm_result
+                                actual_backend = "mixed"
                             else:
                                 result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
+                                actual_backend = "mixed"
                     gpu_used = True
                 except Exception as e:
                     logger.warning(f"Modal batch failed: {e}, falling back to SageMaker")
-                    actual_backend = "sagemaker"
+                    use_sagemaker_check = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+                    actual_backend = "sagemaker" if use_sagemaker_check else "local"
 
             use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
             has_unfilled = any(r is None for r in result_chunks)
@@ -2571,7 +2586,9 @@ class MLModelService:
 
         logger.info(f"Humanizing {len(non_empty_texts)} paragraphs via {backend} (batch mode)")
 
-        if backend == "modal" and len(non_empty_texts) > 1:
+        if backend == "modal" and len(non_empty_texts) > 1 and all(
+            len(t.split()) <= self._CHUNK_WORD_LIMIT for t in non_empty_texts
+        ):
             temp = self._MODE_TEMPS.get(mode, 0.85)
             batch_inputs = [f"humanize: {t}" for t in non_empty_texts]
             word_counts = [len(t.split()) for t in non_empty_texts]
@@ -2612,7 +2629,7 @@ class MLModelService:
                         if sm_used:
                             any_sagemaker = True
                         backends_used.append(actual_be)
-                total_chunks = len(non_empty_texts)
+                total_chunks += len(non_empty_texts) - len(failed_indices)
             except Exception as e:
                 logger.warning(f"Modal batch failed: {e}, falling back to sequential")
                 for j, stripped in enumerate(non_empty_texts):
@@ -2626,7 +2643,9 @@ class MLModelService:
                     if sm_used:
                         any_sagemaker = True
                     backends_used.append(actual_be)
-        elif backend == "sagemaker" and len(non_empty_texts) > 1:
+        elif backend == "sagemaker" and len(non_empty_texts) > 1 and all(
+            len(t.split()) <= self._CHUNK_WORD_LIMIT for t in non_empty_texts
+        ):
             temp = self._MODE_TEMPS.get(mode, 0.85)
             batch_inputs = [f"humanize: {t}" for t in non_empty_texts]
             word_counts = [len(t.split()) for t in non_empty_texts]
@@ -2670,7 +2689,7 @@ class MLModelService:
                         if sm_used:
                             any_sagemaker = True
                         backends_used.append(actual_be)
-                total_chunks = len(non_empty_texts)
+                total_chunks += len(non_empty_texts) - len(failed_indices)
             except Exception as e:
                 logger.warning(f"SageMaker server batch failed: {e}, falling back to sequential")
                 for j, stripped in enumerate(non_empty_texts):
@@ -2728,7 +2747,14 @@ class MLModelService:
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
         is_chunked = total_chunks > len(content_paragraphs) or len(content_paragraphs) > 1
-        actual_backend = backends_used[-1] if backends_used else get_inference_backend()
+        any_sagemaker = any(be == "sagemaker" for be in backends_used)
+        unique_backends = set(backends_used)
+        if len(unique_backends) > 1:
+            actual_backend = "mixed"
+        elif len(unique_backends) == 1:
+            actual_backend = unique_backends.pop()
+        else:
+            actual_backend = get_inference_backend()
         return {
             "original_text": text,
             "model_output": model_output,
