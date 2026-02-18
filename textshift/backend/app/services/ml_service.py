@@ -1930,6 +1930,52 @@ class MLModelService:
             'chunk_scores': chunk_scores,
         }
     
+    def _estimate_humanization_score(self, text: str) -> Optional[float]:
+        """Detect signs of mechanical text humanization (word-substitution artifacts).
+        Returns 0.0-1.0 where higher = more likely the text was run through a humanizer.
+        Returns None for short texts (<30 words) where signal is unreliable.
+        """
+        words = re.findall(r'\b[a-zA-Z]+\b', text)
+        if len(words) < 30:
+            return None
+
+        score = 0.0
+
+        slash_constructions = len(re.findall(
+            r'\b[a-z]+/[a-z]+\b', text, re.IGNORECASE
+        ))
+        score += min(0.25, slash_constructions * 0.08)
+
+        word_merges = len(re.findall(r'[a-z][A-Z][a-z]', text))
+        score += min(0.25, word_merges * 0.12)
+
+        pronoun_hedges = len(re.findall(
+            r'\b(?:he or she|him or her|his or her|s/he|him/herself|he/she|'
+            r'man or woman|men or women|boy or girl|his/her|him or herself)\b',
+            text, re.IGNORECASE,
+        ))
+        score += min(0.25, pronoun_hedges * 0.07)
+
+        long_words = [w for w in words if len(w) > 14]
+        long_ratio = len(long_words) / len(words)
+        if long_ratio > 0.008:
+            score += min(0.20, long_ratio * 12)
+
+        sentences = [s.strip() for s in re.split(r'[.!?]+', text) if len(s.strip()) > 10]
+        if sentences:
+            comma_per_sent = text.count(',') / len(sentences)
+            if comma_per_sent > 4.5:
+                score += 0.10
+
+        third_person = len(re.findall(
+            r'\b(?:they|a person|someone|the person|one\'s)\b', text, re.IGNORECASE
+        ))
+        first_person = len(re.findall(r'\bI think\b|\bI believe\b|\bI feel\b', text))
+        if first_person > 0 and third_person > first_person * 3 and len(sentences) > 8:
+            score += 0.08
+
+        return min(1.0, score)
+
     def detect_ai(self, text: str) -> Dict[str, Any]:
         """
         Detect AI-generated text using Super-Ensemble (RoBERTa + TriBoost Original + V3 + V4).
@@ -1945,6 +1991,7 @@ class MLModelService:
         - TriBoost provides secondary signal (statistical features)
         - Weighting is confidence-based: when RoBERTa is confident, trust it more
         - Chunked RoBERTa processes full text (no 512-token truncation loss)
+        - Humanization-aware: detects word-substitution artifacts and adjusts weights
         """
         with ThreadPoolExecutor(max_workers=2) as executor:
             triboost_future = executor.submit(self._get_triboost_predictions, text)
@@ -1966,6 +2013,13 @@ class MLModelService:
         triboost_avg = float(np.mean(triboost_ai_probs))
         triboost_all_high = all(p > 0.90 for p in triboost_ai_probs)
         chunk_gap = roberta_chunked_score - roberta_single
+        humanization_score_raw = self._estimate_humanization_score(text)
+        humanization_reliable = humanization_score_raw is not None
+        humanization_score = humanization_score_raw if humanization_reliable else 0.0
+        chunk_scores = roberta_chunked.get('chunk_scores', [])
+        chunk_std = float(np.std(chunk_scores)) if len(chunk_scores) > 1 else 0.0
+        
+        logger.info(f"Humanization score: {humanization_score:.3f} (reliable={humanization_reliable}), chunk_std: {chunk_std:.4f}")
         
         if triboost_all_high and roberta_single > 0.85 and roberta_chunked_score < 0.15:
             w_roberta, w_triboost = 0.25, 0.75
@@ -1975,12 +2029,19 @@ class MLModelService:
             w_roberta, w_triboost = 0.40, 0.60
             strategy_used = "consensus_ai_strong_chunks"
         elif triboost_all_high and num_chunks > 3 and chunk_gap > 0.03 and roberta_chunked_score > 0.05:
-            w_roberta, w_triboost = 0.30, 0.70
-            strategy_used = "consensus_ai_body_gap"
+            if roberta_single < 0.05 and humanization_reliable and humanization_score >= 0.25:
+                w_roberta, w_triboost = 0.90, 0.10
+                strategy_used = "consensus_ai_body_gap_humanized"
+            else:
+                w_roberta, w_triboost = 0.30, 0.70
+                strategy_used = "consensus_ai_body_gap"
         elif triboost_all_high and roberta_single > 0.70 and roberta_blended < 0.30:
             w_roberta, w_triboost = 0.30, 0.70
             roberta_blended = roberta_single
             strategy_used = "consensus_ai_single_override"
+        elif triboost_all_high and roberta_blended < 0.10 and roberta_chunked_score < 0.05 and (not humanization_reliable or humanization_score < 0.10):
+            w_roberta, w_triboost = 0.35, 0.65
+            strategy_used = "triboost_unanimous_roberta_blind"
         elif roberta_blended < 0.10:
             w_roberta, w_triboost = 0.98, 0.02
             strategy_used = "roberta_primary_confident_human"
@@ -2045,6 +2106,8 @@ class MLModelService:
                 "roberta_weight": w_roberta,
                 "triboost_weight": w_triboost,
                 "num_chunks": roberta_chunked['num_chunks'],
+                "humanization_score": None if not humanization_reliable else round(humanization_score, 3),
+                "chunk_score_std": round(chunk_std, 4),
                 "total_models": 10
             },
             "level_analysis": self._perform_10_level_analysis(text, final_ai_prob),
