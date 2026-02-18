@@ -1,61 +1,93 @@
 {% extends "base.html" %}
-{% block title %}WPVault - Premium WordPress Plugins & Themes{% endblock %}
 {% block content %}
 <section class="hero">
     <div class="container">
-        <div class="hero-badge">Premium Marketplace</div>
-        <h1>Premium WordPress Plugins & Themes</h1>
-        <p class="hero-sub">Access thousands of premium plugins and themes with a single subscription. Instant downloads, always up to date.</p>
+        <div class="hero-badge"><span class="dot"></span> Trusted by Thousands of Professionals</div>
+        <h1>Access <span class="gradient-text">12,000+</span> Premium WordPress Products</h1>
+        <p class="hero-sub">The ultimate marketplace for premium WordPress themes, plugins, and extensions. Save thousands with instant access to top-rated products at 97% off original prices.</p>
         <div class="hero-actions">
-            <a href="/plugins" class="btn btn-xl">Browse Collection</a>
-            <a href="/register" class="btn btn-xl btn-outline">Create Account</a>
+            <a href="/plugins" class="btn btn-xl">Browse All Products</a>
+            <a href="/checkout" class="btn btn-xl btn-outline">View Pricing</a>
+        </div>
+        <div class="hero-stats">
+            <div class="hero-stat">
+                <div class="hero-stat-number" id="heroPluginCount"><span class="accent">12,000</span>+</div>
+                <div class="hero-stat-label">Premium Products</div>
+            </div>
+            <div class="hero-stat">
+                <div class="hero-stat-number">1,500+</div>
+                <div class="hero-stat-label">Categories</div>
+            </div>
+            <div class="hero-stat">
+                <div class="hero-stat-number">97%</div>
+                <div class="hero-stat-label">Savings</div>
+            </div>
+            <div class="hero-stat">
+                <div class="hero-stat-number">Daily</div>
+                <div class="hero-stat-label">Updates</div>
+            </div>
         </div>
     </div>
 </section>
 
-<section class="stats-bar">
+<section class="trust-bar">
     <div class="container">
-        <div class="stats-grid">
-            <div class="stat-item">
-                <span class="stat-number" id="homePluginCount">12,000+</span>
-                <span class="stat-label">Plugins & Themes</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">Daily</span>
-                <span class="stat-label">Updates</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">$9.99</span>
-                <span class="stat-label">Per Year</span>
-            </div>
+        <div class="trust-items">
+            <div class="trust-item"><div class="trust-icon green">&#10003;</div> 100% Original Files</div>
+            <div class="trust-item"><div class="trust-icon blue">&#128274;</div> SSL Encrypted</div>
+            <div class="trust-item"><div class="trust-icon purple">&#9889;</div> Instant Download</div>
+            <div class="trust-item"><div class="trust-icon orange">&#128260;</div> Daily Updates</div>
         </div>
     </div>
 </section>
 
 <section class="features">
     <div class="container">
-        <h2 class="section-title">Why Choose WPVault</h2>
-        <p class="section-subtitle">Everything you need to build stunning WordPress sites, all in one place.</p>
+        <div class="text-center">
+            <div class="section-eyebrow">&#9733; Why Choose WPVault</div>
+        </div>
+        <h2 class="section-title">Everything You Need to Build Amazing Sites</h2>
+        <p class="section-subtitle">Access premium WordPress products at a fraction of the cost, with instant delivery and regular updates.</p>
         <div class="features-grid">
             <div class="feature-card">
-                <div class="feature-icon">&#x1F4E6;</div>
-                <h3>Huge Library</h3>
-                <p>Thousands of premium plugins and themes ready for instant download.</p>
+                <div class="feature-icon purple">&#128230;</div>
+                <h3>12,000+ Products</h3>
+                <p>Massive library of premium plugins and themes from top developers worldwide.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">&#x1F504;</div>
-                <h3>Always Updated</h3>
-                <p>Our library syncs automatically so you always get the latest versions.</p>
+                <div class="feature-icon green">&#9889;</div>
+                <h3>Instant Delivery</h3>
+                <p>Download immediately after purchase. No waiting, no delays. Start building instantly.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">&#x26A1;</div>
-                <h3>Instant Access</h3>
-                <p>Download any plugin or theme instantly after subscribing. No waiting.</p>
+                <div class="feature-icon blue">&#128260;</div>
+                <h3>Daily Updates</h3>
+                <p>Stay current with the latest versions, security patches, and new features.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">&#x1F512;</div>
-                <h3>Secure & Safe</h3>
-                <p>Every file is verified for integrity. Clean, safe downloads guaranteed.</p>
+                <div class="feature-icon orange">&#128737;</div>
+                <h3>100% Original</h3>
+                <p>All files are genuine, unmodified, and downloaded directly from original developers.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon cyan">&#127760;</div>
+                <h3>Unlimited Domains</h3>
+                <p>Use on as many websites as you want. No domain restrictions or limitations.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon purple">&#128272;</div>
+                <h3>GPL Licensed</h3>
+                <p>100% legal redistribution under the GNU General Public License.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon green">&#128176;</div>
+                <h3>97% Savings</h3>
+                <p>Get premium products at a fraction of the original price. Save thousands.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon blue">&#128640;</div>
+                <h3>Fast & Secure</h3>
+                <p>High-speed CDN delivery with SSL encryption. Your security is our priority.</p>
             </div>
         </div>
     </div>
@@ -63,47 +95,74 @@
 
 <section class="pricing" id="pricing">
     <div class="container">
-        <h2 class="section-title">Simple Pricing</h2>
-        <p class="section-subtitle">One plan, unlimited access. No hidden fees.</p>
+        <div class="text-center">
+            <div class="section-eyebrow">&#128176; Flexible Plans</div>
+        </div>
+        <h2 class="section-title">Choose Your Perfect Plan</h2>
+        <p class="section-subtitle">All plans include full access to our entire library of 12,000+ products.</p>
         <div class="pricing-grid">
             <div class="pricing-card">
-                <h3>Free</h3>
-                <div class="price">$0 <span>/ forever</span></div>
+                <h3>Monthly</h3>
+                <div class="plan-desc">Perfect for trying us out</div>
+                <div class="price">$14<span>.50/mo</span></div>
+                <div class="price-note">Billed monthly, cancel anytime</div>
                 <ul class="pricing-features">
-                    <li>Browse full catalog</li>
-                    <li>View plugin details</li>
-                    <li>Search & filter</li>
-                    <li class="disabled">Download plugins</li>
-                    <li class="disabled">Priority updates</li>
+                    <li>12,000+ Premium Products</li>
+                    <li>20 Downloads Per Day</li>
+                    <li>Instant Delivery</li>
+                    <li>Regular Updates</li>
+                    <li>Email Support</li>
+                    <li>Unlimited Domains</li>
                 </ul>
-                <a href="/register" class="btn btn-full btn-ghost">Sign Up Free</a>
+                <a href="/checkout" class="btn btn-outline btn-full">Get Started</a>
             </div>
             <div class="pricing-card featured">
-                <span class="badge">Best Value</span>
-                <h3>Premium</h3>
-                <div class="price">$9.99 <span>/ year</span></div>
+                <span class="badge">Most Popular</span>
+                <h3>Annual</h3>
+                <div class="plan-desc">Best value for professionals</div>
+                <div class="price">$79<span>.60/yr</span></div>
+                <div class="price-note">Save 54% vs monthly</div>
                 <ul class="pricing-features">
-                    <li>Browse full catalog</li>
-                    <li>View plugin details</li>
-                    <li>Search & filter</li>
-                    <li>Unlimited downloads</li>
-                    <li>Priority updates</li>
+                    <li>12,000+ Premium Products</li>
+                    <li>50 Downloads Per Day</li>
+                    <li>Instant Delivery</li>
+                    <li>Priority Updates</li>
+                    <li>Priority Support</li>
+                    <li>Unlimited Domains</li>
+                    <li>Early Access to New Items</li>
                 </ul>
-                <a href="/checkout" class="btn btn-full btn-xl">Get Premium</a>
+                <a href="/checkout" class="btn btn-full btn-lg">Choose Annual</a>
             </div>
+            <div class="pricing-card">
+                <h3>Lifetime</h3>
+                <div class="plan-desc">Pay once, own forever</div>
+                <div class="price">$239<span>.40</span></div>
+                <div class="price-note">One-time payment</div>
+                <ul class="pricing-features">
+                    <li>12,000+ Premium Products</li>
+                    <li>100 Downloads Per Day</li>
+                    <li>Instant Delivery</li>
+                    <li>Lifetime Updates</li>
+                    <li>24/7 Priority Support</li>
+                    <li>Unlimited Domains</li>
+                    <li>All Future Products Free</li>
+                </ul>
+                <a href="/checkout" class="btn btn-gold btn-full">Claim Lifetime Access</a>
+            </div>
+        </div>
+        <div class="pricing-guarantee">
+            <p><strong>30-Day Money Back Guarantee</strong> — Try risk-free. Not satisfied? Get a full refund.</p>
         </div>
     </div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
-(function(){
-    fetch('/api/plugins?page=1').then(function(r){return r.json()}).then(function(d){
-        if(d.success && d.data && d.data.total){
-            var el = document.getElementById('homePluginCount');
-            if(el) el.textContent = d.data.total.toLocaleString() + '+';
-        }
-    }).catch(function(){});
-})();
+fetch('/api/plugins?page=1&per_page=1').then(r=>r.json()).then(d=>{
+    if(d.success && d.data.total){
+        var n = d.data.total.toLocaleString();
+        document.getElementById('heroPluginCount').innerHTML='<span class="accent">'+n+'</span>+';
+    }
+});
 </script>
 {% endblock %}

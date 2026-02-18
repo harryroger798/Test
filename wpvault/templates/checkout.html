@@ -1,54 +1,42 @@
 {% extends "base.html" %}
-{% block title %}Checkout - WPVault{% endblock %}
 {% block content %}
 <section class="checkout-section">
     <div class="checkout-card">
         <h2>Upgrade to Premium</h2>
+        <p class="checkout-subtitle">Unlock unlimited access to 12,000+ premium products</p>
         <div class="plan-summary">
             <div class="plan-detail">
-                <span class="plan-name">Premium Yearly</span>
-                <span class="plan-price">$9.99</span>
+                <span class="plan-name">Premium Annual</span>
+                <span class="plan-price">$79.60</span>
             </div>
             <ul class="plan-perks">
-                <li>Unlimited plugin & theme downloads</li>
-                <li>Access to entire library (12,000+)</li>
-                <li>Priority updates & new releases</li>
-                <li>12 months of access</li>
+                <li>12,000+ Premium Plugins & Themes</li>
+                <li>50 Downloads Per Day</li>
+                <li>Priority Updates & Support</li>
+                <li>Unlimited Domain Usage</li>
+                <li>Early Access to New Products</li>
+                <li>30-Day Money Back Guarantee</li>
             </ul>
         </div>
-        <div id="checkoutError" class="alert alert-error" style="display:none;"></div>
-        <button class="btn btn-full btn-xl" id="payBtn" onclick="startCheckout()">Pay with Bitcoin</button>
-        <p class="checkout-note">Secure payment via BTCPay Server. Your subscription activates instantly after payment confirmation.</p>
+        <button class="btn btn-full btn-lg btn-gold" onclick="doCheckout()" id="checkoutBtn">&#9889; Pay with Bitcoin</button>
+        <div class="checkout-secure">&#128274; Secure payment via BTCPay Server</div>
+        <p class="checkout-note">Your subscription activates instantly after payment confirmation. Cancel anytime from your dashboard. All products are GPL licensed.</p>
     </div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
-function startCheckout(){
-    var token = localStorage.getItem('token');
-    if(!token){ window.location.href = '/login'; return; }
-    var btn = document.getElementById('payBtn');
-    var errEl = document.getElementById('checkoutError');
-    btn.disabled = true; btn.textContent = 'Processing...';
-    errEl.style.display = 'none';
-
-    fetch('/api/checkout', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-        body: JSON.stringify({plan:'yearly'})
-    }).then(function(r){return r.json()}).then(function(d){
-        if(d.success && d.data.checkout_url){
-            window.location.href = d.data.checkout_url;
-        } else {
-            errEl.textContent = d.error || 'Checkout failed';
-            errEl.style.display = 'block';
-            btn.disabled = false; btn.textContent = 'Pay with Bitcoin';
-        }
-    }).catch(function(){
-        errEl.textContent = 'Network error';
-        errEl.style.display = 'block';
-        btn.disabled = false; btn.textContent = 'Pay with Bitcoin';
-    });
+function doCheckout(){
+    var t=localStorage.getItem('token');
+    if(!t){location.href='/login';return;}
+    var btn=document.getElementById('checkoutBtn');
+    btn.disabled=true;btn.textContent='Processing...';
+    fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({plan:'yearly'})
+    }).then(r=>r.json()).then(d=>{
+        if(d.success&&d.data.checkout_url){window.location.href=d.data.checkout_url;}
+        else{alert(d.error||'Checkout failed');}
+        btn.disabled=false;btn.innerHTML='&#9889; Pay with Bitcoin';
+    }).catch(()=>{btn.disabled=false;btn.innerHTML='&#9889; Pay with Bitcoin';});
 }
 </script>
 {% endblock %}

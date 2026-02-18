@@ -1,95 +1,66 @@
 {% extends "base.html" %}
-{% block title %}Plugin Details - WPVault{% endblock %}
 {% block content %}
 <section class="plugin-detail-section">
     <div class="container">
-        <div id="pluginContent"><div class="loading">Loading plugin details...</div></div>
+        <div class="breadcrumb">
+            <a href="/">Home</a> <span>/</span> <a href="/plugins">Products</a> <span>/</span> <span id="breadcrumbName">Loading...</span>
+        </div>
+        <div id="pluginContent"><div class="loading">Loading product details...</div></div>
     </div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
-var pluginSlug = '{{ slug }}';
-(function(){
-    fetch('/api/plugins/' + pluginSlug).then(function(r){return r.json()}).then(function(d){
-        if(!d.success){
-            document.getElementById('pluginContent').innerHTML = '<div class="empty-state"><p>Plugin not found</p></div>';
-            return;
-        }
-        var p = d.data;
-        var typeLabel = p.is_plugin ? 'Plugin' : 'Theme';
-        var typeClass = p.is_plugin ? 'type' : 'type';
-
-        var thumb = '';
-        if(p.thumbnail_url){
-            thumb = '<img src="' + p.thumbnail_url + '" alt="' + (p.name||'').replace(/"/g,'&quot;') + '" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder\ style=font-size:5rem>' + (p.name||'?')[0].toUpperCase() + '</span>\';">';
-        } else {
-            thumb = '<span class="thumb-placeholder large">' + (p.name||'?')[0].toUpperCase() + '</span>';
-        }
-
-        var desc = p.description || 'No description available.';
-
-        var sizeStr = '-';
-        if(p.file_size_bytes && p.file_size_bytes > 0) sizeStr = formatBytes(p.file_size_bytes);
-
-        var html = '<div class="plugin-detail-grid">';
-        html += '<div class="plugin-main">';
-        html += '<div class="plugin-hero-thumb">' + thumb + '</div>';
-        html += '<h1 class="plugin-detail-title">' + (p.name||p.slug) + '</h1>';
-        html += '<div class="plugin-detail-meta">';
-        if(p.version && p.version !== 'unknown') html += '<span class="meta-chip version">v' + p.version + '</span>';
-        if(p.category) html += '<span class="meta-chip category">' + p.category + '</span>';
-        html += '<span class="meta-chip type">' + typeLabel + '</span>';
-        if(p.updated_at) html += '<span class="meta-chip updated">Updated ' + formatDate(p.updated_at) + '</span>';
-        html += '</div>';
-        html += '<div class="plugin-description-card">';
-        html += '<h3>Description</h3>';
-        html += '<div class="plugin-description-text">' + desc + '</div>';
-        html += '</div>';
-        html += '</div>';
-
-        html += '<div class="plugin-sidebar">';
-        html += '<div class="sidebar-card">';
-        html += '<div class="download-btn-wrap"><button class="btn btn-lg" onclick="downloadPlugin(\'' + p.slug + '\')">Download ' + typeLabel + '</button></div>';
-        html += '<p class="text-muted" style="font-size:0.8rem;text-align:center;">Premium subscription required</p>';
-        html += '</div>';
-        html += '<div class="sidebar-card">';
-        html += '<h3>Details</h3>';
-        html += '<ul class="info-list">';
-        html += '<li><span class="info-label">Version</span><span class="info-value">' + (p.version && p.version !== 'unknown' ? p.version : 'Latest') + '</span></li>';
-        html += '<li><span class="info-label">Type</span><span class="info-value">' + typeLabel + '</span></li>';
-        html += '<li><span class="info-label">Category</span><span class="info-value">' + (p.category||'-') + '</span></li>';
-        html += '<li><span class="info-label">File Size</span><span class="info-value">' + sizeStr + '</span></li>';
-        if(p.updated_at) html += '<li><span class="info-label">Updated</span><span class="info-value">' + formatDate(p.updated_at) + '</span></li>';
-        html += '</ul></div></div></div>';
-
-        document.getElementById('pluginContent').innerHTML = html;
-        document.title = (p.name||p.slug) + ' - WPVault';
-    }).catch(function(){
-        document.getElementById('pluginContent').innerHTML = '<div class="empty-state"><p>Error loading plugin</p></div>';
-    });
-})();
-
-function downloadPlugin(slug){
-    var token = localStorage.getItem('token');
-    if(!token){ window.location.href = '/login'; return; }
-    var user = null;
-    try { user = JSON.parse(localStorage.getItem('user')); } catch(e){}
-    if(!user || user.plan !== 'premium'){
-        if(confirm('Premium subscription required to download. Go to checkout?')){
-            window.location.href = '/checkout';
-        }
-        return;
+var slug='{{ slug }}';
+function proxyImg(u){
+    if(!u) return '';
+    return '/api/img?url='+encodeURIComponent(u);
+}
+fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
+    if(!d.success){document.getElementById('pluginContent').innerHTML='<div class="empty-state"><p>Product not found</p><a href="/plugins" class="btn">Browse Products</a></div>';return;}
+    var p=d.data;
+    document.getElementById('breadcrumbName').textContent=p.name;
+    document.title=p.name+' — WPVault';
+    var html='<div class="plugin-detail-grid"><div class="detail-main">';
+    if(p.thumbnail_url){
+        html+='<div class="plugin-hero-thumb"><img src="'+proxyImg(p.thumbnail_url)+'" alt="'+p.name.replace(/"/g,'&quot;')+'"></div>';
+    } else {
+        html+='<div class="plugin-hero-thumb"><span class="thumb-placeholder large">'+p.name.charAt(0)+'</span></div>';
     }
-    fetch('/api/plugins/' + slug + '/download', {
-        headers: {'Authorization': 'Bearer ' + token}
-    }).then(function(r){return r.json()}).then(function(d){
-        if(d.success && d.data.download_url){
-            window.open(d.data.download_url, '_blank');
-        } else {
-            alert(d.error || 'Download failed');
-        }
-    }).catch(function(){ alert('Network error'); });
+    html+='<h1 class="plugin-detail-title">'+p.name+'</h1>';
+    html+='<div class="plugin-detail-meta">';
+    if(p.version && p.version !== 'unknown') html+='<span class="meta-chip version">v'+p.version+'</span>';
+    if(p.category) html+='<span class="meta-chip category">'+p.category+'</span>';
+    html+='<span class="meta-chip type">'+(p.is_plugin?'Plugin':'Theme')+'</span>';
+    if(p.updated_at) html+='<span class="meta-chip updated">Updated '+new Date(p.updated_at).toLocaleDateString()+'</span>';
+    html+='</div>';
+    html+='<div class="plugin-description-card"><h3>&#128196; Description</h3>';
+    html+='<div class="plugin-description-text">'+(p.description||'No description available for this product.')+'</div>';
+    html+='</div></div>';
+    html+='<div class="detail-sidebar">';
+    html+='<div class="sidebar-card">';
+    html+='<h3>Download</h3>';
+    html+='<div class="download-btn-wrap"><button class="btn btn-full btn-lg" onclick="downloadPlugin()">&#11015; Download Now</button></div>';
+    html+='<p class="download-note">Premium plan required for downloads</p>';
+    html+='</div>';
+    html+='<div class="sidebar-card"><h3>Product Details</h3><ul class="info-list">';
+    html+='<li><span class="info-label">Version</span><span class="info-value">'+(p.version && p.version!=='unknown'?p.version:'Latest')+'</span></li>';
+    html+='<li><span class="info-label">Type</span><span class="info-value">'+(p.is_plugin?'Plugin':'Theme')+'</span></li>';
+    if(p.category) html+='<li><span class="info-label">Category</span><span class="info-value">'+p.category+'</span></li>';
+    if(p.file_size_bytes) html+='<li><span class="info-label">File Size</span><span class="info-value">'+(p.file_size_bytes/1048576).toFixed(1)+' MB</span></li>';
+    if(p.updated_at) html+='<li><span class="info-label">Updated</span><span class="info-value">'+new Date(p.updated_at).toLocaleDateString()+'</span></li>';
+    html+='<li><span class="info-label">License</span><span class="info-value">GPL v2+</span></li>';
+    html+='</ul></div>';
+    html+='</div></div>';
+    document.getElementById('pluginContent').innerHTML=html;
+});
+function downloadPlugin(){
+    var t=localStorage.getItem('token');
+    if(!t){location.href='/login';return;}
+    fetch('/api/plugins/'+slug+'/download',{headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
+        if(d.success&&d.data.download_url){window.open(d.data.download_url,'_blank');}
+        else{alert(d.error||'Download failed. Premium plan may be required.');}
+    });
 }
 </script>
 {% endblock %}

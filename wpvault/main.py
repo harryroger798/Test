@@ -2,14 +2,17 @@ import os
 import re
 import logging
 import threading
+import hashlib
 from datetime import datetime
+from urllib.parse import urlparse
 from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import httpx
 
 load_dotenv()
 
@@ -450,6 +453,59 @@ def api_user_downloads(request: Request):
     user = get_current_user_from_request(request)
     downloads = database.get_user_downloads(user["id"])
     return JSONResponse(content={"success": True, "data": {"downloads": downloads}})
+
+
+_image_cache_dir = os.path.join(os.path.dirname(__file__), "static", "_imgcache")
+os.makedirs(_image_cache_dir, exist_ok=True)
+
+
+@app.get("/api/img")
+async def proxy_image(url: str):
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        return JSONResponse(status_code=400, content={"error": "Invalid URL"})
+
+    url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
+    ext = os.path.splitext(parsed.path)[1] or ".jpg"
+    cache_path = os.path.join(_image_cache_dir, f"{url_hash}{ext}")
+
+    if os.path.exists(cache_path):
+        ct = "image/jpeg"
+        if ext == ".png":
+            ct = "image/png"
+        elif ext == ".webp":
+            ct = "image/webp"
+        elif ext == ".gif":
+            ct = "image/gif"
+        elif ext == ".svg":
+            ct = "image/svg+xml"
+        with open(cache_path, "rb") as f:
+            data = f.read()
+        return StreamingResponse(
+            iter([data]),
+            media_type=ct,
+            headers={"Cache-Control": "public, max-age=604800"},
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                return JSONResponse(status_code=502, content={"error": "Upstream error"})
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            img_data = resp.content
+            try:
+                with open(cache_path, "wb") as f:
+                    f.write(img_data)
+            except OSError:
+                pass
+            return StreamingResponse(
+                iter([img_data]),
+                media_type=content_type,
+                headers={"Cache-Control": "public, max-age=604800"},
+            )
+    except httpx.HTTPError:
+        return JSONResponse(status_code=502, content={"error": "Failed to fetch image"})
 
 
 @app.get("/", response_class=HTMLResponse)

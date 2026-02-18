@@ -1,20 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Browse Plugins & Themes - WPVault{% endblock %}
 {% block content %}
 <section class="plugins-section">
     <div class="container">
         <div class="plugins-header">
-            <h2>Browse Collection</h2>
-            <p><span class="plugins-count" id="totalCount">Loading...</span> premium plugins & themes available</p>
+            <div>
+                <h2>Browse Premium Products</h2>
+                <p>Explore <span class="plugins-count" id="pluginTotal">12,000+</span> premium WordPress plugins and themes</p>
+            </div>
         </div>
         <div class="filters">
-            <input type="text" class="search-input" id="searchInput" placeholder="Search plugins and themes..." oninput="debouncedSearch()">
-            <select class="category-select" id="categorySelect" onchange="loadPlugins(1)">
-                <option value="">All Categories</option>
-            </select>
+            <div class="search-wrap">
+                <input type="text" class="search-input" id="searchInput" placeholder="Search plugins and themes...">
+            </div>
+            <select class="category-select" id="categorySelect"><option value="">All Categories</option></select>
         </div>
         <div class="plugins-grid" id="pluginsGrid">
-            <div class="loading">Loading plugins...</div>
+            <div class="loading">Loading products...</div>
         </div>
         <div class="pagination" id="pagination"></div>
     </div>
@@ -22,99 +23,73 @@
 {% endblock %}
 {% block scripts %}
 <script>
-var currentPage = 1;
-var searchTimer = null;
-
-function debouncedSearch(){
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(function(){ loadPlugins(1); }, 350);
+var currentPage=1,totalPages=1,searchTimer=null;
+function proxyImg(u){
+    if(!u) return '';
+    return '/api/img?url='+encodeURIComponent(u);
 }
-
-function loadPlugins(page){
-    currentPage = page;
-    var search = document.getElementById('searchInput').value.trim();
-    var category = document.getElementById('categorySelect').value;
-    var url = '/api/plugins?page=' + page;
-    if(search) url += '&search=' + encodeURIComponent(search);
-    if(category) url += '&category=' + encodeURIComponent(category);
-
-    document.getElementById('pluginsGrid').innerHTML = '<div class="loading">Loading...</div>';
-
-    fetch(url).then(function(r){return r.json()}).then(function(d){
+function loadPlugins(page,search,category){
+    currentPage=page||1;
+    var url='/api/plugins?page='+currentPage+'&per_page=20';
+    if(search) url+='&search='+encodeURIComponent(search);
+    if(category) url+='&category='+encodeURIComponent(category);
+    document.getElementById('pluginsGrid').innerHTML='<div class="loading">Loading products...</div>';
+    fetch(url).then(r=>r.json()).then(d=>{
         if(!d.success) return;
-        var data = d.data;
-        document.getElementById('totalCount').textContent = data.total.toLocaleString();
-
-        var sel = document.getElementById('categorySelect');
-        if(sel.options.length <= 1 && data.categories){
-            data.categories.forEach(function(c){
-                var o = document.createElement('option');
-                o.value = c; o.textContent = c;
-                sel.appendChild(o);
-            });
-        }
-
-        var grid = document.getElementById('pluginsGrid');
-        if(!data.plugins || data.plugins.length === 0){
-            grid.innerHTML = '<div class="empty-state"><p>No plugins found</p></div>';
-            document.getElementById('pagination').innerHTML = '';
-            return;
-        }
-
-        var html = '';
-        data.plugins.forEach(function(p){
-            var typeLabel = p.is_plugin ? 'Plugin' : 'Theme';
-            var typeClass = p.is_plugin ? 'type-plugin' : 'type-theme';
-            var thumb = '';
+        var ps=d.data.plugins, total=d.data.total;
+        document.getElementById('pluginTotal').textContent=total.toLocaleString();
+        totalPages=Math.ceil(total/20);
+        var grid=document.getElementById('pluginsGrid');
+        if(!ps.length){grid.innerHTML='<div class="empty-state"><p>No products found</p></div>';document.getElementById('pagination').innerHTML='';return;}
+        var html='';
+        ps.forEach(function(p){
+            var thumbHtml='';
             if(p.thumbnail_url){
-                thumb = '<img src="' + p.thumbnail_url + '" alt="' + (p.name||'').replace(/"/g,'&quot;') + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder>' + (p.name||'?')[0].toUpperCase() + '</span>\';">';
+                thumbHtml='<img src="'+proxyImg(p.thumbnail_url)+'" alt="'+((p.name||'').replace(/"/g,'&quot;'))+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder>\'+(p.name||\'?\').charAt(0)+\'</span>\'">';
             } else {
-                thumb = '<span class="thumb-placeholder">' + (p.name||'?')[0].toUpperCase() + '</span>';
+                thumbHtml='<span class="thumb-placeholder">'+(p.name||'?').charAt(0)+'</span>';
             }
-            html += '<div class="plugin-card">';
-            html += '<div class="plugin-thumb"><span class="plugin-type-badge ' + typeClass + '">' + typeLabel + '</span>' + thumb + '</div>';
-            html += '<div class="plugin-info">';
-            html += '<div class="plugin-name"><a href="/plugins/' + p.slug + '">' + (p.name||p.slug) + '</a></div>';
-            html += '<div class="plugin-meta-row">';
-            if(p.version && p.version !== 'unknown') html += '<span class="plugin-meta-tag">v' + p.version + '</span>';
-            if(p.category) html += '<span class="plugin-meta-tag">' + p.category + '</span>';
-            html += '</div></div></div>';
+            var typeBadge=p.is_plugin?'<span class="plugin-type-badge type-plugin">Plugin</span>':'<span class="plugin-type-badge type-theme">Theme</span>';
+            html+='<div class="plugin-card" onclick="location.href=\'/plugins/'+p.slug+'\'">';
+            html+='<div class="plugin-thumb">'+thumbHtml+typeBadge+'</div>';
+            html+='<div class="plugin-info">';
+            html+='<div class="plugin-name"><a href="/plugins/'+p.slug+'">'+p.name+'</a></div>';
+            if(p.description){
+                var desc=p.description.replace(/<[^>]*>/g,'').substring(0,80);
+                html+='<div class="plugin-card-desc">'+desc+'</div>';
+            }
+            html+='<div class="plugin-meta-row">';
+            if(p.version && p.version !== 'unknown') html+='<span class="plugin-meta-tag version">v'+p.version+'</span>';
+            if(p.category) html+='<span class="plugin-meta-tag cat">'+p.category+'</span>';
+            html+='</div></div></div>';
         });
-        grid.innerHTML = html;
-
-        renderPagination(data.total, data.page, data.per_page);
-    }).catch(function(err){
-        document.getElementById('pluginsGrid').innerHTML = '<div class="empty-state"><p>Error loading plugins</p></div>';
+        grid.innerHTML=html;
+        renderPagination();
     });
 }
-
-function renderPagination(total, page, perPage){
-    var totalPages = Math.ceil(total / perPage);
-    var el = document.getElementById('pagination');
-    if(totalPages <= 1){ el.innerHTML = ''; return; }
-
-    var html = '';
-    if(page > 1) html += '<button class="page-btn" onclick="loadPlugins(' + (page-1) + ')">&laquo;</button>';
-
-    var start = Math.max(1, page - 3);
-    var end = Math.min(totalPages, page + 3);
-
-    if(start > 1){
-        html += '<button class="page-btn" onclick="loadPlugins(1)">1</button>';
-        if(start > 2) html += '<span class="page-ellipsis">...</span>';
-    }
-    for(var i = start; i <= end; i++){
-        html += '<button class="page-btn' + (i===page?' active':'') + '" onclick="loadPlugins(' + i + ')">' + i + '</button>';
-    }
-    if(end < totalPages){
-        if(end < totalPages - 1) html += '<span class="page-ellipsis">...</span>';
-        html += '<button class="page-btn" onclick="loadPlugins(' + totalPages + ')">' + totalPages + '</button>';
-    }
-
-    if(page < totalPages) html += '<button class="page-btn" onclick="loadPlugins(' + (page+1) + ')">&raquo;</button>';
-    el.innerHTML = html;
+function renderPagination(){
+    var el=document.getElementById('pagination');
+    if(totalPages<=1){el.innerHTML='';return;}
+    var html='';
+    if(currentPage>1) html+='<button class="page-btn" onclick="loadPlugins('+(currentPage-1)+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">&larr;</button>';
+    var start=Math.max(1,currentPage-3),end=Math.min(totalPages,currentPage+3);
+    if(start>1){html+='<button class="page-btn" onclick="loadPlugins(1,document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">1</button>';if(start>2)html+='<span class="page-ellipsis">...</span>';}
+    for(var i=start;i<=end;i++){html+='<button class="page-btn'+(i===currentPage?' active':'')+'" onclick="loadPlugins('+i+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">'+i+'</button>';}
+    if(end<totalPages){if(end<totalPages-1)html+='<span class="page-ellipsis">...</span>';html+='<button class="page-btn" onclick="loadPlugins('+totalPages+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">'+totalPages+'</button>';}
+    if(currentPage<totalPages) html+='<button class="page-btn" onclick="loadPlugins('+(currentPage+1)+',document.getElementById(\'searchInput\').value,document.getElementById(\'categorySelect\').value)">&rarr;</button>';
+    el.innerHTML=html;
 }
-
+document.getElementById('searchInput').addEventListener('input',function(){
+    clearTimeout(searchTimer);
+    searchTimer=setTimeout(function(){loadPlugins(1,document.getElementById('searchInput').value,document.getElementById('categorySelect').value);},400);
+});
+document.getElementById('categorySelect').addEventListener('change',function(){loadPlugins(1,document.getElementById('searchInput').value,this.value);});
+fetch('/api/plugins?page=1&per_page=1').then(r=>r.json()).then(d=>{
+    if(d.success&&d.data.categories){
+        var sel=document.getElementById('categorySelect');
+        d.data.categories.forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+    }
+});
 loadPlugins(1);
 </script>
 {% endblock %}

@@ -1,70 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - WPVault{% endblock %}
 {% block content %}
 <section class="dashboard-section">
     <div class="container">
-        <h2 class="dash-greeting" id="greeting">Welcome back</h2>
-        <div class="plan-card" id="planCard">
-            <div class="plan-info">
+        <h1 class="dash-greeting" id="dashGreeting">Welcome back!</h1>
+        <div class="dash-grid">
+            <div class="plan-card">
                 <h3>Your Plan</h3>
-                <span class="plan-badge" id="planBadge">Free</span>
+                <div class="plan-info">
+                    <span class="plan-badge" id="planBadge">Free</span>
+                    <span class="plan-expiry" id="planExpiry"></span>
+                </div>
+                <a href="/checkout" class="btn btn-sm" id="upgradeBtn">Upgrade to Premium</a>
             </div>
-            <p class="plan-expiry" id="planExpiry"></p>
-            <div style="margin-top:16px;" id="upgradeWrap">
-                <a href="/checkout" class="btn">Upgrade to Premium</a>
+            <div class="plan-card">
+                <h3>Account Details</h3>
+                <div style="margin-bottom:12px;">
+                    <span class="info-label">Email: </span>
+                    <span class="info-value" id="userEmail">—</span>
+                </div>
+                <div>
+                    <span class="info-label">Member since: </span>
+                    <span class="info-value" id="userSince">—</span>
+                </div>
             </div>
         </div>
         <div class="downloads-section">
-            <h3>Download History</h3>
-            <table class="data-table" id="downloadsTable">
-                <thead><tr><th>Plugin</th><th>Downloaded</th></tr></thead>
-                <tbody id="downloadsBody">
-                    <tr><td colspan="2" class="text-muted">Loading...</td></tr>
-                </tbody>
-            </table>
+            <h3>Recent Downloads</h3>
+            <div id="downloadsTable">
+                <table class="data-table">
+                    <thead><tr><th>Plugin</th><th>Date</th></tr></thead>
+                    <tbody id="downloadsList"><tr><td colspan="2" class="text-muted">No downloads yet. <a href="/plugins">Browse products</a></td></tr></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
-(function(){
-    var token = localStorage.getItem('token');
-    if(!token){ window.location.href = '/login'; return; }
-
-    fetch('/api/me', {headers:{'Authorization':'Bearer '+token}})
-    .then(function(r){return r.json()}).then(function(d){
-        if(!d.success){ window.location.href = '/login'; return; }
-        var u = d.data;
-        document.getElementById('greeting').textContent = 'Welcome, ' + u.email.split('@')[0];
-        var badge = document.getElementById('planBadge');
-        if(u.plan === 'premium'){
-            badge.textContent = 'Premium';
+var t=localStorage.getItem('token');
+if(!t) location.href='/login';
+else {
+    fetch('/api/me',{headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
+        if(!d.success){localStorage.removeItem('token');location.href='/login';return;}
+        var u=d.data;
+        document.getElementById('dashGreeting').textContent='Welcome back, '+u.email.split('@')[0]+'!';
+        document.getElementById('userEmail').textContent=u.email;
+        if(u.created_at) document.getElementById('userSince').textContent=new Date(u.created_at).toLocaleDateString();
+        var badge=document.getElementById('planBadge');
+        if(u.plan==='premium'){
+            badge.textContent='Premium';
             badge.classList.add('premium');
-            document.getElementById('upgradeWrap').style.display = 'none';
-            if(u.plan_expires_at){
-                document.getElementById('planExpiry').textContent = 'Expires: ' + formatDate(u.plan_expires_at);
-            }
-        } else {
-            badge.textContent = 'Free';
-            document.getElementById('planExpiry').textContent = 'Upgrade to download plugins and themes.';
+            document.getElementById('upgradeBtn').style.display='none';
+            if(u.plan_expires_at) document.getElementById('planExpiry').textContent='Expires: '+new Date(u.plan_expires_at).toLocaleDateString();
         }
-    }).catch(function(){ window.location.href = '/login'; });
-
-    fetch('/api/user/downloads', {headers:{'Authorization':'Bearer '+token}})
-    .then(function(r){return r.json()}).then(function(d){
-        var tbody = document.getElementById('downloadsBody');
-        if(!d.success || !d.data.downloads || d.data.downloads.length === 0){
-            tbody.innerHTML = '<tr><td colspan="2" class="text-muted">No downloads yet</td></tr>';
-            return;
-        }
-        var html = '';
+    });
+    fetch('/api/user/downloads',{headers:{'Authorization':'Bearer '+t}}).then(r=>r.json()).then(d=>{
+        if(!d.success||!d.data.downloads.length) return;
+        var html='';
         d.data.downloads.forEach(function(dl){
-            html += '<tr><td>' + (dl.plugin_name || dl.plugin_id || '-') + '</td>';
-            html += '<td>' + formatDate(dl.downloaded_at) + '</td></tr>';
+            html+='<tr><td>'+dl.slug+'</td><td>'+new Date(dl.downloaded_at).toLocaleDateString()+'</td></tr>';
         });
-        tbody.innerHTML = html;
-    }).catch(function(){});
-})();
+        document.getElementById('downloadsList').innerHTML=html;
+    });
+}
 </script>
 {% endblock %}
