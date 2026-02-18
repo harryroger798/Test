@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.services.feature_extractor import FeatureExtractor565
 from app.services.sagemaker_client import sagemaker_client
 from app.services.hf_inference_client import hf_client
+from app.services.modal_client import modal_client, get_inference_backend, is_peak_hours
 
 logger = logging.getLogger(__name__)
 
@@ -1505,7 +1506,7 @@ class MLModelService:
     
     @staticmethod
     def _clean_model_output(text: str) -> str:
-        """Strip task-prefix leakage and clean up raw model output."""
+        """Strip task-prefix leakage and clean up raw model output and simple loops."""
         result = text.strip()
         prefixes = ["humanize:", "Humanize:", "paraphrase:", "Paraphrase:"]
         for prefix in prefixes:
@@ -1513,7 +1514,60 @@ class MLModelService:
                 result = result[len(prefix):].strip()
             result = result.replace(f" {prefix} ", " ")
         result = re.sub(r'\bhumanize:\s*', '', result, flags=re.IGNORECASE)
+        tokens = re.split(r'(\s+)', result)
+        word_tokens = [t for t in tokens if t.strip()]
+        n = len(word_tokens)
+        changed = True
+        while changed:
+            changed = False
+            i = 0
+            out = []
+            while i < n:
+                collapsed = False
+                for w in range(12, 4, -1):
+                    if i + 2*w <= n:
+                        seg = word_tokens[i:i+w]
+                        if word_tokens[i+w:i+2*w] == seg:
+                            j = i + w
+                            while j + w <= n and word_tokens[j:j+w] == seg:
+                                j += w
+                            out.extend(seg)
+                            i = j
+                            collapsed = True
+                            changed = True
+                            break
+                if not collapsed:
+                    out.append(word_tokens[i])
+                    i += 1
+            word_tokens = out
+            n = len(word_tokens)
+        result = ' '.join(word_tokens)
         return result.strip()
+
+    _MODE_TEMPS = {'academic': 0.7, 'professional': 0.75, 'casual': 0.85}
+
+    def _humanize_chunk_via_modal(self, chunk: str, parameters: Optional[Dict[str, Any]] = None, mode: str = 'casual') -> Optional[str]:
+        """Humanize a single chunk via Modal serverless GPU endpoint."""
+        try:
+            input_text = f"humanize: {chunk}"
+            word_count = len(chunk.split())
+            max_new = min(int(word_count * 2.5), 512)
+            modal_params = parameters or {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": self._MODE_TEMPS.get(mode, 0.85),
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            result = modal_client.humanize_single(input_text, modal_params)
+            if result and len(result) > 20:
+                return self._clean_model_output(result)
+            return None
+        except Exception as e:
+            logger.warning(f"Modal humanize chunk failed: {e}")
+            return None
 
     def _humanize_chunk_via_sagemaker(self, chunk: str) -> Optional[str]:
         """Humanize a single chunk via SageMaker serverless endpoint."""
@@ -1539,7 +1593,23 @@ class MLModelService:
             return None
 
     def _humanize_single(self, sentence: str, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> str:
-        """Humanize a single sentence using SageMaker (primary) or local ONNX INT8 (fallback)."""
+        """Humanize a single sentence using best available backend.
+
+        Routing: get_inference_backend() picks sagemaker (peak) or modal (off-peak).
+        Fallback chain: primary backend -> other backend -> local ONNX -> HF API.
+        """
+        backend = get_inference_backend()
+        logger.info(f"Humanize single: backend={backend}, peak={is_peak_hours()}")
+
+        if backend == "modal":
+            modal_result = self._humanize_chunk_via_modal(sentence)
+            if modal_result:
+                model_output = modal_result
+                if use_post_processor:
+                    model_output = self._apply_stealthwriter_postprocessor(model_output, passes, original_text=sentence, mode=mode)
+                return model_output
+            logger.info("Modal humanize failed, trying SageMaker fallback")
+
         if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
             sm_result = self._humanize_chunk_via_sagemaker(sentence)
             if sm_result:
@@ -2230,6 +2300,106 @@ class MLModelService:
     
     _CHUNK_WORD_LIMIT = 500
 
+    def _preserve_negations(self, original_text: str, humanized_text: str) -> str:
+        """Restore negations that the T5 model dropped during humanization.
+
+        Extracts every ``not WORD`` / ``never WORD`` pattern from the original
+        text, finds the best-matching humanized sentence for the surrounding
+        context, and checks whether that specific negation-target pair is still
+        present.  If the target word appears without its negation nearby, the
+        negation is re-inserted.
+
+        Works regardless of GPU backend (Modal / SageMaker / local) because it
+        operates on the final assembled text.
+        """
+
+        def _sentences(text: str) -> List[str]:
+            return [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+
+        def _content_words(text: str) -> set:
+            return {w for w in re.findall(r'\b[a-z]{4,}\b', text.lower())
+                    if w not in self._STOPWORDS}
+
+        def _best_match(sentence: str, candidates: List[str]):
+            cw = _content_words(sentence)
+            if len(cw) < 2:
+                return -1, 0.0
+            best_idx, best_score = -1, 0.0
+            for i, cand in enumerate(candidates):
+                ccw = _content_words(cand)
+                if not ccw:
+                    continue
+                overlap = len(cw & ccw)
+                score = overlap / min(len(cw), len(ccw))
+                if score > best_score:
+                    best_score = score
+                    best_idx = i
+            return best_idx, best_score
+
+        def _has_neg_before(text: str, pos: int, neg_word: str, window: int = 60) -> bool:
+            region = text[max(0, pos - window):pos].lower()
+            words = region.split()
+            return neg_word in words[-6:] if words else False
+
+        orig_sents = _sentences(original_text)
+        hum_sents = _sentences(humanized_text)
+        if not orig_sents or not hum_sents:
+            return humanized_text
+
+        fixes: List[tuple] = []
+        fixed_positions: set = set()
+
+        for orig_sent in orig_sents:
+            orig_lower = orig_sent.lower()
+            neg_patterns = list(re.finditer(r'\b(not|never)\s+(\w{4,})', orig_lower))
+            if not neg_patterns:
+                continue
+
+            best_idx, best_score = _best_match(orig_sent, hum_sents)
+            if best_idx < 0 or best_score < 0.3:
+                continue
+
+            matched = hum_sents[best_idx]
+            matched_lower = matched.lower()
+
+            for neg_m in neg_patterns:
+                neg_word = neg_m.group(1)
+                target = neg_m.group(2)
+                exact_pat = re.compile(
+                    r'\b' + re.escape(neg_word) + r'\s+' + re.escape(target) + r'\b',
+                    re.IGNORECASE,
+                )
+                if exact_pat.search(matched_lower):
+                    continue
+
+                target_m = re.search(r'\b' + re.escape(target) + r'\b', matched, re.IGNORECASE)
+                if not target_m:
+                    continue
+                if _has_neg_before(matched, target_m.start(), neg_word):
+                    continue
+
+                fix_key = (best_idx, target)
+                if fix_key in fixed_positions:
+                    continue
+
+                pos = target_m.start()
+                fixed = matched[:pos] + neg_word + ' ' + matched[pos:]
+                fixes.append((matched, fixed))
+                fixed_positions.add(fix_key)
+                hum_sents[best_idx] = fixed
+                matched = fixed
+                matched_lower = fixed.lower()
+                logger.info(f"Negation preserved: restored '{neg_word}' before '{target}'")
+
+        if not fixes:
+            return humanized_text
+
+        result = humanized_text
+        for old_frag, new_frag in fixes:
+            result = result.replace(old_frag, new_frag, 1)
+        logger.info(f"Negation preservation: {len(fixes)} fix(es) applied")
+        return result
+
     def _build_chunks(self, text: str) -> List[str]:
         """Split text into chunks of roughly _CHUNK_WORD_LIMIT words, breaking at sentence boundaries."""
         sentences = self._split_sentences_preserve(text)
@@ -2252,64 +2422,101 @@ class MLModelService:
         return chunks
 
     def _humanize_paragraph(self, paragraph: str, use_post_processor: bool, passes: int, mode: str) -> tuple:
-        """Humanize a single paragraph, returning (humanized_text, chunk_count, sagemaker_used)."""
+        """Humanize a single paragraph, returning (humanized_text, chunk_count, gpu_used, actual_backend).
+
+        Uses hybrid routing: Modal (off-peak) > SageMaker (peak) > local ONNX.
+        """
         word_count = len(paragraph.split())
         if word_count > self._CHUNK_WORD_LIMIT:
             chunks = self._build_chunks(paragraph)
-            logger.info(f"Paragraph has {word_count} words (>{self._CHUNK_WORD_LIMIT}), split into {len(chunks)} chunks")
+            backend = get_inference_backend()
+            actual_backend = backend
+            logger.info(f"Paragraph has {word_count} words, split into {len(chunks)} chunks, backend={backend}")
 
-            use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
             result_chunks: List[str] = [None] * len(chunks)
-            sagemaker_used = False
+            gpu_used = False
 
-            if use_sagemaker:
-                logger.info(f"Attempting optimized batch SageMaker inference for {len(chunks)} chunks")
+            batch_inputs = [f"humanize: {chunk}" for chunk in chunks]
+            word_counts = [len(c.split()) for c in chunks]
+            max_new = min(int(max(word_counts) * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": 1.0,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+
+            if backend == "modal":
+                logger.info(f"Attempting Modal batch inference for {len(chunks)} chunks")
                 try:
-                    batch_inputs = [f"humanize: {chunk}" for chunk in chunks]
-                    word_counts = [len(c.split()) for c in chunks]
-                    max_new = min(int(max(word_counts) * 2.5), 512)
-                    parameters = {
-                        "max_new_tokens": max_new,
-                        "num_beams": 1,
-                        "do_sample": True,
-                        "temperature": 1.0,
-                        "top_p": 0.95,
-                        "repetition_penalty": 2.5,
-                        "no_repeat_ngram_size": 3,
-                    }
-                    batch_results = sagemaker_client.invoke_text2text_batch_optimized(
-                        "humanizer", batch_inputs, parameters, max_concurrent=3
-                    )
+                    batch_results = modal_client.humanize_batch(batch_inputs, parameters)
                     failed_indices: List[int] = []
                     for idx, result in enumerate(batch_results):
                         if result and len(result) > 20:
                             result_chunks[idx] = self._clean_model_output(result)
-                            logger.info(f"SageMaker chunk {idx + 1}/{len(chunks)} done ({len(result_chunks[idx].split())} words)")
+                            logger.info(f"Modal chunk {idx + 1}/{len(chunks)} done ({len(result_chunks[idx].split())} words)")
                         else:
                             failed_indices.append(idx)
 
                     if failed_indices:
-                        logger.info(f"SageMaker failed for {len(failed_indices)} chunks, falling back to local ONNX")
+                        logger.info(f"Modal failed for {len(failed_indices)} chunks, trying SageMaker fallback")
                         for idx in failed_indices:
-                            result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
-                    sagemaker_used = not failed_indices
+                            sm_result = self._humanize_chunk_via_sagemaker(chunks[idx])
+                            if sm_result:
+                                result_chunks[idx] = sm_result
+                            else:
+                                result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
+                    gpu_used = True
                 except Exception as e:
-                    logger.warning(f"SageMaker batch processing failed: {e}, falling back to local ONNX")
+                    logger.warning(f"Modal batch failed: {e}, falling back to SageMaker")
+                    actual_backend = "sagemaker"
+
+            use_sagemaker = bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+            has_unfilled = any(r is None for r in result_chunks)
+
+            if has_unfilled and use_sagemaker:
+                logger.info("Attempting SageMaker batch for remaining chunks")
+                actual_backend = "sagemaker"
+                try:
+                    unfilled = [i for i, r in enumerate(result_chunks) if r is None]
+                    sm_inputs = [batch_inputs[i] for i in unfilled]
+                    sm_results = sagemaker_client.invoke_text2text_batch_optimized(
+                        "humanizer", sm_inputs, parameters, max_concurrent=3
+                    )
+                    sm_failed: List[int] = []
+                    for j, result in enumerate(sm_results):
+                        orig_idx = unfilled[j]
+                        if result and len(result) > 20:
+                            result_chunks[orig_idx] = self._clean_model_output(result)
+                            logger.info(f"SageMaker chunk {orig_idx + 1}/{len(chunks)} done")
+                        else:
+                            sm_failed.append(orig_idx)
+
+                    if sm_failed:
+                        logger.info(f"SageMaker failed for {len(sm_failed)} chunks, falling back to local ONNX")
+                        for idx in sm_failed:
+                            result_chunks[idx] = self._humanize_single(chunks[idx], use_post_processor=False, passes=passes, mode=mode)
+                    gpu_used = True
+                except Exception as e:
+                    logger.warning(f"SageMaker batch failed: {e}, falling back to local ONNX")
                     for idx, chunk in enumerate(chunks):
                         if result_chunks[idx] is None:
                             result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
-            else:
+
+            if any(r is None for r in result_chunks):
                 for idx, chunk in enumerate(chunks):
-                    logger.info(f"Humanizing chunk {idx + 1}/{len(chunks)} ({len(chunk.split())} words)")
-                    humanized = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
-                    result_chunks[idx] = humanized
+                    if result_chunks[idx] is None:
+                        result_chunks[idx] = self._humanize_single(chunk, use_post_processor=False, passes=passes, mode=mode)
 
             output = ' '.join(result_chunks)
             output = self._clean_model_output(output)
-            return output, len(chunks), sagemaker_used
+            return output, len(chunks), gpu_used, actual_backend
 
         output = self._humanize_single(paragraph, use_post_processor=False, passes=passes, mode=mode)
-        return output, 1, False
+        return output, 1, False, get_inference_backend()
 
     def humanize(self, text: str, preserved_indices: Optional[List[int]] = None, use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
         """Humanize AI text using Stealthwriter T5 Chaos model.
@@ -2350,19 +2557,145 @@ class MLModelService:
 
         total_chunks = 0
         any_sagemaker = False
-        humanized_paragraphs: List[str] = []
+        backends_used: List[str] = []
+        humanized_paragraphs: List[str] = [''] * len(content_paragraphs)
 
+        backend = get_inference_backend()
+        non_empty_indices = []
+        non_empty_texts = []
         for p_idx, paragraph in enumerate(content_paragraphs):
             stripped = paragraph.strip()
-            if not stripped:
-                humanized_paragraphs.append('')
-                continue
-            logger.info(f"Humanizing paragraph {p_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
-            h_text, chunk_count, sm_used = self._humanize_paragraph(stripped, use_post_processor, passes, mode)
-            total_chunks += chunk_count
-            if sm_used:
-                any_sagemaker = True
-            humanized_paragraphs.append(h_text)
+            if stripped:
+                non_empty_indices.append(p_idx)
+                non_empty_texts.append(stripped)
+
+        logger.info(f"Humanizing {len(non_empty_texts)} paragraphs via {backend} (batch mode)")
+
+        if backend == "modal" and len(non_empty_texts) > 1:
+            temp = self._MODE_TEMPS.get(mode, 0.85)
+            batch_inputs = [f"humanize: {t}" for t in non_empty_texts]
+            word_counts = [len(t.split()) for t in non_empty_texts]
+            max_new = min(int(max(word_counts) * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": temp,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            try:
+                import time as _time
+                t0 = _time.time()
+                batch_results = modal_client.humanize_batch(batch_inputs, parameters, timeout=300.0)
+                elapsed = _time.time() - t0
+                logger.info(f"Modal batch completed: {len(non_empty_texts)} paragraphs in {elapsed:.1f}s")
+                failed_indices = []
+                for j, result in enumerate(batch_results):
+                    orig_idx = non_empty_indices[j]
+                    if result and len(result) > 20:
+                        humanized_paragraphs[orig_idx] = self._clean_model_output(result)
+                        backends_used.append("modal")
+                    else:
+                        failed_indices.append(j)
+
+                if failed_indices:
+                    logger.info(f"Modal batch: {len(failed_indices)} paragraphs failed, falling back to sequential")
+                    for j in failed_indices:
+                        orig_idx = non_empty_indices[j]
+                        h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                            non_empty_texts[j], use_post_processor, passes, mode
+                        )
+                        humanized_paragraphs[orig_idx] = h_text
+                        total_chunks += chunk_count
+                        if sm_used:
+                            any_sagemaker = True
+                        backends_used.append(actual_be)
+                total_chunks = len(non_empty_texts)
+            except Exception as e:
+                logger.warning(f"Modal batch failed: {e}, falling back to sequential")
+                for j, stripped in enumerate(non_empty_texts):
+                    orig_idx = non_empty_indices[j]
+                    logger.info(f"Humanizing paragraph {orig_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
+                    h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                        stripped, use_post_processor, passes, mode
+                    )
+                    humanized_paragraphs[orig_idx] = h_text
+                    total_chunks += chunk_count
+                    if sm_used:
+                        any_sagemaker = True
+                    backends_used.append(actual_be)
+        elif backend == "sagemaker" and len(non_empty_texts) > 1:
+            temp = self._MODE_TEMPS.get(mode, 0.85)
+            batch_inputs = [f"humanize: {t}" for t in non_empty_texts]
+            word_counts = [len(t.split()) for t in non_empty_texts]
+            max_new = min(int(max(word_counts) * 2.5), 512)
+            parameters = {
+                "max_new_tokens": max_new,
+                "num_beams": 1,
+                "do_sample": True,
+                "temperature": temp,
+                "top_p": 0.95,
+                "repetition_penalty": 2.5,
+                "no_repeat_ngram_size": 3,
+            }
+            try:
+                import time as _time
+                t0 = _time.time()
+                batch_results = sagemaker_client.invoke_text2text_server_batch(
+                    "humanizer", batch_inputs, parameters
+                )
+                elapsed = _time.time() - t0
+                logger.info(f"SageMaker server batch completed: {len(non_empty_texts)} paragraphs in {elapsed:.1f}s")
+                failed_indices = []
+                for j, result in enumerate(batch_results):
+                    orig_idx = non_empty_indices[j]
+                    if result and len(result) > 20:
+                        humanized_paragraphs[orig_idx] = self._clean_model_output(result)
+                        backends_used.append("sagemaker")
+                        any_sagemaker = True
+                    else:
+                        failed_indices.append(j)
+
+                if failed_indices:
+                    logger.info(f"SageMaker batch: {len(failed_indices)} paragraphs failed, falling back to sequential")
+                    for j in failed_indices:
+                        orig_idx = non_empty_indices[j]
+                        h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                            non_empty_texts[j], use_post_processor, passes, mode
+                        )
+                        humanized_paragraphs[orig_idx] = h_text
+                        total_chunks += chunk_count
+                        if sm_used:
+                            any_sagemaker = True
+                        backends_used.append(actual_be)
+                total_chunks = len(non_empty_texts)
+            except Exception as e:
+                logger.warning(f"SageMaker server batch failed: {e}, falling back to sequential")
+                for j, stripped in enumerate(non_empty_texts):
+                    orig_idx = non_empty_indices[j]
+                    logger.info(f"Humanizing paragraph {orig_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
+                    h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                        stripped, use_post_processor, passes, mode
+                    )
+                    humanized_paragraphs[orig_idx] = h_text
+                    total_chunks += chunk_count
+                    if sm_used:
+                        any_sagemaker = True
+                    backends_used.append(actual_be)
+        else:
+            for j, stripped in enumerate(non_empty_texts):
+                orig_idx = non_empty_indices[j]
+                logger.info(f"Humanizing paragraph {orig_idx + 1}/{len(content_paragraphs)} ({len(stripped.split())} words)")
+                h_text, chunk_count, sm_used, actual_be = self._humanize_paragraph(
+                    stripped, use_post_processor, passes, mode
+                )
+                humanized_paragraphs[orig_idx] = h_text
+                total_chunks += chunk_count
+                if sm_used:
+                    any_sagemaker = True
+                backends_used.append(actual_be)
 
         if has_paragraph_breaks:
             parts: List[str] = []
@@ -2390,10 +2723,12 @@ class MLModelService:
 
         before_spelling = model_output
         final_output = self._apply_spelling_only_pass(model_output)
+        final_output = self._preserve_negations(text, final_output)
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
         is_chunked = total_chunks > len(content_paragraphs) or len(content_paragraphs) > 1
+        actual_backend = backends_used[-1] if backends_used else get_inference_backend()
         return {
             "original_text": text,
             "model_output": model_output,
@@ -2410,6 +2745,8 @@ class MLModelService:
             "chunk_count": total_chunks,
             "paragraph_count": len(content_paragraphs),
             "sagemaker_used": any_sagemaker,
+            "inference_backend": actual_backend,
+            "is_peak_hours": is_peak_hours(),
         }
     
     def _humanize_selective(self, text: str, preserved_indices: List[int], use_post_processor: bool = True, passes: int = 2, mode: str = 'casual') -> Dict[str, Any]:
@@ -2444,6 +2781,7 @@ class MLModelService:
         final_output = ' '.join(result_sentences)
         before_spelling = final_output
         final_output = self._apply_spelling_only_pass(final_output)
+        final_output = self._preserve_negations(text, final_output)
         original_words = text.lower().split()
         final_words = final_output.lower().split()
         changes = len(set(original_words).symmetric_difference(set(final_words)))
