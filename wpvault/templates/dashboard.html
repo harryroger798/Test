@@ -82,9 +82,20 @@ document.addEventListener('DOMContentLoaded', function() {
             var tbody = document.getElementById('downloadsBody');
             data.data.downloads.forEach(function(d) {
                 var row = document.createElement('tr');
-                row.innerHTML = '<td><a href="/plugins/' + (d.plugin_slug || '') + '">' + (d.plugin_name || 'Unknown') + '</a></td>' +
-                    '<td>' + (d.plugin_version || '-') + '</td>' +
-                    '<td>' + new Date(d.downloaded_at).toLocaleDateString() + '</td>';
+
+                var nameTd = document.createElement('td');
+                var link = document.createElement('a');
+                link.href = '/plugins/' + encodeURIComponent(d.plugin_slug || '');
+                link.textContent = d.plugin_name || 'Unknown';
+                nameTd.appendChild(link);
+
+                var versionTd = document.createElement('td');
+                versionTd.textContent = d.plugin_version || '-';
+
+                var dateTd = document.createElement('td');
+                dateTd.textContent = new Date(d.downloaded_at).toLocaleDateString();
+
+                row.append(nameTd, versionTd, dateTd);
                 tbody.appendChild(row);
             });
         } else {

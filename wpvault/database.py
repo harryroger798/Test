@@ -60,7 +60,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS downloads (
             id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
             user_id TEXT REFERENCES users(id),
-            plugin_id TEXT REFERENCES plugins(id),
+            plugin_id TEXT REFERENCES plugins(id) ON DELETE CASCADE,
             downloaded_at TEXT DEFAULT (datetime('now'))
         );
 
@@ -74,11 +74,41 @@ def init_db():
     """)
     conn.commit()
 
-    admin_email = "admin@wpvault.com"
-    existing = get_user_by_email(admin_email)
-    if not existing:
+    try:
+        fk_rows = cursor.execute("PRAGMA foreign_key_list(downloads)").fetchall()
+        for r in fk_rows:
+            if r["from"] == "plugin_id":
+                on_delete = (r["on_delete"] or "").upper()
+                if on_delete != "CASCADE":
+                    cursor.execute("PRAGMA foreign_keys=OFF")
+                    cursor.execute("ALTER TABLE downloads RENAME TO downloads_old")
+                    cursor.execute(
+                        "CREATE TABLE downloads (\n"
+                        "    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),\n"
+                        "    user_id TEXT REFERENCES users(id),\n"
+                        "    plugin_id TEXT REFERENCES plugins(id) ON DELETE CASCADE,\n"
+                        "    downloaded_at TEXT DEFAULT (datetime('now'))\n"
+                        ");"
+                    )
+                    cursor.execute(
+                        "INSERT INTO downloads (id, user_id, plugin_id, downloaded_at) "
+                        "SELECT id, user_id, plugin_id, downloaded_at FROM downloads_old"
+                    )
+                    cursor.execute("DROP TABLE downloads_old")
+                    cursor.execute("PRAGMA foreign_keys=ON")
+                    conn.commit()
+                break
+    except Exception:
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            pass
+
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    if admin_email and admin_password and not get_user_by_email(admin_email):
         from auth import hash_password
-        hashed = hash_password("admin123")
+        hashed = hash_password(admin_password)
         cursor.execute(
             "INSERT INTO users (id, email, password_hash, plan, plan_expires_at, is_admin) "
             "VALUES (lower(hex(randomblob(16))), ?, ?, 'premium', ?, 1)",

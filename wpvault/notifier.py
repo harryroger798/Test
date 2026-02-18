@@ -1,4 +1,5 @@
 import os
+import html
 import requests
 from dotenv import load_dotenv
 
@@ -82,10 +83,16 @@ def notify_corrupt_file(slug: str) -> None:
 
 
 def notify_payment_received(email: str, amount: str) -> None:
+    parts = (email or "").split("@")
+    if len(parts) == 2 and parts[0]:
+        masked = parts[0][:2] + "***@" + parts[1]
+    else:
+        masked = "***"
+
     message = (
         f"<b>Payment Received</b>\n"
-        f"User: {email}\n"
-        f"Amount: ${amount}\n"
+        f"User: {html.escape(masked)}\n"
+        f"Amount: ${html.escape(str(amount))}\n"
         f"Plan activated!"
     )
     notify(message)

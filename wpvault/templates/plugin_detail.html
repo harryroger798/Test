@@ -47,9 +47,10 @@
 
 <script>
 var pluginSlug = window.location.pathname.split('/').pop();
+var pluginSlugEncoded = encodeURIComponent(pluginSlug);
 
 document.addEventListener('DOMContentLoaded', function() {
-    fetch('/api/plugins/' + pluginSlug)
+    fetch('/api/plugins/' + pluginSlugEncoded)
     .then(function(r) { return r.json(); })
     .then(function(data) {
         document.getElementById('pluginLoading').style.display = 'none';
@@ -63,7 +64,8 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('pluginVersion').textContent = 'v' + (p.version || '?');
         document.getElementById('pluginCategory').textContent = p.category || '';
         document.getElementById('pluginType').textContent = p.is_plugin ? 'Plugin' : 'Theme';
-        document.getElementById('pluginDescription').innerHTML = p.description || '<p>No description available.</p>';
+        var descEl = document.getElementById('pluginDescription');
+        descEl.textContent = p.description || 'No description available.';
 
         var sizeKB = p.file_size_bytes ? Math.round(p.file_size_bytes / 1024) : 0;
         document.getElementById('pluginSize').textContent = sizeKB > 0 ? sizeKB + ' KB' : '';
@@ -79,10 +81,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         var thumbDiv = document.getElementById('pluginThumb');
+        thumbDiv.textContent = '';
         if (p.thumbnail_url) {
-            thumbDiv.innerHTML = '<img src="' + p.thumbnail_url + '" alt="' + p.name + '">';
+            var img = document.createElement('img');
+            img.src = p.thumbnail_url;
+            img.alt = p.name || 'Plugin thumbnail';
+            thumbDiv.appendChild(img);
         } else {
-            thumbDiv.innerHTML = '<div class="thumb-placeholder large">' + (p.is_plugin ? 'P' : 'T') + '</div>';
+            var placeholder = document.createElement('div');
+            placeholder.className = 'thumb-placeholder large';
+            placeholder.textContent = p.is_plugin ? 'P' : 'T';
+            thumbDiv.appendChild(placeholder);
         }
 
         document.title = p.name + ' - WPVault';
@@ -104,7 +113,7 @@ function downloadPlugin() {
     btn.disabled = true;
     btn.textContent = 'Preparing download...';
 
-    fetch('/api/plugins/' + pluginSlug + '/download', {
+    fetch('/api/plugins/' + pluginSlugEncoded + '/download', {
         headers: {'Authorization': 'Bearer ' + token}
     })
     .then(function(r) { return r.json(); })

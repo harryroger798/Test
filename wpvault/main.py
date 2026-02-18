@@ -20,10 +20,13 @@ import watcher
 
 app = FastAPI(title="WPVault", version="1.0.0")
 
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+cors_origins = ALLOWED_ORIGINS if ALLOWED_ORIGINS else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=bool(ALLOWED_ORIGINS),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -314,7 +317,12 @@ async def webhook_btcpay(request: Request):
             content={"success": False, "error": "Invalid payload"}
         )
 
-    result = payments.handle_webhook(payload, raw_body, signature)
+    ok = payments.handle_webhook(payload, raw_body, signature)
+    if not ok:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "Webhook verification failed"}
+        )
     return JSONResponse(content={"success": True, "data": {"status": "ok"}})
 
 
@@ -360,11 +368,17 @@ def api_admin_delete_plugin(slug: str, request: Request):
             content={"success": False, "error": "Plugin not found"}
         )
 
+    deleted = database.delete_plugin_by_slug(slug)
+    if not deleted:
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error": "Plugin could not be deleted"}
+        )
+
     file_key = plugin.get("file_key", "")
     if file_key:
         storage.delete_file(file_key)
 
-    database.delete_plugin_by_slug(slug)
     return JSONResponse(content={"success": True, "data": {"message": f"Plugin {slug} deleted"}})
 
 

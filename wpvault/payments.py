@@ -18,6 +18,8 @@ BASE_URL = os.getenv("BASE_URL", "")
 
 def create_invoice(user_id: str, amount_usd: float, plan_days: int = 365) -> dict:
     try:
+        if amount_usd <= 0 or plan_days <= 0:
+            return {"error": "Invalid amount or plan duration"}
         url = f"{BTCPAY_URL}/api/v1/stores/{BTCPAY_STORE_ID}/invoices"
         headers = {
             "Authorization": f"token {BTCPAY_API_KEY}",
@@ -42,7 +44,11 @@ def create_invoice(user_id: str, amount_usd: float, plan_days: int = 365) -> dic
         invoice_id = data.get("id", "")
         checkout_url = data.get("checkoutLink", "")
 
-        database.create_order(user_id, invoice_id, amount_usd, plan_days)
+        if not invoice_id or not checkout_url:
+            return {"error": "BTCPay response missing invoice details"}
+        order = database.create_order(user_id, invoice_id, amount_usd, plan_days)
+        if not order:
+            return {"error": "Failed to persist order"}
 
         return {
             "invoice_id": invoice_id,
@@ -54,6 +60,8 @@ def create_invoice(user_id: str, amount_usd: float, plan_days: int = 365) -> dic
 
 def verify_webhook_signature(payload: bytes, signature: str) -> bool:
     try:
+        if not BTCPAY_WEBHOOK_SECRET:
+            return False
         expected = hmac.new(
             BTCPAY_WEBHOOK_SECRET.encode("utf-8"),
             payload,
@@ -74,23 +82,33 @@ def handle_webhook(payload: dict, raw_body: bytes, signature: str) -> bool:
 
         if event_type == "InvoiceSettled":
             order = database.get_order_by_invoice(invoice_id)
-            if order:
-                user_id = order.get("user_id", "")
-                plan_days = order.get("plan_duration_days", 365)
-                amount = order.get("amount_usd", 0)
+            if not order:
+                return False
+            if order.get("status") == "paid":
+                return True
 
-                database.upgrade_user_plan(user_id, plan_days)
-                database.update_order_status(invoice_id, "paid")
+            user_id = order.get("user_id", "")
+            plan_days = order.get("plan_duration_days", 365)
+            amount = order.get("amount_usd", 0)
 
-                user = database.get_user_by_id(user_id)
-                if user:
-                    notifier.notify_payment_received(
-                        user.get("email", ""),
-                        str(amount)
-                    )
+            if not database.update_order_status(invoice_id, "paid"):
+                return False
+
+            if not database.upgrade_user_plan(user_id, plan_days):
+                database.update_order_status(invoice_id, "error")
+                return False
+
+            user = database.get_user_by_id(user_id)
+            if user:
+                notifier.notify_payment_received(
+                    user.get("email", ""),
+                    str(amount)
+                )
 
         elif event_type == "InvoiceExpired":
-            database.update_order_status(invoice_id, "expired")
+            order = database.get_order_by_invoice(invoice_id)
+            if order and order.get("status") != "paid":
+                database.update_order_status(invoice_id, "expired")
 
         return True
     except Exception:

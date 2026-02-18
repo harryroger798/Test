@@ -52,7 +52,14 @@ function loadPlugins(page) {
         if (data.data.categories) {
             var select = document.getElementById('categoryFilter');
             var currentVal = select.value;
-            select.innerHTML = '<option value="">All Categories</option>';
+            while (select.firstChild) {
+                select.removeChild(select.firstChild);
+            }
+            var defaultOpt = document.createElement('option');
+            defaultOpt.value = '';
+            defaultOpt.textContent = 'All Categories';
+            select.appendChild(defaultOpt);
+
             data.data.categories.forEach(function(cat) {
                 var opt = document.createElement('option');
                 opt.value = cat;
@@ -63,27 +70,81 @@ function loadPlugins(page) {
         }
 
         if (plugins.length === 0) {
-            grid.innerHTML = '<p class="text-muted">No plugins found.</p>';
+            var msg = document.createElement('p');
+            msg.className = 'text-muted';
+            msg.textContent = 'No plugins found.';
+            grid.appendChild(msg);
             return;
         }
 
         plugins.forEach(function(p) {
             var card = document.createElement('div');
             card.className = 'plugin-card';
+
             var sizeKB = p.file_size_bytes ? Math.round(p.file_size_bytes / 1024) : 0;
             var typeLabel = p.is_plugin ? 'Plugin' : 'Theme';
-            card.innerHTML =
-                '<div class="plugin-thumb">' +
-                    (p.thumbnail_url ? '<img src="' + p.thumbnail_url + '" alt="' + p.name + '">' : '<div class="thumb-placeholder">' + typeLabel.charAt(0) + '</div>') +
-                '</div>' +
-                '<div class="plugin-info">' +
-                    '<h3 class="plugin-name"><a href="/plugins/' + p.slug + '">' + p.name + '</a></h3>' +
-                    '<span class="plugin-version">v' + (p.version || '?') + '</span>' +
-                    (p.category ? '<span class="plugin-category">' + p.category + '</span>' : '') +
-                    '<span class="plugin-type">' + typeLabel + '</span>' +
-                    (sizeKB > 0 ? '<span class="plugin-size">' + sizeKB + ' KB</span>' : '') +
-                '</div>' +
-                '<a href="/plugins/' + p.slug + '" class="btn btn-sm btn-full">View Details</a>';
+            var slug = p.slug || '';
+            var encodedSlug = encodeURIComponent(slug);
+
+            var thumb = document.createElement('div');
+            thumb.className = 'plugin-thumb';
+            if (p.thumbnail_url) {
+                var img = document.createElement('img');
+                img.src = p.thumbnail_url;
+                img.alt = p.name || 'Plugin thumbnail';
+                thumb.appendChild(img);
+            } else {
+                var placeholder = document.createElement('div');
+                placeholder.className = 'thumb-placeholder';
+                placeholder.textContent = typeLabel.charAt(0);
+                thumb.appendChild(placeholder);
+            }
+
+            var info = document.createElement('div');
+            info.className = 'plugin-info';
+
+            var title = document.createElement('h3');
+            title.className = 'plugin-name';
+            var titleLink = document.createElement('a');
+            titleLink.href = '/plugins/' + encodedSlug;
+            titleLink.textContent = p.name || '-';
+            title.appendChild(titleLink);
+
+            var versionSpan = document.createElement('span');
+            versionSpan.className = 'plugin-version';
+            versionSpan.textContent = 'v' + (p.version || '?');
+
+            info.appendChild(title);
+            info.appendChild(versionSpan);
+
+            if (p.category) {
+                var catSpan = document.createElement('span');
+                catSpan.className = 'plugin-category';
+                catSpan.textContent = p.category;
+                info.appendChild(catSpan);
+            }
+
+            var typeSpan = document.createElement('span');
+            typeSpan.className = 'plugin-type';
+            typeSpan.textContent = typeLabel;
+            info.appendChild(typeSpan);
+
+            if (sizeKB > 0) {
+                var sizeSpan = document.createElement('span');
+                sizeSpan.className = 'plugin-size';
+                sizeSpan.textContent = sizeKB + ' KB';
+                info.appendChild(sizeSpan);
+            }
+
+            var action = document.createElement('a');
+            action.href = '/plugins/' + encodedSlug;
+            action.className = 'btn btn-sm btn-full';
+            action.textContent = 'View Details';
+
+            card.appendChild(thumb);
+            card.appendChild(info);
+            card.appendChild(action);
+
             grid.appendChild(card);
         });
 

@@ -1,8 +1,11 @@
 import os
+import logging
 from datetime import datetime
 import boto3
 from botocore.config import Config
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -34,6 +37,7 @@ def upload_file(filepath: str, object_key: str) -> bool:
         )
         return True
     except Exception:
+        logger.exception("Failed to upload %s to %s", filepath, object_key)
         return False
 
 
@@ -47,6 +51,7 @@ def generate_presigned_url(object_key: str, expires_in: int = 3600) -> str:
         )
         return url
     except Exception:
+        logger.exception("Failed to generate presigned URL for %s", object_key)
         return ""
 
 
@@ -56,6 +61,7 @@ def delete_file(object_key: str) -> bool:
         client.delete_object(Bucket=IDRIVE_BUCKET, Key=object_key)
         return True
     except Exception:
+        logger.exception("Failed to delete %s", object_key)
         return False
 
 
@@ -84,12 +90,14 @@ def list_all_files() -> list:
                 })
         return files
     except Exception:
+        logger.exception("Failed to list files")
         return []
 
 
 def backup_database() -> bool:
     try:
         if not os.path.exists(DB_PATH):
+            logger.warning("Database file not found at %s", DB_PATH)
             return False
 
         client = _get_client()
@@ -97,10 +105,16 @@ def backup_database() -> bool:
 
         dated_key = f"backup/database-{date_str}.db"
         client.upload_file(DB_PATH, IDRIVE_BUCKET, dated_key)
+        logger.info("Uploaded dated backup to %s", dated_key)
 
         latest_key = "backup/database-latest.db"
-        client.upload_file(DB_PATH, IDRIVE_BUCKET, latest_key)
-
-        return True
+        try:
+            client.upload_file(DB_PATH, IDRIVE_BUCKET, latest_key)
+            logger.info("Uploaded latest backup to %s", latest_key)
+            return True
+        except Exception:
+            logger.exception("Uploaded dated backup but failed to upload latest backup")
+            return False
     except Exception:
+        logger.exception("Failed to backup database")
         return False

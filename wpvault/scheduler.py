@@ -33,7 +33,12 @@ def cleanup_tmp():
 
 
 def daily_backup():
-    storage.backup_database()
+    ok = storage.backup_database()
+    if not ok:
+        try:
+            notifier.notify("<b>Backup Failed</b>\nDatabase backup failed")
+        except Exception:
+            print("daily_backup: database backup failed")
 
 
 if __name__ == "__main__":

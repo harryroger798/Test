@@ -127,16 +127,30 @@ def get_authenticated_page():
     if not is_session_valid():
         success = login_and_save_session()
         if not success:
-            return None, None, None
+            return None, None, None, None
 
-    p = sync_playwright().start()
-    browser = p.chromium.launch(headless=True)
-    context = browser.new_context(
-        user_agent=USER_AGENT,
-        viewport={"width": 1920, "height": 1080}
-    )
-    load_session(context)
-    page = context.new_page()
-    stealth_sync(page)
-
-    return browser, context, page
+    p = None
+    browser = None
+    try:
+        p = sync_playwright().start()
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1920, "height": 1080}
+        )
+        load_session(context)
+        page = context.new_page()
+        stealth_sync(page)
+        return p, browser, context, page
+    except Exception:
+        try:
+            if browser:
+                browser.close()
+        except Exception:
+            pass
+        try:
+            if p:
+                p.stop()
+        except Exception:
+            pass
+        return None, None, None, None

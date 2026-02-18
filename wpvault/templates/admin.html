@@ -107,10 +107,23 @@ function loadAdminStats() {
             tbody.innerHTML = '';
             d.recent_sync_logs.forEach(function(log) {
                 var row = document.createElement('tr');
-                row.innerHTML = '<td>' + (log.slug || '-') + '</td>' +
-                    '<td><span class="status-badge status-' + (log.status || '') + '">' + (log.status || '-') + '</span></td>' +
-                    '<td>' + (log.message || '-') + '</td>' +
-                    '<td>' + (log.synced_at ? new Date(log.synced_at).toLocaleString() : '-') + '</td>';
+
+                var slugCell = document.createElement('td');
+                slugCell.textContent = log.slug || '-';
+
+                var statusCell = document.createElement('td');
+                var badge = document.createElement('span');
+                badge.className = 'status-badge status-' + (log.status || '');
+                badge.textContent = log.status || '-';
+                statusCell.appendChild(badge);
+
+                var msgCell = document.createElement('td');
+                msgCell.textContent = log.message || '-';
+
+                var timeCell = document.createElement('td');
+                timeCell.textContent = log.synced_at ? new Date(log.synced_at).toLocaleString() : '-';
+
+                row.append(slugCell, statusCell, msgCell, timeCell);
                 tbody.appendChild(row);
             });
         }
@@ -137,11 +150,27 @@ function loadAdminPlugins() {
             tbody.innerHTML = '';
             plugins.forEach(function(p) {
                 var row = document.createElement('tr');
-                row.innerHTML = '<td>' + p.name + '</td>' +
-                    '<td>' + p.slug + '</td>' +
-                    '<td>' + (p.version || '-') + '</td>' +
-                    '<td>' + (p.category || '-') + '</td>' +
-                    '<td><button class="btn btn-sm btn-danger" onclick="deletePlugin(\'' + p.slug + '\')">Delete</button></td>';
+
+                var nameCell = document.createElement('td');
+                nameCell.textContent = p.name || '-';
+
+                var slugCell = document.createElement('td');
+                slugCell.textContent = p.slug || '-';
+
+                var versionCell = document.createElement('td');
+                versionCell.textContent = p.version || '-';
+
+                var categoryCell = document.createElement('td');
+                categoryCell.textContent = p.category || '-';
+
+                var actionCell = document.createElement('td');
+                var btn = document.createElement('button');
+                btn.className = 'btn btn-sm btn-danger';
+                btn.textContent = 'Delete';
+                btn.addEventListener('click', function () { deletePlugin(p.slug); });
+                actionCell.appendChild(btn);
+
+                row.append(nameCell, slugCell, versionCell, categoryCell, actionCell);
                 tbody.appendChild(row);
             });
         }
@@ -183,7 +212,7 @@ function triggerSync() {
 function deletePlugin(slug) {
     if (!confirm('Delete plugin "' + slug + '"? This cannot be undone.')) return;
     var token = localStorage.getItem('token');
-    fetch('/api/admin/plugins/' + slug, {
+    fetch('/api/admin/plugins/' + encodeURIComponent(slug), {
         method: 'DELETE',
         headers: {'Authorization': 'Bearer ' + token}
     })

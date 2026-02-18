@@ -1,5 +1,5 @@
 import re
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 import feedparser
 import requests
 from urllib.parse import urlparse
@@ -133,10 +133,9 @@ def process_single_item(item: dict) -> str:
             database.log_sync(slug, "failed", "Upload to storage failed")
             return "failed"
 
+        old_key_to_delete = ""
         if existing and existing.get("file_key") and existing.get("file_hash") != file_hash:
-            old_key = existing.get("file_key", "")
-            if old_key:
-                storage.delete_file(old_key)
+            old_key_to_delete = existing.get("file_key", "") or ""
 
         plugin_data = {
             "slug": slug,
@@ -154,7 +153,11 @@ def process_single_item(item: dict) -> str:
 
         if existing:
             old_version = existing.get("version", "unknown")
-            database.update_plugin(slug, plugin_data)
+            if not database.update_plugin(slug, plugin_data):
+                database.log_sync(slug, "failed", "DB update failed")
+                return "failed"
+            if old_key_to_delete:
+                storage.delete_file(old_key_to_delete)
             database.log_sync(slug, "updated", f"Updated from {old_version} to {version}")
             notifier.notify_updated_plugin(name, old_version, version)
             status = "updated"
