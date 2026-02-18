@@ -24,10 +24,6 @@
 {% block scripts %}
 <script>
 var currentPage=1,totalPages=1,searchTimer=null;
-function proxyImg(u){
-    if(!u) return '';
-    return '/api/img?url='+encodeURIComponent(u);
-}
 function loadPlugins(page,search,category){
     currentPage=page||1;
     var url='/api/plugins?page='+currentPage+'&per_page=20';
@@ -44,8 +40,8 @@ function loadPlugins(page,search,category){
         var html='';
         ps.forEach(function(p){
             var thumbHtml='';
-            if(p.thumbnail_url){
-                thumbHtml='<img src="'+proxyImg(p.thumbnail_url)+'" alt="'+((p.name||'').replace(/"/g,'&quot;'))+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder>\'+(p.name||\'?\').charAt(0)+\'</span>\'">';
+            if(p.thumbnail){
+                thumbHtml='<img src="'+p.thumbnail+'" alt="'+((p.name||'').replace(/"/g,'&quot;'))+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<span class=thumb-placeholder>\'+(p.name||\'?\').charAt(0)+\'</span>\'">';
             } else {
                 thumbHtml='<span class="thumb-placeholder">'+(p.name||'?').charAt(0)+'</span>';
             }

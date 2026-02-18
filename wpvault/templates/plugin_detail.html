@@ -12,9 +12,41 @@
 {% block scripts %}
 <script>
 var slug='{{ slug }}';
-function proxyImg(u){
-    if(!u) return '';
-    return '/api/img?url='+encodeURIComponent(u);
+function renderDescription(el, raw){
+    if(!el) return;
+    var text=(raw||'').toString().replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+    if(!text){ el.textContent='No description available for this product.'; return; }
+
+    if(text.indexOf('•') !== -1){
+        var parts=text.split('•').map(function(s){return s.trim();}).filter(Boolean);
+        if(!parts.length){ el.textContent=text; return; }
+        var intro='';
+        if(parts[0] && parts[0].endsWith(':')){
+            intro=parts.shift();
+        }
+        var html='';
+        if(intro){ html+='<p>'+intro.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>'; }
+        html+='<ul>';
+        parts.forEach(function(it){
+            html+='<li>'+it.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</li>';
+        });
+        html+='</ul>';
+        el.innerHTML=html;
+        return;
+    }
+
+    var sentences=text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+    var para=[];
+    var html='';
+    for(var i=0;i<sentences.length;i++){
+        para.push(sentences[i].trim());
+        if(para.length>=3 || i===sentences.length-1){
+            var p=para.join(' ');
+            html+='<p>'+p.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>';
+            para=[];
+        }
+    }
+    el.innerHTML=html;
 }
 fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
     if(!d.success){document.getElementById('pluginContent').innerHTML='<div class="empty-state"><p>Product not found</p><a href="/plugins" class="btn">Browse Products</a></div>';return;}
@@ -22,8 +54,8 @@ fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
     document.getElementById('breadcrumbName').textContent=p.name;
     document.title=p.name+' — WPVault';
     var html='<div class="plugin-detail-grid"><div class="detail-main">';
-    if(p.thumbnail_url){
-        html+='<div class="plugin-hero-thumb"><img src="'+proxyImg(p.thumbnail_url)+'" alt="'+p.name.replace(/"/g,'&quot;')+'"></div>';
+    if(p.thumbnail){
+        html+='<div class="plugin-hero-thumb"><img src="'+p.thumbnail+'" alt="'+p.name.replace(/"/g,'&quot;')+'"></div>';
     } else {
         html+='<div class="plugin-hero-thumb"><span class="thumb-placeholder large">'+p.name.charAt(0)+'</span></div>';
     }
@@ -35,7 +67,7 @@ fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
     if(p.updated_at) html+='<span class="meta-chip updated">Updated '+new Date(p.updated_at).toLocaleDateString()+'</span>';
     html+='</div>';
     html+='<div class="plugin-description-card"><h3>&#128196; Description</h3>';
-    html+='<div class="plugin-description-text">'+(p.description||'No description available for this product.')+'</div>';
+    html+='<div class="plugin-description-text" id="pluginDescription"></div>';
     html+='</div></div>';
     html+='<div class="detail-sidebar">';
     html+='<div class="sidebar-card">';
@@ -53,6 +85,7 @@ fetch('/api/plugins/'+slug).then(r=>r.json()).then(d=>{
     html+='</ul></div>';
     html+='</div></div>';
     document.getElementById('pluginContent').innerHTML=html;
+    renderDescription(document.getElementById('pluginDescription'), p.description);
 });
 function downloadPlugin(){
     var t=localStorage.getItem('token');

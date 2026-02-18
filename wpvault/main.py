@@ -3,6 +3,7 @@ import re
 import logging
 import threading
 import hashlib
+import base64
 from datetime import datetime
 from urllib.parse import urlparse
 from fastapi import FastAPI, Request, HTTPException, Depends
@@ -13,8 +14,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 
 load_dotenv()
+
+_IMG_TOKEN_SECRET = os.getenv("IMG_TOKEN_SECRET") or os.getenv("JWT_SECRET", "")
+if not _IMG_TOKEN_SECRET:
+    raise RuntimeError("IMG_TOKEN_SECRET or JWT_SECRET must be set")
+_img_fernet = Fernet(base64.urlsafe_b64encode(hashlib.sha256(_IMG_TOKEN_SECRET.encode()).digest()))
+
+
+def _img_token(url: str) -> str:
+    return _img_fernet.encrypt(url.encode("utf-8")).decode("utf-8")
+
+
+def _img_token_to_url(token: str) -> str | None:
+    try:
+        return _img_fernet.decrypt(token.encode("utf-8")).decode("utf-8")
+    except InvalidToken:
+        return None
+
 
 import database
 import auth
@@ -208,13 +227,14 @@ def api_plugins(page: int = 1, search: str | None = None, category: str | None =
 
     safe_plugins = []
     for p in plugins:
+        thumb = p.get("thumbnail_url", "") or ""
         safe_plugins.append({
             "slug": p.get("slug"),
             "name": p.get("name"),
             "description": p.get("description", ""),
             "version": p.get("version"),
             "category": p.get("category"),
-            "thumbnail_url": p.get("thumbnail_url", ""),
+            "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",
             "is_plugin": p.get("is_plugin", 1),
             "file_size_bytes": p.get("file_size_bytes", 0),
             "updated_at": p.get("updated_at"),
@@ -240,13 +260,14 @@ def api_plugin_detail(slug: str):
             status_code=404,
             content={"success": False, "error": "Plugin not found"}
         )
+    thumb = plugin.get("thumbnail_url", "") or ""
     safe = {
         "slug": plugin.get("slug"),
         "name": plugin.get("name"),
         "description": plugin.get("description", ""),
         "version": plugin.get("version"),
         "category": plugin.get("category"),
-        "thumbnail_url": plugin.get("thumbnail_url", ""),
+        "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",
         "is_plugin": plugin.get("is_plugin", 1),
         "file_size_bytes": plugin.get("file_size_bytes", 0),
         "created_at": plugin.get("created_at"),
@@ -460,10 +481,22 @@ os.makedirs(_image_cache_dir, exist_ok=True)
 
 
 @app.get("/api/img")
-async def proxy_image(url: str):
+async def proxy_image(t: str | None = None, url: str | None = None):
+    if t:
+        url = _img_token_to_url(t)
+        if not url:
+            return JSONResponse(status_code=400, content={"success": False, "error": "Invalid token"})
+
+    if not url:
+        return JSONResponse(status_code=400, content={"success": False, "error": "Missing image token"})
+
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
-        return JSONResponse(status_code=400, content={"error": "Invalid URL"})
+        return JSONResponse(status_code=400, content={"success": False, "error": "Invalid URL"})
+
+    host = parsed.hostname or ""
+    if not host.endswith("pluginsforwp.com"):
+        return JSONResponse(status_code=403, content={"success": False, "error": "Forbidden"})
 
     url_hash = hashlib.sha256(url.encode()).hexdigest()[:16]
     ext = os.path.splitext(parsed.path)[1] or ".jpg"
@@ -491,7 +524,7 @@ async def proxy_image(url: str):
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             resp = await client.get(url)
             if resp.status_code != 200:
-                return JSONResponse(status_code=502, content={"error": "Upstream error"})
+                return JSONResponse(status_code=502, content={"success": False, "error": "Upstream error"})
             content_type = resp.headers.get("content-type", "image/jpeg")
             img_data = resp.content
             try:
@@ -505,7 +538,7 @@ async def proxy_image(url: str):
                 headers={"Cache-Control": "public, max-age=604800"},
             )
     except httpx.HTTPError:
-        return JSONResponse(status_code=502, content={"error": "Failed to fetch image"})
+        return JSONResponse(status_code=502, content={"success": False, "error": "Failed to fetch image"})
 
 
 @app.get("/", response_class=HTMLResponse)

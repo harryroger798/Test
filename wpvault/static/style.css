@@ -959,6 +959,21 @@ img { max-width: 100%; height: auto; }
     line-height: 1.9;
     font-size: 0.93rem;
 }
+.plugin-description-text p {
+    margin: 0 0 14px;
+}
+.plugin-description-text p:last-child {
+    margin-bottom: 0;
+}
+.plugin-description-text ul {
+    margin: 12px 0 12px 18px;
+}
+.plugin-description-text li {
+    margin: 6px 0;
+}
+.plugin-description-text strong {
+    color: var(--text-primary);
+}
 
 .sidebar-card {
     background: var(--gradient-card);
