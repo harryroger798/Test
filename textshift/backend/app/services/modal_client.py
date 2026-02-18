@@ -38,7 +38,7 @@ def get_inference_backend() -> str:
         getattr(settings, "AWS_ACCESS_KEY_ID", "") and
         getattr(settings, "AWS_SECRET_ACCESS_KEY", "")
     )
-    modal_url = getattr(settings, "MODAL_ENDPOINT_URL", MODAL_ENDPOINT_URL)
+    modal_url = getattr(settings, "MODAL_MULTIMODEL_URL", MODAL_MULTIMODEL_URL)
     has_modal = bool(modal_url)
 
     if is_peak_hours() and has_sagemaker:
