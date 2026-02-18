@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -17,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 EDD_API_BASE = "https://pluginsforwp.com/edd-api/v2/products/"
 PLUGINSFORWP_API_KEY = os.getenv("PLUGINSFORWP_API_KEY", "")
-PRODUCTS_PER_PAGE = 20
-MAX_PAGES = 5
+PRODUCTS_PER_PAGE = 50
+MAX_PAGES = 500
 
 
 def _strip_html(text: str) -> str:
@@ -87,7 +88,8 @@ def scrape_plugin_list() -> list:
         logger.error("PLUGINSFORWP_API_KEY not set")
         return []
 
-    for page_num in range(1, MAX_PAGES + 1):
+    page_num = 1
+    while True:
         try:
             products = _fetch_api_page(page_num, PRODUCTS_PER_PAGE)
         except Exception:
@@ -141,6 +143,12 @@ def scrape_plugin_list() -> list:
 
         if len(products) < PRODUCTS_PER_PAGE:
             break
+
+        page_num += 1
+        if page_num > MAX_PAGES:
+            logger.info("Reached MAX_PAGES limit (%d)", MAX_PAGES)
+            break
+        time.sleep(1)
 
     return list(items.values())
 
