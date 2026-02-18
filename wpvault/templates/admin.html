@@ -77,10 +77,10 @@
     .then(function(r) { return r.json(); })
     .then(function(d) {
         if (!d.success) { window.location = '/dashboard'; return; }
-        document.getElementById('adminPlugins').textContent = (d.data.plugins || 0).toLocaleString();
-        document.getElementById('adminUsers').textContent = d.data.users || 0;
-        document.getElementById('adminOrders').textContent = d.data.orders || 0;
-        document.getElementById('adminDownloads').textContent = d.data.downloads || 0;
+        document.getElementById('adminPlugins').textContent = (d.data.total_plugins || 0).toLocaleString();
+        document.getElementById('adminUsers').textContent = d.data.total_users || 0;
+        document.getElementById('adminOrders').textContent = d.data.total_orders || 0;
+        document.getElementById('adminDownloads').textContent = d.data.total_downloads || 0;
     });
 
     fetch('/api/admin/sync-logs', { headers: { 'Authorization': 'Bearer ' + token } })
