@@ -2287,7 +2287,6 @@ class MLModelService:
             elif response.status_code == 503:
                 # Model is loading, wait and retry once
                 logger.info("HuggingFace model loading, waiting...")
-                import time
                 time.sleep(20)
                 response = httpx.post(
                     api_url,
