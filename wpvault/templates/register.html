@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Register - WPVault{% endblock %}
+{% block content %}
+<section class="auth-section">
+    <div class="container">
+        <div class="auth-card">
+            <h2>Create Account</h2>
+            <div id="registerError" class="alert alert-error" style="display:none;"></div>
+            <form id="registerForm" onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Min 6 characters" minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required placeholder="Repeat password">
+                </div>
+                <button type="submit" class="btn btn-full" id="registerBtn">Create Account</button>
+            </form>
+            <p class="auth-footer">Already have an account? <a href="/login">Login here</a></p>
+        </div>
+    </div>
+</section>
+
+<script>
+function handleRegister(e) {
+    e.preventDefault();
+    var email = document.getElementById('email').value;
+    var password = document.getElementById('password').value;
+    var confirm = document.getElementById('confirmPassword').value;
+    var btn = document.getElementById('registerBtn');
+    var errDiv = document.getElementById('registerError');
+    errDiv.style.display = 'none';
+
+    if (password !== confirm) {
+        errDiv.textContent = 'Passwords do not match';
+        errDiv.style.display = 'block';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Creating account...';
+
+    fetch('/api/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email, password: password})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            localStorage.setItem('token', data.data.token);
+            localStorage.setItem('user', JSON.stringify(data.data.user));
+            window.location.href = '/dashboard';
+        } else {
+            errDiv.textContent = data.error || 'Registration failed';
+            errDiv.style.display = 'block';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+    })
+    .catch(function() {
+        errDiv.textContent = 'Network error. Please try again.';
+        errDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+    });
+}
+</script>
+{% endblock %}

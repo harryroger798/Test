@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}WPVault - Premium WordPress Plugins & Themes{% endblock %}
+{% block content %}
+<section class="hero">
+    <div class="container">
+        <h1>Access 10,000+ Premium WordPress Plugins & Themes</h1>
+        <p class="hero-sub">Download the latest GPL-licensed WordPress plugins and themes. Updated daily, secured with Bitcoin payments.</p>
+        <a href="/register" class="btn btn-lg">Get Premium Access</a>
+    </div>
+</section>
+
+<section class="stats-bar">
+    <div class="container stats-grid">
+        <div class="stat-item">
+            <span class="stat-number" id="totalPlugins">0</span>
+            <span class="stat-label">Total Plugins</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number">Daily</span>
+            <span class="stat-label">Updates</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number">Bitcoin</span>
+            <span class="stat-label">Payments</span>
+        </div>
+    </div>
+</section>
+
+<section class="features">
+    <div class="container">
+        <h2 class="section-title">Why WPVault?</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">&#8635;</div>
+                <h3>Always Updated</h3>
+                <p>Automated syncing every 4 hours ensures you always get the latest versions of your favorite plugins and themes.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#8681;</div>
+                <h3>Instant Download</h3>
+                <p>One-click downloads with pre-signed secure URLs. No waiting, no throttling, no limits.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#9729;</div>
+                <h3>Secure Storage</h3>
+                <p>All files stored on enterprise-grade cloud storage with SHA256 integrity verification.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#9919;</div>
+                <h3>Privacy First</h3>
+                <p>Pay with Bitcoin via BTCPay Server. No credit cards, no tracking, complete privacy.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="pricing" id="pricing">
+    <div class="container">
+        <h2 class="section-title">Simple Pricing</h2>
+        <div class="pricing-grid">
+            <div class="pricing-card">
+                <h3>Free</h3>
+                <div class="price">$0</div>
+                <ul class="pricing-features">
+                    <li>Browse all plugins</li>
+                    <li>View plugin details</li>
+                    <li>Search & filter</li>
+                    <li class="disabled">Download plugins</li>
+                    <li class="disabled">Priority updates</li>
+                </ul>
+                <a href="/register" class="btn btn-outline">Sign Up Free</a>
+            </div>
+            <div class="pricing-card featured">
+                <div class="badge">Best Value</div>
+                <h3>Premium</h3>
+                <div class="price">$9.99<span>/year</span></div>
+                <ul class="pricing-features">
+                    <li>Browse all plugins</li>
+                    <li>View plugin details</li>
+                    <li>Search & filter</li>
+                    <li>Unlimited downloads</li>
+                    <li>Priority updates</li>
+                </ul>
+                <a href="/checkout" class="btn">Get Premium</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/plugins?page=1')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('totalPlugins').textContent = data.data.total.toLocaleString();
+            }
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}

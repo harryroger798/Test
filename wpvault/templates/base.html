@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}WPVault{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="/" class="logo">WPVault</a>
+            <button class="nav-toggle" onclick="toggleNav()">&#9776;</button>
+            <div class="nav-links" id="navLinks">
+                <a href="/plugins">Plugins</a>
+                <a href="/checkout">Pricing</a>
+                <span id="navAuth">
+                    <a href="/login">Login</a>
+                    <a href="/register" class="btn btn-sm">Register</a>
+                </span>
+                <span id="navUser" style="display:none;">
+                    <a href="/dashboard">Dashboard</a>
+                    <a href="#" onclick="logout()" class="btn btn-sm btn-outline">Logout</a>
+                </span>
+                <span id="navAdmin" style="display:none;">
+                    <a href="/admin">Admin</a>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 WPVault. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="/static/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

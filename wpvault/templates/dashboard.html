@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - WPVault{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+    <div class="container">
+        <div id="dashboardContent" style="display:none;">
+            <h2>Welcome, <span id="userEmail"></span></h2>
+
+            <div class="plan-card">
+                <h3>Your Plan</h3>
+                <div class="plan-info">
+                    <span class="plan-badge" id="planBadge">Free</span>
+                    <span id="planExpiry"></span>
+                </div>
+                <div id="upgradeSection">
+                    <p>Upgrade to Premium for unlimited downloads.</p>
+                    <a href="/checkout" class="btn">Upgrade to Premium - $9.99/year</a>
+                </div>
+            </div>
+
+            <div class="downloads-section">
+                <h3>Download History</h3>
+                <div id="downloadsLoading" class="loading">Loading...</div>
+                <table class="data-table" id="downloadsTable" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Plugin</th>
+                            <th>Version</th>
+                            <th>Downloaded</th>
+                        </tr>
+                    </thead>
+                    <tbody id="downloadsBody"></tbody>
+                </table>
+                <p id="noDownloads" style="display:none;" class="text-muted">No downloads yet.</p>
+            </div>
+        </div>
+
+        <div id="loginPrompt" style="display:none;">
+            <h2>Please Login</h2>
+            <p>You need to be logged in to view your dashboard.</p>
+            <a href="/login" class="btn">Login</a>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var token = localStorage.getItem('token');
+    var user = JSON.parse(localStorage.getItem('user') || 'null');
+
+    if (!token || !user) {
+        document.getElementById('loginPrompt').style.display = 'block';
+        return;
+    }
+
+    document.getElementById('dashboardContent').style.display = 'block';
+    document.getElementById('userEmail').textContent = user.email;
+
+    var planBadge = document.getElementById('planBadge');
+    var planExpiry = document.getElementById('planExpiry');
+    var upgradeSection = document.getElementById('upgradeSection');
+
+    if (user.plan === 'premium') {
+        planBadge.textContent = 'Premium';
+        planBadge.classList.add('premium');
+        var expiry = user.plan_expires_at ? new Date(user.plan_expires_at).toLocaleDateString() : 'N/A';
+        planExpiry.textContent = 'Expires: ' + expiry;
+        upgradeSection.style.display = 'none';
+    } else {
+        planBadge.textContent = 'Free';
+        upgradeSection.style.display = 'block';
+    }
+
+    fetch('/api/user/downloads', {
+        headers: {'Authorization': 'Bearer ' + token}
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        document.getElementById('downloadsLoading').style.display = 'none';
+        if (data.success && data.data.downloads.length > 0) {
+            document.getElementById('downloadsTable').style.display = 'table';
+            var tbody = document.getElementById('downloadsBody');
+            data.data.downloads.forEach(function(d) {
+                var row = document.createElement('tr');
+                row.innerHTML = '<td><a href="/plugins/' + (d.plugin_slug || '') + '">' + (d.plugin_name || 'Unknown') + '</a></td>' +
+                    '<td>' + (d.plugin_version || '-') + '</td>' +
+                    '<td>' + new Date(d.downloaded_at).toLocaleDateString() + '</td>';
+                tbody.appendChild(row);
+            });
+        } else {
+            document.getElementById('noDownloads').style.display = 'block';
+        }
+    })
+    .catch(function() {
+        document.getElementById('downloadsLoading').style.display = 'none';
+        document.getElementById('noDownloads').style.display = 'block';
+    });
+});
+</script>
+{% endblock %}

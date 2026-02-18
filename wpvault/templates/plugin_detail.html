@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Plugin Details - WPVault{% endblock %}
+{% block content %}
+<section class="plugin-detail-section">
+    <div class="container">
+        <div id="pluginLoading" class="loading">Loading plugin details...</div>
+        <div id="pluginNotFound" style="display:none;">
+            <h2>Plugin Not Found</h2>
+            <p>The plugin you are looking for does not exist.</p>
+            <a href="/plugins" class="btn">Browse Plugins</a>
+        </div>
+        <div id="pluginContent" style="display:none;">
+            <div class="plugin-header">
+                <div class="plugin-thumb-large" id="pluginThumb"></div>
+                <div class="plugin-meta">
+                    <h1 id="pluginName"></h1>
+                    <div class="meta-tags">
+                        <span class="plugin-version" id="pluginVersion"></span>
+                        <span class="plugin-category" id="pluginCategory"></span>
+                        <span class="plugin-type" id="pluginType"></span>
+                        <span class="plugin-size" id="pluginSize"></span>
+                    </div>
+                    <p class="plugin-updated" id="pluginUpdated"></p>
+                </div>
+            </div>
+            <div class="plugin-body">
+                <div class="plugin-description" id="pluginDescription"></div>
+                <div class="plugin-actions">
+                    <button class="btn btn-lg" id="downloadBtn" onclick="downloadPlugin()">Download</button>
+                    <a id="sourceLink" href="#" target="_blank" class="btn btn-outline btn-lg">View Source</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="upgradeModal" style="display:none;">
+            <div class="modal-content">
+                <h3>Premium Plan Required</h3>
+                <p>You need a premium plan to download plugins. Upgrade now for only $9.99/year.</p>
+                <div class="modal-actions">
+                    <a href="/checkout" class="btn">Upgrade to Premium</a>
+                    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+var pluginSlug = window.location.pathname.split('/').pop();
+
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/plugins/' + pluginSlug)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        document.getElementById('pluginLoading').style.display = 'none';
+        if (!data.success) {
+            document.getElementById('pluginNotFound').style.display = 'block';
+            return;
+        }
+        var p = data.data;
+        document.getElementById('pluginContent').style.display = 'block';
+        document.getElementById('pluginName').textContent = p.name;
+        document.getElementById('pluginVersion').textContent = 'v' + (p.version || '?');
+        document.getElementById('pluginCategory').textContent = p.category || '';
+        document.getElementById('pluginType').textContent = p.is_plugin ? 'Plugin' : 'Theme';
+        document.getElementById('pluginDescription').innerHTML = p.description || '<p>No description available.</p>';
+
+        var sizeKB = p.file_size_bytes ? Math.round(p.file_size_bytes / 1024) : 0;
+        document.getElementById('pluginSize').textContent = sizeKB > 0 ? sizeKB + ' KB' : '';
+
+        if (p.updated_at) {
+            document.getElementById('pluginUpdated').textContent = 'Updated: ' + new Date(p.updated_at).toLocaleDateString();
+        }
+
+        if (p.source_url) {
+            document.getElementById('sourceLink').href = p.source_url;
+        } else {
+            document.getElementById('sourceLink').style.display = 'none';
+        }
+
+        var thumbDiv = document.getElementById('pluginThumb');
+        if (p.thumbnail_url) {
+            thumbDiv.innerHTML = '<img src="' + p.thumbnail_url + '" alt="' + p.name + '">';
+        } else {
+            thumbDiv.innerHTML = '<div class="thumb-placeholder large">' + (p.is_plugin ? 'P' : 'T') + '</div>';
+        }
+
+        document.title = p.name + ' - WPVault';
+    })
+    .catch(function() {
+        document.getElementById('pluginLoading').style.display = 'none';
+        document.getElementById('pluginNotFound').style.display = 'block';
+    });
+});
+
+function downloadPlugin() {
+    var token = localStorage.getItem('token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+
+    var btn = document.getElementById('downloadBtn');
+    btn.disabled = true;
+    btn.textContent = 'Preparing download...';
+
+    fetch('/api/plugins/' + pluginSlug + '/download', {
+        headers: {'Authorization': 'Bearer ' + token}
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            window.open(data.data.download_url, '_blank');
+        } else if (data.error === 'Premium plan required') {
+            document.getElementById('upgradeModal').style.display = 'flex';
+        } else {
+            alert(data.error || 'Download failed');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Download';
+    })
+    .catch(function() {
+        alert('Network error');
+        btn.disabled = false;
+        btn.textContent = 'Download';
+    });
+}
+
+function closeModal() {
+    document.getElementById('upgradeModal').style.display = 'none';
+}
+</script>
+{% endblock %}

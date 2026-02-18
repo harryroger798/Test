@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+playwright
+playwright-stealth
+boto3
+python-jose[cryptography]
+bcrypt
+passlib[bcrypt]
+apscheduler
+feedparser
+requests
+python-dotenv
+httpx
+aiofiles

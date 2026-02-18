@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Login - WPVault{% endblock %}
+{% block content %}
+<section class="auth-section">
+    <div class="container">
+        <div class="auth-card">
+            <h2>Login</h2>
+            <div id="loginError" class="alert alert-error" style="display:none;"></div>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="you@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Your password">
+                </div>
+                <button type="submit" class="btn btn-full" id="loginBtn">Login</button>
+            </form>
+            <p class="auth-footer">Don't have an account? <a href="/register">Register here</a></p>
+        </div>
+    </div>
+</section>
+
+<script>
+function handleLogin(e) {
+    e.preventDefault();
+    var email = document.getElementById('email').value;
+    var password = document.getElementById('password').value;
+    var btn = document.getElementById('loginBtn');
+    var errDiv = document.getElementById('loginError');
+    btn.disabled = true;
+    btn.textContent = 'Logging in...';
+    errDiv.style.display = 'none';
+
+    fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email, password: password})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            localStorage.setItem('token', data.data.token);
+            localStorage.setItem('user', JSON.stringify(data.data.user));
+            window.location.href = '/dashboard';
+        } else {
+            errDiv.textContent = data.error || 'Login failed';
+            errDiv.style.display = 'block';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Login';
+    })
+    .catch(function() {
+        errDiv.textContent = 'Network error. Please try again.';
+        errDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Login';
+    });
+}
+</script>
+{% endblock %}

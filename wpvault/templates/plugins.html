@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Plugins - WPVault{% endblock %}
+{% block content %}
+<section class="plugins-section">
+    <div class="container">
+        <h2>Browse Plugins & Themes</h2>
+
+        <div class="filters">
+            <input type="text" id="searchInput" placeholder="Search plugins..." class="search-input">
+            <select id="categoryFilter" class="category-select">
+                <option value="">All Categories</option>
+            </select>
+        </div>
+
+        <div id="pluginsLoading" class="loading">Loading plugins...</div>
+        <div class="plugins-grid" id="pluginsGrid"></div>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+</section>
+
+<script>
+var currentPage = 1;
+var currentSearch = '';
+var currentCategory = '';
+
+function loadPlugins(page) {
+    currentPage = page || 1;
+    var search = document.getElementById('searchInput').value;
+    var category = document.getElementById('categoryFilter').value;
+    currentSearch = search;
+    currentCategory = category;
+
+    var url = '/api/plugins?page=' + currentPage;
+    if (search) url += '&search=' + encodeURIComponent(search);
+    if (category) url += '&category=' + encodeURIComponent(category);
+
+    document.getElementById('pluginsLoading').style.display = 'block';
+    document.getElementById('pluginsGrid').innerHTML = '';
+
+    fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        document.getElementById('pluginsLoading').style.display = 'none';
+        if (!data.success) return;
+
+        var grid = document.getElementById('pluginsGrid');
+        var plugins = data.data.plugins;
+        var total = data.data.total;
+        var perPage = data.data.per_page;
+
+        if (data.data.categories) {
+            var select = document.getElementById('categoryFilter');
+            var currentVal = select.value;
+            select.innerHTML = '<option value="">All Categories</option>';
+            data.data.categories.forEach(function(cat) {
+                var opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                if (cat === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        if (plugins.length === 0) {
+            grid.innerHTML = '<p class="text-muted">No plugins found.</p>';
+            return;
+        }
+
+        plugins.forEach(function(p) {
+            var card = document.createElement('div');
+            card.className = 'plugin-card';
+            var sizeKB = p.file_size_bytes ? Math.round(p.file_size_bytes / 1024) : 0;
+            var typeLabel = p.is_plugin ? 'Plugin' : 'Theme';
+            card.innerHTML =
+                '<div class="plugin-thumb">' +
+                    (p.thumbnail_url ? '<img src="' + p.thumbnail_url + '" alt="' + p.name + '">' : '<div class="thumb-placeholder">' + typeLabel.charAt(0) + '</div>') +
+                '</div>' +
+                '<div class="plugin-info">' +
+                    '<h3 class="plugin-name"><a href="/plugins/' + p.slug + '">' + p.name + '</a></h3>' +
+                    '<span class="plugin-version">v' + (p.version || '?') + '</span>' +
+                    (p.category ? '<span class="plugin-category">' + p.category + '</span>' : '') +
+                    '<span class="plugin-type">' + typeLabel + '</span>' +
+                    (sizeKB > 0 ? '<span class="plugin-size">' + sizeKB + ' KB</span>' : '') +
+                '</div>' +
+                '<a href="/plugins/' + p.slug + '" class="btn btn-sm btn-full">View Details</a>';
+            grid.appendChild(card);
+        });
+
+        var totalPages = Math.ceil(total / perPage);
+        renderPagination(totalPages);
+    })
+    .catch(function() {
+        document.getElementById('pluginsLoading').style.display = 'none';
+    });
+}
+
+function renderPagination(totalPages) {
+    var pag = document.getElementById('pagination');
+    pag.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    for (var i = 1; i <= totalPages; i++) {
+        var btn = document.createElement('button');
+        btn.textContent = i;
+        btn.className = 'page-btn' + (i === currentPage ? ' active' : '');
+        btn.onclick = (function(pg) { return function() { loadPlugins(pg); }; })(i);
+        pag.appendChild(btn);
+    }
+}
+
+document.getElementById('searchInput').addEventListener('input', debounce(function() {
+    loadPlugins(1);
+}, 400));
+
+document.getElementById('categoryFilter').addEventListener('change', function() {
+    loadPlugins(1);
+});
+
+function debounce(fn, delay) {
+    var timer;
+    return function() {
+        clearTimeout(timer);
+        timer = setTimeout(fn, delay);
+    };
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadPlugins(1);
+});
+</script>
+{% endblock %}
