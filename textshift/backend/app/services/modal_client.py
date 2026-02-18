@@ -73,7 +73,9 @@ class ModalHumanizerClient:
     def _get_client(self) -> httpx.Client:
         """Get or create persistent HTTP client for connection reuse."""
         if self._http_client is None:
-            self._http_client = httpx.Client(timeout=180.0)
+            with self._lock:
+                if self._http_client is None:
+                    self._http_client = httpx.Client(timeout=180.0)
         return self._http_client
 
     def _get_endpoint_url(self) -> str:
@@ -117,6 +119,9 @@ class ModalHumanizerClient:
 
             data = response.json()
             results = data.get("results", [])
+            if not isinstance(results, list):
+                logger.warning(f"Modal humanizer unexpected results type: {type(results).__name__}")
+                results = []
             modal_elapsed = data.get("elapsed_seconds", 0)
             logger.info(
                 f"Modal humanizer: {len(texts)} texts in {elapsed:.1f}s "
@@ -222,7 +227,9 @@ class ModalMultiModelClient:
 
     def _get_client(self) -> httpx.Client:
         if self._http_client is None:
-            self._http_client = httpx.Client(timeout=180.0)
+            with self._lock:
+                if self._http_client is None:
+                    self._http_client = httpx.Client(timeout=180.0)
         return self._http_client
 
     def _get_endpoint_url(self) -> str:
