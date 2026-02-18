@@ -1930,13 +1930,14 @@ class MLModelService:
             'chunk_scores': chunk_scores,
         }
     
-    def _estimate_humanization_score(self, text: str) -> float:
+    def _estimate_humanization_score(self, text: str) -> Optional[float]:
         """Detect signs of mechanical text humanization (word-substitution artifacts).
         Returns 0.0-1.0 where higher = more likely the text was run through a humanizer.
+        Returns None for short texts (<30 words) where signal is unreliable.
         """
         words = re.findall(r'\b[a-zA-Z]+\b', text)
         if len(words) < 30:
-            return 0.0
+            return None
 
         score = 0.0
 
@@ -2012,11 +2013,13 @@ class MLModelService:
         triboost_avg = float(np.mean(triboost_ai_probs))
         triboost_all_high = all(p > 0.90 for p in triboost_ai_probs)
         chunk_gap = roberta_chunked_score - roberta_single
-        humanization_score = self._estimate_humanization_score(text)
+        humanization_score_raw = self._estimate_humanization_score(text)
+        humanization_reliable = humanization_score_raw is not None
+        humanization_score = humanization_score_raw if humanization_reliable else 0.0
         chunk_scores = roberta_chunked.get('chunk_scores', [])
         chunk_std = float(np.std(chunk_scores)) if len(chunk_scores) > 1 else 0.0
         
-        logger.info(f"Humanization score: {humanization_score:.3f}, chunk_std: {chunk_std:.4f}")
+        logger.info(f"Humanization score: {humanization_score:.3f} (reliable={humanization_reliable}), chunk_std: {chunk_std:.4f}")
         
         if triboost_all_high and roberta_single > 0.85 and roberta_chunked_score < 0.15:
             w_roberta, w_triboost = 0.25, 0.75
@@ -2026,7 +2029,7 @@ class MLModelService:
             w_roberta, w_triboost = 0.40, 0.60
             strategy_used = "consensus_ai_strong_chunks"
         elif triboost_all_high and num_chunks > 3 and chunk_gap > 0.03 and roberta_chunked_score > 0.05:
-            if roberta_single < 0.05 and humanization_score >= 0.25:
+            if roberta_single < 0.05 and humanization_reliable and humanization_score >= 0.25:
                 w_roberta, w_triboost = 0.90, 0.10
                 strategy_used = "consensus_ai_body_gap_humanized"
             else:
@@ -2036,7 +2039,7 @@ class MLModelService:
             w_roberta, w_triboost = 0.30, 0.70
             roberta_blended = roberta_single
             strategy_used = "consensus_ai_single_override"
-        elif triboost_all_high and roberta_blended < 0.10 and roberta_chunked_score < 0.05 and humanization_score < 0.10:
+        elif triboost_all_high and roberta_blended < 0.10 and roberta_chunked_score < 0.05 and (not humanization_reliable or humanization_score < 0.10):
             w_roberta, w_triboost = 0.35, 0.65
             strategy_used = "triboost_unanimous_roberta_blind"
         elif roberta_blended < 0.10:
@@ -2103,7 +2106,7 @@ class MLModelService:
                 "roberta_weight": w_roberta,
                 "triboost_weight": w_triboost,
                 "num_chunks": roberta_chunked['num_chunks'],
-                "humanization_score": round(humanization_score, 3),
+                "humanization_score": None if not humanization_reliable else round(humanization_score, 3),
                 "chunk_score_std": round(chunk_std, 4),
                 "total_models": 10
             },
