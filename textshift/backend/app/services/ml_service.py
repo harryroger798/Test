@@ -1949,10 +1949,11 @@ class MLModelService:
         score += min(0.25, word_merges * 0.12)
 
         pronoun_hedges = len(re.findall(
-            r'\b(?:he or she|him or her|his or her|s/he|him/herself|he/she)\b',
+            r'\b(?:he or she|him or her|his or her|s/he|him/herself|he/she|'
+            r'man or woman|men or women|boy or girl|his/her|him or herself)\b',
             text, re.IGNORECASE,
         ))
-        score += min(0.20, pronoun_hedges * 0.06)
+        score += min(0.25, pronoun_hedges * 0.07)
 
         long_words = [w for w in words if len(w) > 14]
         long_ratio = len(long_words) / len(words)
@@ -1964,6 +1965,13 @@ class MLModelService:
             comma_per_sent = text.count(',') / len(sentences)
             if comma_per_sent > 4.5:
                 score += 0.10
+
+        third_person = len(re.findall(
+            r'\b(?:they|a person|someone|the person|one\'s)\b', text, re.IGNORECASE
+        ))
+        first_person = len(re.findall(r'\bI think\b|\bI believe\b|\bI feel\b', text))
+        if first_person > 0 and third_person > first_person * 3 and len(sentences) > 8:
+            score += 0.08
 
         return min(1.0, score)
 
@@ -2028,7 +2036,7 @@ class MLModelService:
             w_roberta, w_triboost = 0.30, 0.70
             roberta_blended = roberta_single
             strategy_used = "consensus_ai_single_override"
-        elif triboost_all_high and roberta_blended < 0.10 and roberta_chunked_score < 0.05 and humanization_score < 0.25:
+        elif triboost_all_high and roberta_blended < 0.10 and roberta_chunked_score < 0.05 and humanization_score < 0.10:
             w_roberta, w_triboost = 0.35, 0.65
             strategy_used = "triboost_unanimous_roberta_blind"
         elif roberta_blended < 0.10:
