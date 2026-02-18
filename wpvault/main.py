@@ -404,7 +404,14 @@ def api_admin_delete_plugin(slug: str, request: Request):
 
     file_key = plugin.get("file_key", "")
     if file_key:
-        storage.delete_file(file_key)
+        try:
+            storage.delete_file(file_key)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Plugin %s deleted from DB but failed to delete storage object %s",
+                slug,
+                file_key,
+            )
 
     return JSONResponse(content={"success": True, "data": {"message": f"Plugin {slug} deleted"}})
 
@@ -415,13 +422,6 @@ def api_admin_sync(request: Request):
     _ = get_admin_user(request)
 
     if not _sync_lock.acquire(blocking=False):
-        return JSONResponse(
-            status_code=409,
-            content={"success": False, "error": "Sync already in progress"}
-        )
-
-    if _sync_running:
-        _sync_lock.release()
         return JSONResponse(
             status_code=409,
             content={"success": False, "error": "Sync already in progress"}

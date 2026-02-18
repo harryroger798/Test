@@ -31,19 +31,22 @@ def _strip_html(text: str) -> str:
 def _fetch_api_page(page_num: int, per_page: int = 20) -> list:
     import requests as req
 
-    api_url = f"{EDD_API_BASE}?key={PLUGINSFORWP_API_KEY}&number={per_page}&page={page_num}"
-
     try:
-        resp = req.get(api_url, timeout=30, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
-        })
+        resp = req.get(
+            EDD_API_BASE,
+            params={"key": PLUGINSFORWP_API_KEY, "number": per_page, "page": page_num},
+            timeout=30,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+            },
+        )
         if resp.status_code == 200:
             data = resp.json()
             return data.get("products", [])
         logger.warning("API returned status %d for page %d", resp.status_code, page_num)
     except Exception:
-        logger.exception("requests fetch failed for page %d, trying Playwright", page_num)
+        logger.warning("requests fetch failed for page %d, trying Playwright", page_num)
 
     return _fetch_api_page_playwright(page_num, per_page)
 
