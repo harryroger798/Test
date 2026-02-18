@@ -32,9 +32,9 @@ def login_and_save_session() -> bool:
             page.goto("https://pluginsforwp.com/login", wait_until="networkidle", timeout=60000)
             page.wait_for_timeout(2000)
 
-            page.fill("#user_login", PLUGINSFORWP_EMAIL)
-            page.fill("#user_pass", PLUGINSFORWP_PASSWORD)
-            page.click("#wp-submit")
+            page.fill("input[name='edd_user_login']", PLUGINSFORWP_EMAIL)
+            page.fill("input[name='edd_user_pass']", PLUGINSFORWP_PASSWORD)
+            page.click("input[type='submit']")
 
             page.wait_for_load_state("networkidle", timeout=30000)
             page.wait_for_timeout(3000)
@@ -45,7 +45,8 @@ def login_and_save_session() -> bool:
             login_success = (
                 "my-account" in current_url
                 or "dashboard" in current_url
-                or ".woocommerce-MyAccount-navigation" in page_content
+                or "purchase_history" in current_url
+                or "edd_user_login" not in page_content
                 or "Log out" in page_content
                 or "logout" in page_content.lower()
             )
@@ -113,8 +114,9 @@ def is_session_valid() -> bool:
                 "login" not in current_url
                 and (
                     "my-account" in current_url
-                    or ".woocommerce-MyAccount-navigation" in page_content
+                    or "purchase_history" in current_url
                     or "Log out" in page_content
+                    or "logout" in page_content.lower()
                 )
             )
 
