@@ -1910,9 +1910,9 @@ class MLModelService:
         chunked_ai = float(np.mean(chunk_scores))
         divergence = abs(single_ai - chunked_ai)
         if len(chunks) > 3:
-            if single_ai > 0.85 and chunked_ai < 0.15 and divergence > 0.70:
+            if single_ai > 0.85 and chunked_ai < 0.15:
                 blended_ai = 0.60 * single_ai + 0.40 * chunked_ai
-            elif single_ai < 0.15 and chunked_ai > 0.85 and divergence > 0.70:
+            elif single_ai < 0.15 and chunked_ai > 0.85:
                 blended_ai = 0.30 * single_ai + 0.70 * chunked_ai
             else:
                 blended_ai = 0.15 * single_ai + 0.85 * chunked_ai
@@ -1953,6 +1953,7 @@ class MLModelService:
             roberta_chunked = roberta_chunked_future.result()
         
         roberta_blended = roberta_chunked['blended_ai']
+        roberta_blended_original = roberta_blended
         roberta_single = roberta_chunked['single_ai']
         roberta_chunked_score = roberta_chunked['chunked_ai']
         num_chunks = roberta_chunked['num_chunks']
@@ -2030,7 +2031,7 @@ class MLModelService:
             "model_breakdown": {
                 "roberta": round(roberta_single * 100, 2),
                 "roberta_chunked": round(roberta_chunked['chunked_ai'] * 100, 2),
-                "roberta_blended": round(roberta_blended * 100, 2),
+                "roberta_blended": round(roberta_blended_original * 100, 2),
                 "triboost_original": round(triboost_results['original']['ai_prob'] * 100, 2),
                 "triboost_v3": round(triboost_results['v3']['ai_prob'] * 100, 2),
                 "triboost_v4": round(triboost_results['v4']['ai_prob'] * 100, 2),
@@ -2040,6 +2041,7 @@ class MLModelService:
                 "votes_ai": votes_ai,
                 "votes_human": 4 - votes_ai,
                 "strategy_used": strategy_used,
+                "roberta_blended_overridden": roberta_blended != roberta_blended_original,
                 "roberta_weight": w_roberta,
                 "triboost_weight": w_triboost,
                 "num_chunks": roberta_chunked['num_chunks'],
