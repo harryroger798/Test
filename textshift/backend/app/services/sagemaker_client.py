@@ -30,6 +30,10 @@ LEGACY_ENDPOINTS = {
 }
 
 
+_ENDPOINT_DOWN: Dict[str, float] = {}
+_ENDPOINT_DOWN_TTL = 300
+
+
 class SageMakerClient:
     _instance = None
     _runtime = None
@@ -38,6 +42,21 @@ class SageMakerClient:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
+
+    @staticmethod
+    def _is_endpoint_down(endpoint_name: str) -> bool:
+        ts = _ENDPOINT_DOWN.get(endpoint_name)
+        if ts is None:
+            return False
+        if time.time() - ts > _ENDPOINT_DOWN_TTL:
+            _ENDPOINT_DOWN.pop(endpoint_name, None)
+            return False
+        return True
+
+    @staticmethod
+    def _mark_endpoint_down(endpoint_name: str) -> None:
+        _ENDPOINT_DOWN[endpoint_name] = time.time()
+        logger.warning(f"Endpoint {endpoint_name} marked down for {_ENDPOINT_DOWN_TTL}s")
 
     def _get_runtime(self):
         if self._runtime is None:
@@ -68,6 +87,9 @@ class SageMakerClient:
         if parameters:
             payload["parameters"] = parameters
 
+        if self._is_endpoint_down(MULTIMODEL_ENDPOINT):
+            return None
+
         try:
             t0 = time.time()
             response = self._get_runtime().invoke_endpoint(
@@ -80,6 +102,9 @@ class SageMakerClient:
             logger.info(f"MultiModel GPU [{model_name}] responded in {elapsed:.1f}s")
             return body
         except Exception as e:
+            err_str = str(e)
+            if "not found" in err_str.lower() or "ValidationError" in err_str:
+                self._mark_endpoint_down(MULTIMODEL_ENDPOINT)
             logger.warning(f"MultiModel GPU [{model_name}] failed: {e}")
             return None
 
@@ -91,6 +116,9 @@ class SageMakerClient:
     ) -> Optional[Any]:
         endpoint_name = LEGACY_ENDPOINTS.get(endpoint_key)
         if not endpoint_name:
+            return None
+
+        if self._is_endpoint_down(endpoint_name):
             return None
 
         payload: Dict[str, Any] = {"inputs": input_text}
@@ -109,6 +137,9 @@ class SageMakerClient:
             logger.info(f"Legacy [{endpoint_key}] responded in {elapsed:.1f}s")
             return body
         except Exception as e:
+            err_str = str(e)
+            if "not found" in err_str.lower() or "ValidationError" in err_str:
+                self._mark_endpoint_down(endpoint_name)
             logger.warning(f"Legacy [{endpoint_key}] fallback failed: {e}")
             return None
 

@@ -41,6 +41,7 @@ from transformers import (
 )
 from app.core.config import settings
 from app.services.sagemaker_client import sagemaker_client
+from app.services.modal_client import modal_multimodel_client, is_peak_hours
 
 logger = logging.getLogger(__name__)
 
@@ -320,15 +321,23 @@ class WritingToolsService:
             logger.warning(f"SageMaker CoEdIT chunk failed: {e}")
             return None
 
-    def _flan_t5_via_sagemaker(self, prompt: str, max_length: int = 256) -> Optional[str]:
-        """Generate text via SageMaker Flan-T5-base endpoint."""
+    def _flan_t5_via_gpu(self, prompt: str, max_length: int = 256) -> Optional[str]:
+        """Generate text via Modal (off-peak) or SageMaker (peak) Flan-T5-base."""
+        parameters = {
+            "max_new_tokens": max_length,
+            "num_beams": 4,
+            "early_stopping": True,
+            "do_sample": False,
+        }
+        if not is_peak_hours():
+            try:
+                result = modal_multimodel_client.invoke_text2text("flan-t5-base", prompt, parameters)
+                if result and len(result.strip()) > 5:
+                    logger.info("Modal GPU Flan-T5 succeeded (off-peak)")
+                    return result.strip()
+            except Exception as e:
+                logger.warning(f"Modal Flan-T5 failed, trying SageMaker: {e}")
         try:
-            parameters = {
-                "max_new_tokens": max_length,
-                "num_beams": 4,
-                "early_stopping": True,
-                "do_sample": False,
-            }
             result = sagemaker_client.invoke_text2text("flan-t5-base", prompt, parameters)
             if result and len(result.strip()) > 5:
                 return result.strip()
@@ -339,8 +348,9 @@ class WritingToolsService:
 
     def _edit_text_with_coedit(self, text: str, instruction: str, max_chunk_tokens: int = 200) -> str:
         """Edit text using CoEdIT-large with the given instruction prompt.
-        Chunks by sentences to avoid truncation. SageMaker GPU is PRIMARY,
-        local ONNX INT8 is fallback."""
+        Chunks by sentences to avoid truncation.
+        Off-peak: Modal GPU primary → SageMaker fallback → local ONNX.
+        Peak: SageMaker GPU primary → local ONNX fallback."""
         if not self._load_grammar_model():
             return text
         if self._grammar_model is None or self._grammar_tokenizer is None:
@@ -365,19 +375,20 @@ class WritingToolsService:
 
         results: list[str] = [None] * len(chunks)
 
-        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+        input_texts = [f"{instruction}: {chunk}" for chunk in chunks]
+        word_count = len(text.split())
+        max_new = min(512, max(256, int(word_count * 1.5 / max(len(chunks), 1))))
+        parameters = {
+            "max_new_tokens": max_new,
+            "num_beams": 4,
+            "early_stopping": True,
+            "do_sample": False,
+        }
+
+        if not is_peak_hours():
             try:
-                input_texts = [f"{instruction}: {chunk}" for chunk in chunks]
-                word_count = len(text.split())
-                max_new = min(512, max(256, int(word_count * 1.5 / len(chunks))))
-                parameters = {
-                    "max_new_tokens": max_new,
-                    "num_beams": 4,
-                    "early_stopping": True,
-                    "do_sample": False,
-                }
-                batch_results = sagemaker_client.invoke_text2text_batch(
-                    "coedit-large", input_texts, parameters, max_workers=8
+                batch_results = modal_multimodel_client.invoke_text2text_batch(
+                    "coedit-large", input_texts, parameters, max_workers=4
                 )
                 failed_indices = []
                 for idx, result in enumerate(batch_results):
@@ -385,12 +396,32 @@ class WritingToolsService:
                         results[idx] = result.strip()
                     else:
                         failed_indices.append(idx)
-
                 if not failed_indices:
-                    logger.info(f"SageMaker GPU CoEdIT batch processed {len(chunks)} chunks")
+                    logger.info(f"Modal GPU CoEdIT batch processed {len(chunks)} chunks (off-peak)")
+                    return ' '.join(results)
+                logger.info(f"Modal GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, trying SageMaker for rest")
+            except Exception as e:
+                logger.warning(f"Modal GPU CoEdIT batch failed, trying SageMaker: {e}")
+
+        sm_needed = [i for i, r in enumerate(results) if r is None]
+        if sm_needed and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            try:
+                sm_input_texts = [input_texts[i] for i in sm_needed]
+                batch_results = sagemaker_client.invoke_text2text_batch(
+                    "coedit-large", sm_input_texts, parameters, max_workers=8
+                )
+                failed_indices = []
+                for bi, idx in enumerate(sm_needed):
+                    if batch_results[bi] and len(batch_results[bi].strip()) > 0:
+                        results[idx] = batch_results[bi].strip()
+                    else:
+                        failed_indices.append(idx)
+
+                if not [i for i, r in enumerate(results) if r is None]:
+                    logger.info(f"SageMaker GPU CoEdIT batch processed remaining chunks")
                     return ' '.join(results)
 
-                logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
+                logger.info(f"SageMaker GPU: some chunks failed, falling back to local")
             except Exception as e:
                 logger.warning(f"SageMaker GPU CoEdIT batch failed, falling back to local: {e}")
 
@@ -454,7 +485,7 @@ class WritingToolsService:
     def _generate_with_t5(self, prompt: str, max_length: int = 256, min_length: int = 10) -> Optional[str]:
         """Generate text using Flan-T5 model (SageMaker PRIMARY → local ONNX INT8 fallback)."""
         if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
-            sm_result = self._flan_t5_via_sagemaker(prompt, max_length)
+            sm_result = self._flan_t5_via_gpu(prompt, max_length)
             if sm_result:
                 logger.info("Flan-T5 served via SageMaker (primary)")
                 return sm_result
@@ -2056,11 +2087,12 @@ class WritingToolsService:
             translated_chunks: list[Optional[str]] = [None] * len(chunks)
             used_gpu = False
 
-            if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            endpoint_key = f"translator-{lang_pair}"
+
+            if not is_peak_hours():
                 try:
-                    endpoint_key = f"translator-{lang_pair}"
-                    batch_results = sagemaker_client.invoke_translation_batch(
-                        endpoint_key, chunks, max_workers=8
+                    batch_results = modal_multimodel_client.invoke_translation_batch(
+                        endpoint_key, chunks, max_workers=4
                     )
                     failed_indices = []
                     for idx, result in enumerate(batch_results):
@@ -2068,13 +2100,33 @@ class WritingToolsService:
                             translated_chunks[idx] = result.strip()
                         else:
                             failed_indices.append(idx)
-
                     if not failed_indices:
-                        logger.info(f"SageMaker GPU batch translated {len(chunks)} chunks")
+                        logger.info(f"Modal GPU batch translated {len(chunks)} chunks (off-peak)")
                         used_gpu = True
                     else:
-                        logger.info(f"SageMaker GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, falling back to local for {len(failed_indices)} chunks")
+                        logger.info(f"Modal GPU: {len(chunks) - len(failed_indices)}/{len(chunks)} succeeded, trying SageMaker for rest")
                         if len(failed_indices) < len(chunks):
+                            used_gpu = True
+                except Exception as e:
+                    logger.warning(f"Modal GPU translation failed, trying SageMaker: {e}")
+
+            sm_needed = [i for i, t in enumerate(translated_chunks) if t is None]
+            if sm_needed and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                try:
+                    sm_chunks = [chunks[i] for i in sm_needed]
+                    batch_results = sagemaker_client.invoke_translation_batch(
+                        endpoint_key, sm_chunks, max_workers=8
+                    )
+                    for bi, idx in enumerate(sm_needed):
+                        if batch_results[bi] and len(batch_results[bi].strip()) > 0:
+                            translated_chunks[idx] = batch_results[bi].strip()
+                    still_missing = sum(1 for t in translated_chunks if t is None)
+                    if still_missing == 0:
+                        logger.info(f"SageMaker GPU batch translated remaining chunks")
+                        used_gpu = True
+                    else:
+                        logger.info(f"SageMaker GPU: some chunks failed, falling back to local")
+                        if still_missing < len(chunks):
                             used_gpu = True
                 except Exception as e:
                     logger.warning(f"SageMaker GPU translation failed, falling back to local: {e}")

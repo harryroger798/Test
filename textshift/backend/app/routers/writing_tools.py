@@ -741,7 +741,7 @@ async def get_supported_languages():
     }
 
 
-@router.post("/api-docs")
+@router.get("/api-docs")
 async def get_api_docs(
     current_user: User = Depends(get_current_verified_user),
     db: Session = Depends(get_db)

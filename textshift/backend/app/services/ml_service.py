@@ -26,7 +26,7 @@ from app.core.config import settings
 from app.services.feature_extractor import FeatureExtractor565
 from app.services.sagemaker_client import sagemaker_client
 from app.services.hf_inference_client import hf_client
-from app.services.modal_client import modal_client, get_inference_backend, is_peak_hours
+from app.services.modal_client import modal_client, modal_multimodel_client, get_inference_backend, is_peak_hours
 
 logger = logging.getLogger(__name__)
 
@@ -1824,15 +1824,18 @@ class MLModelService:
         return results
     
     def _get_roberta_prediction(self, text: str) -> Dict[str, float]:
-        """Get AI probability from SageMaker (primary) → HF API (fallback) → local RoBERTa (last resort).
+        """Get AI probability from Modal (off-peak) → SageMaker (peak) → HF API → local RoBERTa.
         
         Returns:
             Dict with 'ai_prob' and 'human_prob'
         """
-        for backend_name, invoke_fn in [
-            ("SageMaker", lambda: sagemaker_client.invoke_classification("detector", text, top_k=2)),
-            ("HF API", lambda: hf_client.invoke_classification("detector", text, top_k=2)),
-        ]:
+        backends = []
+        if not is_peak_hours():
+            backends.append(("Modal", lambda: modal_multimodel_client.invoke_classification("detector", text, top_k=2)))
+        backends.append(("SageMaker", lambda: sagemaker_client.invoke_classification("detector", text, top_k=2)))
+        backends.append(("HF API", lambda: hf_client.invoke_classification("detector", text, top_k=2)))
+
+        for backend_name, invoke_fn in backends:
             try:
                 result = invoke_fn()
                 if result:
@@ -1849,7 +1852,7 @@ class MLModelService:
             except Exception as e:
                 logger.warning(f"{backend_name} detector failed: {e}")
 
-        logger.info("SageMaker + HF API detector unavailable, falling back to local RoBERTa")
+        logger.info("All remote backends unavailable, falling back to local RoBERTa")
         self._load_detector()
         
         inputs = self._detector_tokenizer(text, return_tensors="pt", truncation=True, max_length=512, padding=True)

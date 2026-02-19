@@ -8,6 +8,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+    captcha_token: Optional[str] = None
 
 
 class UserLogin(BaseModel):

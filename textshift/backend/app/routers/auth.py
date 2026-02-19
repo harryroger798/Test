@@ -162,11 +162,12 @@ async def login_json(
     db: Session = Depends(get_db)
 ):
     """Login with email and password (JSON body) - for API access."""
-    if not await verify_captcha_token(login_data.captcha_token or ""):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CAPTCHA verification failed. Please try again."
-        )
+    if login_data.captcha_token:
+        if not await verify_captcha_token(login_data.captcha_token):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CAPTCHA verification failed. Please try again."
+            )
     _check_account_lockout(login_data.email)
     
     user = db.query(User).filter(User.email == login_data.email).first()
@@ -353,22 +354,22 @@ async def auth0_callback(
 ):
     """Exchange Auth0 access token for a local JWT. Creates user if needed."""
     try:
-        userinfo_resp = httpx.get(
-            f"https://{settings.AUTH0_DOMAIN}/userinfo",
-            headers={"Authorization": f"Bearer {payload.access_token}"},
-            timeout=10,
-        )
+        async with httpx.AsyncClient(timeout=10) as client:
+            userinfo_resp = await client.get(
+                f"https://{settings.AUTH0_DOMAIN}/userinfo",
+                headers={"Authorization": f"Bearer {payload.access_token}"},
+            )
         if userinfo_resp.status_code != 200:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Auth0 token",
             )
         userinfo = userinfo_resp.json()
-    except httpx.HTTPError:
+    except httpx.HTTPError as err:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to verify Auth0 token",
-        )
+        ) from err
 
     auth0_sub = userinfo.get("sub", "")
     email = userinfo.get("email", "")

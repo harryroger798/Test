@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime, date
 from typing import Optional
+import re
 from app.core.database import get_db
 from app.core.security import get_current_active_user, get_current_verified_user
 from app.models.user import User, SubscriptionTier
@@ -15,6 +16,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/scan", tags=["Scanning"])
+
+COMMON_SHORT_WORDS = {"i", "a", "an", "am", "as", "at", "be", "by", "do", "go",
+                      "he", "if", "in", "is", "it", "me", "my", "no", "of", "on",
+                      "or", "so", "to", "up", "us", "we", "ok"}
+
+def _is_low_content(text: str, min_ratio: float = 0.7) -> bool:
+    tokens = re.findall(r"[A-Za-z]+", text)
+    if not tokens:
+        return True
+    real = [t for t in tokens if len(t) >= 3 or t.lower() in COMMON_SHORT_WORDS]
+    ratio = len(real) / max(1, len(tokens))
+    return ratio < min_ratio
 
 
 def get_priority_for_tier(tier: SubscriptionTier) -> int:
@@ -121,9 +134,15 @@ async def detect_ai(
     # Check daily scan limit
     check_daily_scan_limit(current_user, db)
     
+    # Validate input quality
+    word_count = count_words(scan_data.text)
+    if word_count < 50:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Please enter at least 50 words for reliable detection")
+    if _is_low_content(scan_data.text, 0.7):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Input appears to be gibberish/low-content. Please provide meaningful text (\u226570% real words).")
+
     # Calculate credits needed (word count)
     credits_needed = calculate_credits_needed(scan_data.text, "ai_detection")
-    word_count = count_words(scan_data.text)
     
     # Check if user has enough credits (Pro/Enterprise have unlimited = -1)
     if current_user.credits_balance != -1 and not current_user.has_enough_credits(credits_needed):
@@ -257,6 +276,10 @@ async def humanize_text(
     
     # Check daily scan limit
     check_daily_scan_limit(current_user, db)
+
+    # Validate input quality for humanizer (block pure gibberish)
+    if _is_low_content(scan_data.text, 0.7):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Input looks like gibberish/low-content. Humanizer needs meaningful sentences.")
     
     # Calculate credits needed (word count * 2 for humanize)
     credits_needed = calculate_credits_needed(scan_data.text, "humanize")
@@ -304,7 +327,7 @@ async def humanize_text(
             db_session=db
         )
         
-        result = ml_service.humanize(scan.input_text)
+        result = ml_service.humanize(scan.input_text, preserved_indices=scan_data.preserved_indices, mode=scan_data.mode or 'casual')
         scan.output_text = result["humanized_text"]
         
         # Store hash of humanized output for future AI detection bypass
@@ -363,6 +386,10 @@ async def check_plagiarism(
     
     # Check daily scan limit
     check_daily_scan_limit(current_user, db)
+
+    # Validate input quality for plagiarism (avoid nonsense scans)
+    if _is_low_content(scan_data.text, 0.7):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Input looks like gibberish/low-content. Provide meaningful text to check for plagiarism.")
     
     # Calculate credits needed (word count * 1.5 for plagiarism)
     credits_needed = calculate_credits_needed(scan_data.text, "plagiarism")
