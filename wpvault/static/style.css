@@ -1841,10 +1841,35 @@ a:hover { color: var(--accent-lighter); }
 .plugin-description-text a { color: var(--accent-light); }
 .plugin-description-text a:hover { text-decoration: underline; }
 .plugin-description-text ul, .plugin-description-text ol {
-    padding-left: 20px;
-    margin-bottom: 12px;
+    padding-left: 0;
+    margin: 16px 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
-.plugin-description-text li { margin-bottom: 4px; }
+.plugin-description-text li {
+    margin-bottom: 0;
+    padding: 10px 14px 10px 36px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    position: relative;
+    transition: var(--transition-fast);
+}
+.plugin-description-text li::before {
+    content: '\2713';
+    position: absolute;
+    left: 12px;
+    color: var(--green);
+    font-weight: 700;
+}
+.plugin-description-text li:hover {
+    border-color: var(--border-hover);
+    background: rgba(124,92,231,0.04);
+}
 
 /* Plugin Highlights */
 .plugin-highlights {

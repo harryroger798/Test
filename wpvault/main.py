@@ -798,16 +798,37 @@ def _format_description_html(text: str) -> str:
         return "<p>Premium WordPress plugin available for instant download.</p>"
     escaped = html_mod.escape(text)
     sentences = re.split(r'(?<=[.!?])\s+', escaped)
-    paragraphs = []
-    current: list[str] = []
-    for s in sentences:
-        current.append(s)
-        if len(current) >= 3:
-            paragraphs.append(" ".join(current))
-            current = []
-    if current:
-        paragraphs.append(" ".join(current))
-    return "".join(f"<p>{p}</p>" for p in paragraphs)
+    if not sentences:
+        return f"<p>{escaped}</p>"
+    intro_parts: list[str] = []
+    rest_text = ""
+    for i, s in enumerate(sentences):
+        intro_parts.append(s)
+        if len(intro_parts) >= 2:
+            rest_text = " ".join(sentences[i + 1:]) if i + 1 < len(sentences) else ""
+            break
+    if not rest_text and len(intro_parts) == 1:
+        rest_text = ""
+    intro_html = f"<p>{' '.join(intro_parts)}</p>"
+    if not rest_text:
+        return intro_html
+    raw_features = re.split(r'(?<=[a-z])\s+(?=[A-Z][a-z])', rest_text)
+    raw_features = [f.strip() for f in raw_features if f.strip()]
+    if len(raw_features) < 3:
+        return f"{intro_html}<p>{rest_text}</p>"
+    _preps = {"for", "to", "with", "in", "on", "at", "by", "of", "the", "a", "an", "and", "or"}
+    features: list[str] = []
+    for f in raw_features:
+        if not features:
+            features.append(f)
+            continue
+        prev_last = features[-1].rstrip(".,;:!? ").rsplit(None, 1)[-1].lower()
+        if len(f) < 25 or prev_last in _preps:
+            features[-1] = features[-1] + " " + f
+        else:
+            features.append(f)
+    items = "".join(f"<li>{f}</li>" for f in features)
+    return f"{intro_html}<ul>{items}</ul>"
 
 
 @app.get("/plugin/{slug}", response_class=HTMLResponse)
