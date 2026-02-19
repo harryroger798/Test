@@ -57,6 +57,7 @@ async def _get_auth0_jwks() -> dict:
             resp = await client.get(
                 f"https://{settings.AUTH0_DOMAIN}/.well-known/jwks.json",
             )
+        resp.raise_for_status()
         _auth0_jwks_cache = resp.json()
         _auth0_jwks_cache_time = now
         return _auth0_jwks_cache

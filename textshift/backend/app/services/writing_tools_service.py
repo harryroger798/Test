@@ -418,10 +418,10 @@ class WritingToolsService:
                         failed_indices.append(idx)
 
                 if not [i for i, r in enumerate(results) if r is None]:
-                    logger.info(f"SageMaker GPU CoEdIT batch processed remaining chunks")
+                    logger.info("SageMaker GPU CoEdIT batch processed remaining chunks")
                     return ' '.join(results)
 
-                logger.info(f"SageMaker GPU: some chunks failed, falling back to local")
+                logger.info("SageMaker GPU: some chunks failed, falling back to local")
             except Exception as e:
                 logger.warning(f"SageMaker GPU CoEdIT batch failed, falling back to local: {e}")
 
@@ -2138,10 +2138,10 @@ class WritingToolsService:
                             translated_chunks[idx] = batch_results[bi].strip()
                     still_missing = sum(1 for t in translated_chunks if t is None)
                     if still_missing == 0:
-                        logger.info(f"SageMaker GPU batch translated remaining chunks")
+                        logger.info("SageMaker GPU batch translated remaining chunks")
                         used_gpu = True
                     else:
-                        logger.info(f"SageMaker GPU: some chunks failed, falling back to local")
+                        logger.info("SageMaker GPU: some chunks failed, falling back to local")
                         if still_missing < len(chunks):
                             used_gpu = True
                 except Exception as e:
