@@ -22,6 +22,9 @@
     color: var(--text-secondary);
     transition: var(--transition);
     white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-block;
 }
 .brand-item:hover {
     border-color: var(--accent);
@@ -116,6 +119,9 @@
     grid-template-columns: 2fr 1.2fr 1.2fr 1fr;
     border-bottom: 1px solid var(--border);
     transition: var(--transition-fast);
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
 }
 .price-table-row:last-child { border-bottom: none; }
 .price-table-row:hover:not(.header) { background: var(--accent-glow); }
@@ -193,6 +199,9 @@
     text-align: center;
     transition: var(--transition);
     cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    display: block;
 }
 .category-card:hover {
     border-color: var(--accent);

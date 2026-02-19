@@ -558,7 +558,8 @@ img { max-width: 100%; height: auto; }
 /* TRUST BAR */
 .trust-bar { padding: 28px 0; border-bottom: 1px solid var(--border); }
 .trust-items { display: flex; justify-content: center; gap: 36px; flex-wrap: wrap; }
-.trust-item { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
+.trust-item { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; text-decoration: none; cursor: pointer; transition: var(--transition); }
+.trust-item:hover { color: var(--accent-light); }
 .trust-icon {
     width: 34px; height: 34px;
     border-radius: 10px;
@@ -618,6 +619,10 @@ img { max-width: 100%; height: auto; }
     transition: var(--transition);
     position: relative;
     overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    display: block;
 }
 .feature-card::before {
     content: '';
