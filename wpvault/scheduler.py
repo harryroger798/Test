@@ -11,6 +11,7 @@ import session_manager
 import storage
 import database
 import notifier
+import payments
 
 
 def check_and_refresh_session():
@@ -41,6 +42,15 @@ def daily_backup():
             print("daily_backup: database backup failed")
 
 
+def check_payments():
+    try:
+        count = payments.check_pending_payments()
+        if count > 0:
+            print(f"Payment checker: confirmed {count} payment(s)")
+    except Exception as e:
+        print(f"Payment checker error: {e}")
+
+
 if __name__ == "__main__":
     os.makedirs(os.getenv("TMP_DIR", "/tmp/downloads"), exist_ok=True)
     database.init_db()
@@ -50,6 +60,7 @@ if __name__ == "__main__":
     scheduler.add_job(check_and_refresh_session, "interval", hours=12, id="session")
     scheduler.add_job(cleanup_tmp, "interval", hours=24, id="cleanup")
     scheduler.add_job(daily_backup, "interval", hours=24, id="backup")
+    scheduler.add_job(check_payments, "interval", minutes=2, id="payment_check")
 
-    print("Scheduler started")
+    print("Scheduler started (with payment checker every 2 min)")
     scheduler.start()

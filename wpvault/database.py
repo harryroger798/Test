@@ -55,6 +55,7 @@ def init_db():
             user_id TEXT REFERENCES users(id),
             btcpay_invoice_id TEXT UNIQUE,
             amount_usd REAL,
+            btc_amount REAL DEFAULT 0,
             status TEXT DEFAULT 'pending',
             plan_duration_days INTEGER DEFAULT 365,
             created_at TEXT DEFAULT (datetime('now'))
@@ -113,6 +114,15 @@ def init_db():
             cursor.execute("PRAGMA foreign_keys=ON")
         except Exception:
             pass
+
+    try:
+        cols = [r["name"] for r in cursor.execute("PRAGMA table_info(orders)").fetchall()]
+        if "btc_amount" not in cols:
+            cursor.execute("ALTER TABLE orders ADD COLUMN btc_amount REAL DEFAULT 0")
+            conn.commit()
+            logger.info("Added btc_amount column to orders table")
+    except Exception:
+        logger.exception("btc_amount migration check failed")
 
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_password = os.getenv("ADMIN_PASSWORD")
@@ -309,13 +319,13 @@ def upgrade_user_plan(user_id: str, days: int) -> bool:
         conn.close()
 
 
-def create_order(user_id: str, invoice_id: str, amount: float, days: int) -> dict:
+def create_order(user_id: str, invoice_id: str, amount: float, days: int, btc_amount: float = 0.0) -> dict:
     conn = get_connection()
     try:
         conn.execute(
-            "INSERT INTO orders (id, user_id, btcpay_invoice_id, amount_usd, plan_duration_days) "
-            "VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?)",
-            (user_id, invoice_id, amount, days)
+            "INSERT INTO orders (id, user_id, btcpay_invoice_id, amount_usd, btc_amount, plan_duration_days) "
+            "VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?)",
+            (user_id, invoice_id, amount, btc_amount, days)
         )
         conn.commit()
         return get_order_by_invoice(invoice_id)
@@ -443,6 +453,35 @@ def get_total_downloads() -> int:
         return row["cnt"] if row else 0
     except Exception:
         return 0
+    finally:
+        conn.close()
+
+
+def get_pending_orders() -> list:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+def get_all_orders(limit: int = 50) -> list:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT o.*, u.email as user_email FROM orders o "
+            "LEFT JOIN users u ON o.user_id = u.id "
+            "ORDER BY o.created_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
     finally:
         conn.close()
 

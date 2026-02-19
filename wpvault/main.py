@@ -637,6 +637,43 @@ def api_create_order(body: CheckoutRequest, request: Request):
     })
 
 
+@app.get("/api/order-status/{invoice_id}")
+def api_order_status(invoice_id: str, request: Request):
+    user = get_current_user_from_request(request)
+    result = payments.get_order_status(invoice_id)
+    return JSONResponse(content={"success": True, "data": result})
+
+
+@app.post("/api/admin/confirm-order")
+def api_admin_confirm_order(request: Request, body: dict):
+    _ = get_admin_user(request)
+    invoice_id = body.get("invoice_id", "")
+    if not invoice_id:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "Missing invoice_id"}
+        )
+    ok = payments.confirm_order(invoice_id)
+    return JSONResponse(content={"success": ok, "data": {"confirmed": ok}})
+
+
+@app.get("/api/admin/orders")
+def api_admin_orders(request: Request):
+    _ = get_admin_user(request)
+    orders = database.get_all_orders(limit=100)
+    return JSONResponse(content={"success": True, "data": orders})
+
+
+@app.post("/api/admin/check-payments")
+def api_admin_check_payments(request: Request):
+    _ = get_admin_user(request)
+    count = payments.check_pending_payments()
+    return JSONResponse(content={
+        "success": True,
+        "data": {"confirmed": count}
+    })
+
+
 @app.get("/api/admin/sync-logs")
 def api_admin_sync_logs(request: Request):
     _ = get_admin_user(request)

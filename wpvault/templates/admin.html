@@ -25,8 +25,9 @@
             </div>
         </div>
 
-        <div class="admin-actions">
+        <div class="admin-actions" style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn" onclick="triggerSync()">&#128260; Trigger Sync</button>
+            <button class="btn" onclick="checkPayments()" style="background:linear-gradient(135deg,#f7931a,#e8850e);border:none">&#8383; Check Payments</button>
         </div>
 
         <div class="admin-panel">
@@ -42,6 +43,26 @@
                 </thead>
                 <tbody id="syncLogs">
                     <tr><td colspan="4" class="text-muted" style="text-align:center">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="admin-panel">
+            <h3>&#128176; Orders & Payments</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>User</th>
+                        <th>USD</th>
+                        <th>BTC</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersList">
+                    <tr><td colspan="7" class="text-muted" style="text-align:center">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -100,6 +121,24 @@
         }
     });
 
+    fetch('/api/admin/orders', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        var tbody = document.getElementById('ordersList');
+        if (d.success && d.data && d.data.length > 0) {
+            tbody.innerHTML = '';
+            d.data.forEach(function(o) {
+                var tr = document.createElement('tr');
+                var statusCls = o.status === 'paid' ? 'color:#22c55e' : o.status === 'expired' ? 'color:#ef4444' : 'color:#f7931a';
+                var actionBtn = o.status === 'pending' ? '<button onclick="confirmOrder(\'' + o.btcpay_invoice_id + '\')" style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);color:#22c55e;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.75rem">Confirm</button>' : '-';
+                tr.innerHTML = '<td style="font-family:monospace;font-size:0.75rem">' + (o.btcpay_invoice_id || '-') + '</td><td>' + (o.user_email || '-') + '</td><td>$' + (o.amount_usd || 0) + '</td><td style="font-family:monospace;font-size:0.75rem">' + (o.btc_amount ? Number(o.btc_amount).toFixed(8) : '-') + '</td><td style="font-weight:600;' + statusCls + '">' + (o.status || '-') + '</td><td>' + (o.created_at || '').split('T')[0] + '</td><td>' + actionBtn + '</td>';
+                tbody.appendChild(tr);
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="text-align:center">No orders yet</td></tr>';
+        }
+    });
+
     fetch('/api/plugins?per_page=10', { headers: { 'Authorization': 'Bearer ' + token } })
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -129,6 +168,34 @@ function triggerSync() {
         btn.disabled = false;
         btn.innerHTML = '&#128260; Trigger Sync';
         if (typeof WPVault !== 'undefined') WPVault.toast(d.success ? 'Sync triggered!' : (d.error || 'Sync failed'), d.success ? 'success' : 'error');
+    });
+}
+
+function checkPayments() {
+    var token = localStorage.getItem('token');
+    fetch('/api/admin/check-payments', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (typeof WPVault !== 'undefined') WPVault.toast(d.success ? 'Checked! ' + (d.data.confirmed || 0) + ' payment(s) confirmed.' : (d.error || 'Check failed'), d.success ? 'success' : 'error');
+        if (d.data && d.data.confirmed > 0) location.reload();
+    });
+}
+
+function confirmOrder(invoiceId) {
+    var token = localStorage.getItem('token');
+    if (!confirm('Confirm payment for order ' + invoiceId + '?')) return;
+    fetch('/api/admin/confirm-order', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (typeof WPVault !== 'undefined') WPVault.toast(d.success ? 'Order confirmed!' : (d.error || 'Failed'), d.success ? 'success' : 'error');
+        if (d.success) location.reload();
     });
 }
 </script>

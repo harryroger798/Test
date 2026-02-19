@@ -117,16 +117,34 @@
                 <span style="color:var(--text-primary)" id="modalBtcPrice">-</span>
             </div>
         </div>
-        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px 16px;margin-bottom:16px">
-            <p style="color:rgba(34,197,94,0.9);font-size:0.8rem;margin:0;line-height:1.5">
-                After sending the exact BTC amount, your account will be upgraded automatically once the payment is confirmed on the blockchain (usually within 10-30 minutes).
-            </p>
+        <div id="paymentStatusBox" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px 16px;margin-bottom:16px">
+            <div id="statusWaiting">
+                <p style="color:rgba(34,197,94,0.9);font-size:0.8rem;margin:0;line-height:1.5">
+                    <span id="statusDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f7931a;margin-right:6px;animation:pulse-dot 1.5s infinite"></span>
+                    Waiting for payment... We automatically check every 15 seconds.
+                </p>
+            </div>
+            <div id="statusDetected" style="display:none">
+                <p style="color:#f7931a;font-size:0.85rem;margin:0;font-weight:600">
+                    &#9889; Transaction detected! Waiting for blockchain confirmation...
+                </p>
+                <p style="color:var(--text-muted);font-size:0.75rem;margin:4px 0 0" id="statusTxId"></p>
+            </div>
+            <div id="statusConfirmed" style="display:none">
+                <p style="color:#22c55e;font-size:0.95rem;margin:0;font-weight:700">
+                    &#9989; Payment confirmed! Your account has been upgraded.
+                </p>
+                <p style="color:var(--text-muted);font-size:0.8rem;margin:6px 0 0">
+                    Redirecting to your dashboard...
+                </p>
+            </div>
         </div>
         <div style="text-align:center">
             <p style="color:var(--text-muted);font-size:0.72rem;margin:0">
                 &#128274; Only send BTC (Bitcoin) to this address. Other assets will be lost.
             </p>
         </div>
+        <style>@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.3}}</style>
     </div>
 </div>
 
@@ -138,6 +156,8 @@ var selectedPlan = 'yearly';
 var selectedAmount = '9.99';
 var currentBtcAmount = '';
 var currentBtcAddress = '';
+var currentInvoiceId = '';
+var pollInterval = null;
 
 function selectPlan(btn) {
     document.querySelectorAll('.plan-option').forEach(function(b) {
@@ -187,6 +207,7 @@ function handlePayment() {
 function showPaymentModal(data) {
     currentBtcAmount = data.btc_amount;
     currentBtcAddress = data.btc_address;
+    currentInvoiceId = data.invoice_id;
     var label = document.getElementById('selectedPlanName').textContent;
     document.getElementById('btcAmountDisplay').textContent = currentBtcAmount + ' BTC';
     document.getElementById('btcUsdDisplay').textContent = '= $' + data.usd_amount + ' USD';
@@ -196,13 +217,55 @@ function showPaymentModal(data) {
     document.getElementById('modalBtcPrice').textContent = '$' + Number(data.btc_price).toLocaleString();
     var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:' + encodeURIComponent(currentBtcAddress) + '?amount=' + currentBtcAmount;
     document.getElementById('btcQR').src = qrUrl;
+    document.getElementById('statusWaiting').style.display = '';
+    document.getElementById('statusDetected').style.display = 'none';
+    document.getElementById('statusConfirmed').style.display = 'none';
     document.getElementById('btcPayModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
+    startPolling();
 }
 
 function closeModal() {
     document.getElementById('btcPayModal').style.display = 'none';
     document.body.style.overflow = '';
+    stopPolling();
+}
+
+function startPolling() {
+    stopPolling();
+    pollInterval = setInterval(checkOrderStatus, 15000);
+}
+
+function stopPolling() {
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+function checkOrderStatus() {
+    if (!currentInvoiceId) return;
+    var token = localStorage.getItem('token');
+    if (!token) return;
+    fetch('/api/order-status/' + currentInvoiceId, {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+        if (!d.success || !d.data) return;
+        var st = d.data;
+        if (st.status === 'paid') {
+            document.getElementById('statusWaiting').style.display = 'none';
+            document.getElementById('statusDetected').style.display = 'none';
+            document.getElementById('statusConfirmed').style.display = '';
+            stopPolling();
+            setTimeout(function() { window.location = '/dashboard'; }, 3000);
+        } else if (st.tx_found) {
+            document.getElementById('statusWaiting').style.display = 'none';
+            document.getElementById('statusDetected').style.display = '';
+            if (st.txid) {
+                document.getElementById('statusTxId').innerHTML = 'TX: <a href="https://mempool.space/tx/' + st.txid + '" target="_blank" style="color:var(--accent)">' + st.txid.substring(0, 16) + '...</a>';
+            }
+        }
+    })
+    .catch(function() {});
 }
 
 function copyBtcAmount() {
