@@ -628,8 +628,11 @@ def api_create_order(body: CheckoutRequest, request: Request):
     return JSONResponse(content={
         "success": True,
         "data": {
-            "payment_url": result.get("checkout_url", ""),
-            "invoice_id": result.get("invoice_id", "")
+            "invoice_id": result.get("invoice_id", ""),
+            "btc_address": result.get("btc_address", ""),
+            "btc_amount": result.get("btc_amount", 0),
+            "usd_amount": result.get("usd_amount", 0),
+            "btc_price": result.get("btc_price", 0),
         }
     })
 

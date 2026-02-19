@@ -50,12 +50,12 @@
                 <div class="price-savings" style="display:inline-block">You save $13,810/year vs buying individually</div>
             </div>
 
-            <button class="btn btn-xl btn-full btn-pulse" id="payBtn" onclick="handlePayment()">
+            <button class="btn btn-xl btn-full btn-pulse" id="payBtn" onclick="handlePayment()" style="background:linear-gradient(135deg,#f7931a,#e8850e);border:none">
                 &#9889; Pay with Bitcoin &mdash; <span id="payBtnAmount">$9.99</span>
             </button>
 
             <p class="checkout-note">
-                Secure payment processed via BTCPay Server. Your membership activates instantly after payment confirmation.
+                Secure Bitcoin payment. Your membership activates instantly after payment confirmation.
             </p>
             <div class="checkout-secure">
                 <span>&#128274;</span>
@@ -74,12 +74,70 @@
     </div>
 </section>
 
+<div id="btcPayModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;overflow-y:auto">
+    <div style="max-width:480px;margin:40px auto;background:var(--card-bg,#0d0f14);border-radius:20px;border:1px solid rgba(124,92,231,0.3);padding:32px 28px;position:relative">
+        <button onclick="closeModal()" style="position:absolute;top:14px;right:18px;background:none;border:none;color:var(--text-muted);font-size:1.5rem;cursor:pointer">&times;</button>
+        <div style="text-align:center;margin-bottom:24px">
+            <div style="font-size:2.2rem;margin-bottom:4px">&#8383;</div>
+            <h3 style="margin:0;color:var(--text-primary);font-size:1.3rem">Send Bitcoin Payment</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin:6px 0 0">Scan QR code or copy the address below</p>
+        </div>
+        <div style="text-align:center;margin-bottom:20px">
+            <div style="background:#fff;border-radius:16px;padding:16px;display:inline-block">
+                <img id="btcQR" src="" alt="Bitcoin QR Code" style="width:200px;height:200px;display:block">
+            </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(247,147,26,0.08);border:1px solid rgba(247,147,26,0.25);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+            <div>
+                <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Amount to Send</div>
+                <div style="font-size:1.4rem;font-weight:800;color:#f7931a" id="btcAmountDisplay">0.00000000 BTC</div>
+                <div style="font-size:0.8rem;color:var(--text-muted)" id="btcUsdDisplay">= $0.00 USD</div>
+            </div>
+            <button onclick="copyBtcAmount()" id="copyAmountBtn" style="background:rgba(247,147,26,0.15);border:1px solid rgba(247,147,26,0.3);color:#f7931a;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:0.8rem;font-weight:600">Copy</button>
+        </div>
+        <div style="margin-bottom:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Bitcoin Address</div>
+            <div style="background:rgba(124,92,231,0.06);border:1px solid rgba(124,92,231,0.2);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:10px">
+                <code style="font-size:0.72rem;color:var(--text-primary);word-break:break-all;flex:1;line-height:1.5" id="btcAddressDisplay"></code>
+                <button onclick="copyBtcAddress()" id="copyAddrBtn" style="background:rgba(124,92,231,0.15);border:1px solid rgba(124,92,231,0.3);color:var(--accent);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:0.8rem;font-weight:600;white-space:nowrap">Copy</button>
+            </div>
+        </div>
+        <div style="background:rgba(124,92,231,0.06);border-radius:12px;padding:14px 16px;margin-bottom:20px">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">Order Details</div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px">
+                <span style="color:var(--text-muted)">Plan</span>
+                <span style="color:var(--text-primary);font-weight:600" id="modalPlanName">-</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px">
+                <span style="color:var(--text-muted)">Order ID</span>
+                <span style="color:var(--text-primary);font-family:monospace;font-size:0.78rem" id="modalOrderId">-</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem">
+                <span style="color:var(--text-muted)">BTC Price</span>
+                <span style="color:var(--text-primary)" id="modalBtcPrice">-</span>
+            </div>
+        </div>
+        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px 16px;margin-bottom:16px">
+            <p style="color:rgba(34,197,94,0.9);font-size:0.8rem;margin:0;line-height:1.5">
+                After sending the exact BTC amount, your account will be upgraded automatically once the payment is confirmed on the blockchain (usually within 10-30 minutes).
+            </p>
+        </div>
+        <div style="text-align:center">
+            <p style="color:var(--text-muted);font-size:0.72rem;margin:0">
+                &#128274; Only send BTC (Bitcoin) to this address. Other assets will be lost.
+            </p>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
 var selectedPlan = 'yearly';
 var selectedAmount = '9.99';
+var currentBtcAmount = '';
+var currentBtcAddress = '';
 
 function selectPlan(btn) {
     document.querySelectorAll('.plan-option').forEach(function(b) {
@@ -103,7 +161,7 @@ function handlePayment() {
     if (!token) { window.location = '/login'; return; }
     var btn = document.getElementById('payBtn');
     btn.disabled = true;
-    btn.innerHTML = '&#9203; Creating invoice...';
+    btn.innerHTML = '&#9203; Creating order...';
     fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -111,11 +169,11 @@ function handlePayment() {
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
-        if (d.success && d.data && d.data.payment_url) {
-            window.location = d.data.payment_url;
+        btn.disabled = false;
+        btn.innerHTML = '&#9889; Pay with Bitcoin &mdash; <span id="payBtnAmount">$' + selectedAmount + '</span>';
+        if (d.success && d.data) {
+            showPaymentModal(d.data);
         } else {
-            btn.disabled = false;
-            btn.innerHTML = '&#9889; Pay with Bitcoin &mdash; <span id="payBtnAmount">$' + selectedAmount + '</span>';
             if (typeof WPVault !== 'undefined') WPVault.toast(d.error || 'Payment failed. Please try again.', 'error');
         }
     })
@@ -125,5 +183,46 @@ function handlePayment() {
         if (typeof WPVault !== 'undefined') WPVault.toast('Connection error. Please try again.', 'error');
     });
 }
+
+function showPaymentModal(data) {
+    currentBtcAmount = data.btc_amount;
+    currentBtcAddress = data.btc_address;
+    var label = document.getElementById('selectedPlanName').textContent;
+    document.getElementById('btcAmountDisplay').textContent = currentBtcAmount + ' BTC';
+    document.getElementById('btcUsdDisplay').textContent = '= $' + data.usd_amount + ' USD';
+    document.getElementById('btcAddressDisplay').textContent = currentBtcAddress;
+    document.getElementById('modalPlanName').textContent = label;
+    document.getElementById('modalOrderId').textContent = data.invoice_id;
+    document.getElementById('modalBtcPrice').textContent = '$' + Number(data.btc_price).toLocaleString();
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=bitcoin:' + encodeURIComponent(currentBtcAddress) + '?amount=' + currentBtcAmount;
+    document.getElementById('btcQR').src = qrUrl;
+    document.getElementById('btcPayModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+    document.getElementById('btcPayModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function copyBtcAmount() {
+    navigator.clipboard.writeText(String(currentBtcAmount)).then(function() {
+        var b = document.getElementById('copyAmountBtn');
+        b.textContent = 'Copied!';
+        setTimeout(function() { b.textContent = 'Copy'; }, 2000);
+    });
+}
+
+function copyBtcAddress() {
+    navigator.clipboard.writeText(currentBtcAddress).then(function() {
+        var b = document.getElementById('copyAddrBtn');
+        b.textContent = 'Copied!';
+        setTimeout(function() { b.textContent = 'Copy'; }, 2000);
+    });
+}
+
+document.getElementById('btcPayModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
 </script>
 {% endblock %}
