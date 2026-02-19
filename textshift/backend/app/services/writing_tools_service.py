@@ -1362,23 +1362,27 @@ class WritingToolsService:
                 t5_result = self._generate_with_t5(t5_prompt, max_length=max_length, min_length=min_length)
             
             if t5_result and len(t5_result) > 10 and len(t5_result) < len(text):
-                summary = t5_result
-                used_t5 = True
-                logger.info("Summarization using T5 model successful")
-                
-                original_words = len(text.split())
-                summary_words = len(summary.split())
-                compression_ratio = round((1 - summary_words / original_words) * 100, 1) if original_words > 0 else 0
-                
-                return {
-                    "success": True,
-                    "original_text": text[:500] + "..." if len(text) > 500 else text,
-                    "summary": summary,
-                    "original_word_count": original_words,
-                    "summary_word_count": summary_words,
-                    "compression_ratio": compression_ratio,
-                    "used_t5": used_t5
-                }
+                summary_words = len(t5_result.split())
+                min_acceptable_words = max(10, int(word_count * 0.15))
+                if summary_words >= min_acceptable_words:
+                    summary = t5_result
+                    used_t5 = True
+                    logger.info("Summarization using T5 model successful")
+                    
+                    original_words = len(text.split())
+                    compression_ratio = round((1 - summary_words / original_words) * 100, 1) if original_words > 0 else 0
+                    
+                    return {
+                        "success": True,
+                        "original_text": text[:500] + "..." if len(text) > 500 else text,
+                        "summary": summary,
+                        "original_word_count": original_words,
+                        "summary_word_count": summary_words,
+                        "compression_ratio": compression_ratio,
+                        "used_t5": used_t5
+                    }
+                else:
+                    logger.warning(f"T5 summary too short ({summary_words} words vs {min_acceptable_words} min), falling back to extractive")
             
             # Fallback to extractive summarization
             logger.info("Falling back to extractive summarization")
@@ -1837,12 +1841,22 @@ class WritingToolsService:
         url: str = None,
         style: str = "apa"
     ) -> Dict[str, Any]:
-        """Generate citations using CrossRef API."""
+        """Generate citations using CrossRef API with proper DOI resolution."""
         try:
             citation_data = None
+
+            if not doi and query:
+                doi_match = re.match(r'^\s*(https?://doi\.org/)?\s*(10\.\d{4,}/\S+)\s*$', query.strip())
+                if doi_match:
+                    doi = doi_match.group(2)
+                    logger.info(f"Auto-detected DOI in query field: {doi}")
             
             if doi:
-                # Fetch from CrossRef by DOI
+                doi = doi.strip()
+                if doi.startswith("https://doi.org/"):
+                    doi = doi[len("https://doi.org/"):]
+                elif doi.startswith("http://doi.org/"):
+                    doi = doi[len("http://doi.org/"):]
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
                         f"https://api.crossref.org/works/{doi}",
@@ -1851,9 +1865,11 @@ class WritingToolsService:
                     if response.status_code == 200:
                         data = response.json()
                         citation_data = data.get("message", {})
-            
-            elif query:
-                # Search CrossRef
+                    else:
+                        logger.warning(f"CrossRef DOI lookup failed (status {response.status_code}), trying query search")
+                        doi = None
+
+            if not citation_data and query:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.get(
                         "https://api.crossref.org/works",
@@ -2531,24 +2547,41 @@ class WritingToolsService:
     
     # ==================== Feature 14: Content Improver ====================
     def improve_content(self, text: str, focus: str = "clarity") -> Dict[str, Any]:
-        """Improve content using CoEdIT-large instruction-tuned model."""
+        """Improve content using CoEdIT-large instruction-tuned model.
+        Processes each paragraph independently to prevent content loss."""
         try:
             logger.info(f"Improving content with focus: {focus}")
 
             focus_lower = focus.lower()
             instruction_map = {
-                "clarity": "Simplify this sentence",
-                "conciseness": "Simplify this sentence",
-                "engagement": "Make this text coherent",
-                "professionalism": "Write this more formally",
-                "seo": "Simplify this sentence",
+                "clarity": "Improve the clarity of this text",
+                "conciseness": "Make this text more concise",
+                "engagement": "Make this text more engaging",
+                "professionalism": "Rewrite this text more formally",
+                "seo": "Improve the clarity of this text",
             }
             instruction = instruction_map.get(focus_lower, "Make this text coherent")
 
-            improved_text = self._edit_text_with_coedit(text, instruction, max_chunk_tokens=80)
+            paragraphs = re.split(r'\n\n+', text.strip())
+            if len(paragraphs) <= 1:
+                paragraphs = re.split(r'\n', text.strip())
+            paragraphs = [p.strip() for p in paragraphs if p.strip()]
+
+            improved_paragraphs = []
+            for para in paragraphs:
+                improved_para = self._edit_text_with_coedit(para, instruction, max_chunk_tokens=150)
+                para_words = len(para.split())
+                improved_words = len(improved_para.split()) if improved_para else 0
+                if not improved_para or improved_words < para_words * 0.5:
+                    logger.warning(f"CoEdIT lost too much content ({improved_words}/{para_words} words), keeping original paragraph")
+                    improved_paragraphs.append(para)
+                else:
+                    improved_paragraphs.append(improved_para)
+
+            improved_text = '\n\n'.join(improved_paragraphs)
 
             if not improved_text or improved_text == text:
-                improved_text = self._edit_text_with_coedit(text, "Make this text coherent", max_chunk_tokens=80)
+                improved_text = self._edit_text_with_coedit(text, "Make this text coherent", max_chunk_tokens=150)
 
             suggestions = [f"Text improved for {focus} using advanced language model"]
             changes_made = sum(1 for a, b in zip(text.split(), improved_text.split()) if a != b)

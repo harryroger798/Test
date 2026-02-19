@@ -112,15 +112,6 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
     EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
     
-    # Intercom integration (optional)
-    INTERCOM_APP_ID: str = ""
-    INTERCOM_ACCESS_TOKEN: str = ""
-    INTERCOM_IDENTITY_SECRET: str = ""
-    
-    # iDrive credentials (alternative naming)
-    IDRIVE_ACCESS_KEY: str = ""
-    IDRIVE_SECRET_KEY: str = ""
-    
     # Modal.com serverless GPU (off-peak humanizer)
     MODAL_ENDPOINT_URL: str = "https://textshift--textshift-humanizer-humanizermodel-humanize-api.modal.run"
 
