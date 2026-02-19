@@ -7,7 +7,7 @@
         <div class="breadcrumb">
             <a href="/">Home</a>
             <span>&#8250;</span>
-            <a href="/plugins">Plugins</a>
+            <a href="/plugins">{{ 'Plugins' if plugin.is_plugin else 'Themes' }}</a>
             <span>&#8250;</span>
             <span>{{ plugin.name }}</span>
         </div>
@@ -31,7 +31,7 @@
                     {% if plugin.category %}
                     <span class="meta-chip category">{{ plugin.category }}</span>
                     {% endif %}
-                    <span class="meta-chip type">Plugin</span>
+                    <span class="meta-chip type">{{ 'Plugin' if plugin.is_plugin else 'Theme' }}</span>
                     {% if plugin.updated_at %}
                     <span class="meta-chip updated">Updated {{ plugin.updated_at[:10] }}</span>
                     {% endif %}
@@ -46,7 +46,7 @@
 
                 <div class="tab-content active" id="tab-desc">
                     <div class="plugin-description-card">
-                        <h3>&#128196; About This Plugin</h3>
+                        <h3>&#128196; About This {{ 'Plugin' if plugin.is_plugin else 'Theme' }}</h3>
                         <div class="plugin-description-text">
                             {% if plugin.description %}
                             {{ plugin.description | safe }}
@@ -57,7 +57,7 @@
                     </div>
 
                     <div class="plugin-description-card" style="margin-top: 20px">
-                        <h3>&#128640; Why Choose This Plugin?</h3>
+                        <h3>&#128640; Why Choose This {{ 'Plugin' if plugin.is_plugin else 'Theme' }}?</h3>
                         <div class="plugin-description-text">
                             <div class="plugin-highlights">
                                 <div class="highlight-item">
@@ -92,67 +92,17 @@
                         </div>
                     </div>
 
-                    <div class="plugin-description-card" style="margin-top: 20px">
-                        <h3>&#128187; Requirements</h3>
-                        <div class="plugin-description-text">
-                            <ul class="requirements-list">
-                                <li>WordPress 5.0 or higher</li>
-                                <li>PHP 7.4 or higher recommended</li>
-                                <li>MySQL 5.6+ or MariaDB 10.1+</li>
-                                <li>Modern web browser (Chrome, Firefox, Safari, Edge)</li>
-                            </ul>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="tab-content" id="tab-features">
                     <div class="plugin-description-card">
                         <h3>&#11088; Key Features</h3>
                         <div class="plugin-description-text">
-                            <div class="plugin-highlights">
-                                <div class="highlight-item">
-                                    <span class="highlight-icon">&#128640;</span>
-                                    <div>
-                                        <strong>Easy Installation</strong>
-                                        <p>Upload and activate in seconds. No coding required.</p>
-                                    </div>
-                                </div>
-                                <div class="highlight-item">
-                                    <span class="highlight-icon">&#127912;</span>
-                                    <div>
-                                        <strong>Fully Customizable</strong>
-                                        <p>Extensive settings panel to tailor the plugin to your specific needs.</p>
-                                    </div>
-                                </div>
-                                <div class="highlight-item">
-                                    <span class="highlight-icon">&#128241;</span>
-                                    <div>
-                                        <strong>Responsive Design</strong>
-                                        <p>Works flawlessly on all devices and screen sizes.</p>
-                                    </div>
-                                </div>
-                                <div class="highlight-item">
-                                    <span class="highlight-icon">&#9889;</span>
-                                    <div>
-                                        <strong>Performance Optimized</strong>
-                                        <p>Lightweight code that won't slow down your website.</p>
-                                    </div>
-                                </div>
-                                <div class="highlight-item">
-                                    <span class="highlight-icon">&#127760;</span>
-                                    <div>
-                                        <strong>Translation Ready</strong>
-                                        <p>Fully translatable and compatible with WPML and Polylang.</p>
-                                    </div>
-                                </div>
-                                <div class="highlight-item">
-                                    <span class="highlight-icon">&#128295;</span>
-                                    <div>
-                                        <strong>Regular Updates</strong>
-                                        <p>Continuously updated with new features, bug fixes, and security patches.</p>
-                                    </div>
-                                </div>
-                            </div>
+                            {% if plugin.description %}
+                            {{ plugin.description | safe }}
+                            {% else %}
+                            <p>Feature details will be available after the plugin description is updated.</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -161,20 +111,17 @@
                     <div class="plugin-description-card">
                         <h3>&#128203; Version History</h3>
                         <div class="plugin-description-text">
-                            {% if plugin.version and plugin.version != 'unknown' %}
+                            {% if plugin.version %}
                             <div class="changelog-entry">
                                 <div class="changelog-version">
                                     <span class="meta-chip version">v{{ plugin.version }}</span>
-                                    <span class="changelog-date">{{ plugin.updated_at[:10] if plugin.updated_at else 'Recent' }}</span>
+                                    <span class="changelog-date">{{ plugin.updated_at[:10] if plugin.updated_at else '' }}</span>
                                 </div>
-                                <ul>
-                                    <li>Latest stable release</li>
-                                    <li>Bug fixes and performance improvements</li>
-                                    <li>WordPress compatibility updates</li>
-                                </ul>
+                                <p>Current version available for download.</p>
                             </div>
+                            {% else %}
+                            <p>Version history is not available yet. The latest version is always available for download.</p>
                             {% endif %}
-                            <p>This plugin is automatically updated when new versions are released. Download the latest version to get all improvements.</p>
                         </div>
                     </div>
                 </div>
@@ -183,47 +130,7 @@
                     <div class="plugin-description-card">
                         <h3>&#11088; User Reviews</h3>
                         <div class="plugin-description-text">
-                            <div class="review-summary">
-                                <div class="review-score">4.8</div>
-                                <div class="review-score-detail">
-                                    <div class="review-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                                    <span class="review-count">Based on verified downloads</span>
-                                </div>
-                            </div>
-
-                            <div class="testimonial-card" style="margin-bottom: 16px">
-                                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                                <p class="testimonial-text">"Works perfectly on all my client sites. Easy to set up and configure. Highly recommended for any serious WordPress developer."</p>
-                                <div class="testimonial-author">
-                                    <div class="testimonial-avatar">JD</div>
-                                    <div class="testimonial-info">
-                                        <div class="name">James D.</div>
-                                        <div class="role">Web Developer &middot; Verified Buyer</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="testimonial-card" style="margin-bottom: 16px">
-                                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                                <p class="testimonial-text">"Saved me hundreds of dollars compared to buying individual licenses. The download was instant and the plugin worked out of the box."</p>
-                                <div class="testimonial-author">
-                                    <div class="testimonial-avatar">SK</div>
-                                    <div class="testimonial-info">
-                                        <div class="name">Sarah K.</div>
-                                        <div class="role">Agency Owner &middot; Verified Buyer</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="testimonial-card">
-                                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9734;</div>
-                                <p class="testimonial-text">"Great value for money. The plugin does exactly what it promises. Would love to see more frequent updates though."</p>
-                                <div class="testimonial-author">
-                                    <div class="testimonial-avatar">MR</div>
-                                    <div class="testimonial-info">
-                                        <div class="name">Mike R.</div>
-                                        <div class="role">Freelancer &middot; Verified Buyer</div>
-                                    </div>
-                                </div>
-                            </div>
+                            <p>No reviews yet. Be the first to download and review this {{ 'plugin' if plugin.is_plugin else 'theme' }}.</p>
                         </div>
                     </div>
                 </div>
@@ -245,32 +152,30 @@
                 </div>
 
                 <div class="sidebar-card">
-                    <h3>&#128196; Plugin Info</h3>
+                    <h3>&#128196; {{ 'Plugin' if plugin.is_plugin else 'Theme' }} Info</h3>
                     <ul class="info-list">
-                        {% if plugin.version and plugin.version != 'unknown' %}
+                        {% if plugin.version %}
                         <li>
                             <span class="info-label">Version</span>
                             <span class="info-value">{{ plugin.version }}</span>
                         </li>
                         {% endif %}
+                        <li>
+                            <span class="info-label">Type</span>
+                            <span class="info-value">{{ 'Plugin' if plugin.is_plugin else 'Theme' }}</span>
+                        </li>
                         {% if plugin.category %}
                         <li>
                             <span class="info-label">Category</span>
                             <span class="info-value">{{ plugin.category }}</span>
                         </li>
                         {% endif %}
-                        <li>
-                            <span class="info-label">Compatibility</span>
-                            <span class="info-value">WP 5.0+</span>
-                        </li>
-                        <li>
-                            <span class="info-label">PHP Version</span>
-                            <span class="info-value">7.4+</span>
-                        </li>
+                        {% if plugin.updated_at %}
                         <li>
                             <span class="info-label">Last Updated</span>
-                            <span class="info-value">{{ plugin.updated_at[:10] if plugin.updated_at else 'Recently' }}</span>
+                            <span class="info-value">{{ plugin.updated_at[:10] }}</span>
                         </li>
+                        {% endif %}
                         <li>
                             <span class="info-label">License</span>
                             <span class="info-value">GPL v2+</span>

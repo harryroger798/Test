@@ -839,18 +839,27 @@ def page_plugin_detail(request: Request, slug: str):
     thumb = plugin.get("thumbnail_url", "") or ""
     raw_desc = plugin.get("description", "") or ""
     file_hash = plugin.get("file_hash", "") or ""
-    file_size = plugin.get("file_size_bytes", 0) or 0
+    raw_size = plugin.get("file_size_bytes", 0) or 0
+    file_size = raw_size if raw_size and raw_size != 404159 else 0
+    version = plugin.get("version") or ""
+    if version and version.lower() in ("unknown", "none", "null", ""):
+        version = ""
+    is_plugin = plugin.get("is_plugin", 1)
+    category = plugin.get("category", "") or ""
+    if category.lower() in ("plugins", "themes"):
+        category = ""
     plugin_data = {
         "slug": plugin.get("slug"),
         "name": plugin.get("name"),
         "description": _format_description_html(raw_desc),
-        "version": plugin.get("version"),
-        "category": plugin.get("category"),
+        "version": version,
+        "category": category,
         "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",
         "updated_at": plugin.get("updated_at"),
         "created_at": plugin.get("created_at"),
         "file_hash": file_hash,
         "file_size_bytes": file_size,
+        "is_plugin": is_plugin,
     }
     return templates.TemplateResponse("plugin_detail.html", {
         "request": request,
