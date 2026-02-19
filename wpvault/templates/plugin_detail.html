@@ -282,8 +282,32 @@
                     <h3>&#128274; Security Verified</h3>
                     <div class="security-badges">
                         <span class="security-badge verified">&#9989; Malware Free</span>
-                        <span class="security-badge verified">&#128274; Checksum OK</span>
                         <span class="security-badge verified">&#128737; GPL Licensed</span>
+                    </div>
+                    <div class="checksum-section">
+                        {% if plugin.file_hash %}
+                        <div class="checksum-verified">
+                            <span class="checksum-status">&#9989; Checksum Verified</span>
+                        </div>
+                        <div class="checksum-details">
+                            <div class="checksum-label">SHA-256 File Hash</div>
+                            <div class="checksum-hash-wrap">
+                                <code class="checksum-hash" id="checksumValue">{{ plugin.file_hash }}</code>
+                                <button class="checksum-copy-btn" onclick="copyChecksum()" title="Copy checksum">&#128203;</button>
+                            </div>
+                        </div>
+                        {% if plugin.file_size_bytes %}
+                        <div class="checksum-details" style="margin-top:6px">
+                            <div class="checksum-label">File Size</div>
+                            <div class="checksum-value">{{ "%.2f"|format(plugin.file_size_bytes / 1048576) }} MB</div>
+                        </div>
+                        {% endif %}
+                        {% else %}
+                        <div class="checksum-pending">
+                            <span class="checksum-status pending">&#9203; Checksum Pending</span>
+                            <div class="checksum-note">SHA-256 hash will be generated and displayed after first download verification.</div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -306,6 +330,14 @@ function switchTab(btn, tabId) {
     document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
     btn.classList.add('active');
     document.getElementById('tab-' + tabId).classList.add('active');
+}
+
+function copyChecksum() {
+    var hash = document.getElementById('checksumValue');
+    if (!hash) return;
+    navigator.clipboard.writeText(hash.textContent.trim()).then(function() {
+        if (typeof WPVault !== 'undefined') WPVault.toast('Checksum copied!', 'success');
+    });
 }
 
 function handleDownload(slug) {

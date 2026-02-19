@@ -12,7 +12,7 @@
             <span class="pulse-dot"></span>
             <span id="heroViewers">127</span> people browsing right now
         </div>
-        <h1 class="reveal">Access <span class="gradient-text">12,000+ Premium</span> WordPress Plugins & Themes</h1>
+        <h1 class="reveal">Access <span class="gradient-text">{{ total_plugins or 12290 }}+ Premium</span> WordPress Plugins &amp; Themes</h1>
         <p class="hero-sub reveal">Stop paying $50-$299 per plugin. Get instant access to the entire collection for one simple annual fee. Updated daily.</p>
         <div class="hero-savings reveal">
             &#128176; You save <strong id="heroSavings">$13,820</strong>/year compared to buying individually
@@ -23,11 +23,11 @@
         </div>
         <div class="hero-stats reveal">
             <div class="hero-stat">
-                <div class="hero-stat-number" data-target="{{ plugin_count or 12290 }}"><span class="accent">0</span></div>
+                <div class="hero-stat-number" data-target="{{ total_plugins or 12290 }}"><span class="accent">0</span></div>
                 <div class="hero-stat-label">Premium Plugins</div>
             </div>
             <div class="hero-stat">
-                <div class="hero-stat-number" data-target="1559"><span class="accent">0</span></div>
+                <div class="hero-stat-number" data-target="{{ categories_count or 1559 }}"><span class="accent">0</span></div>
                 <div class="hero-stat-label">Categories</div>
             </div>
             <div class="hero-stat">
@@ -73,7 +73,7 @@
         <div class="features-grid">
             <div class="feature-card reveal reveal-delay-1">
                 <div class="feature-icon purple">&#128230;</div>
-                <h3>12,000+ Plugins</h3>
+                <h3>{{ total_plugins or 12290 }}+ Plugins</h3>
                 <p>The largest curated collection of premium WordPress plugins, all in one place.</p>
             </div>
             <div class="feature-card reveal reveal-delay-2">
@@ -89,7 +89,7 @@
             <div class="feature-card reveal reveal-delay-4">
                 <div class="feature-icon orange">&#128274;</div>
                 <h3>100% Secure</h3>
-                <p>Every file is scanned for malware. Verified checksums. Zero compromises on safety.</p>
+                <p>Every file is scanned for malware. Verified SHA-256 checksums. Zero compromises on safety.</p>
             </div>
             <div class="feature-card reveal reveal-delay-1">
                 <div class="feature-icon cyan">&#127760;</div>
@@ -105,18 +105,174 @@
     </div>
 </section>
 
-<section class="logo-wall reveal">
+<section class="brand-showcase reveal">
+    <div class="container text-center">
+        <div class="section-eyebrow">&#127775; Premium Brands</div>
+        <h2 class="section-title">Here Are <span class="gradient-text">Only Some Of The Many Plugins</span> We Redistribute</h2>
+        <div class="brand-grid">
+            <div class="brand-item">Elementor Pro</div>
+            <div class="brand-item">WooCommerce</div>
+            <div class="brand-item">Yoast SEO Premium</div>
+            <div class="brand-item">ACF Pro</div>
+            <div class="brand-item">Gravity Forms</div>
+            <div class="brand-item">WPBakery</div>
+            <div class="brand-item">Slider Revolution</div>
+            <div class="brand-item">Divi Builder</div>
+            <div class="brand-item">Beaver Builder</div>
+            <div class="brand-item">LearnDash</div>
+            <div class="brand-item">MemberPress</div>
+            <div class="brand-item">WPForms Pro</div>
+            <div class="brand-item">Rank Math Pro</div>
+            <div class="brand-item">AffiliateWP</div>
+            <div class="brand-item">SearchWP</div>
+            <div class="brand-item">FacetWP</div>
+            <div class="brand-item">GiveWP</div>
+            <div class="brand-item">MainWP</div>
+            <div class="brand-item">Restrict Content Pro</div>
+            <div class="brand-item">Admin Columns Pro</div>
+            <div class="brand-item">Sugar Calendar</div>
+            <div class="brand-item">SeedProd</div>
+            <div class="brand-item">Thrive Themes</div>
+            <div class="brand-item">WPML</div>
+            <div class="brand-item">Bookly Pro</div>
+            <div class="brand-item">LoginPress Pro</div>
+            <div class="brand-item">Ninja Forms</div>
+            <div class="brand-item">RafflePress</div>
+            <div class="brand-item">UpdraftPlus Premium</div>
+            <div class="brand-item">WP Rocket</div>
+            <div class="brand-item">YITH Plugins</div>
+            <div class="brand-item highlight">MANY MORE...</div>
+        </div>
+        <p class="brand-disclaimer">* We are not affiliated with nor in any way related to the third-party developers or trademark owners.</p>
+        <a href="/plugins" class="btn btn-outline" style="margin-top:20px">View All {{ total_plugins or 12290 }}+ Plugins &amp; Themes &#8594;</a>
+    </div>
+</section>
+
+<section class="gpl-section reveal" id="gpl">
     <div class="container">
-        <div class="logo-wall-title">Includes plugins from top brands</div>
-        <div class="logo-wall-grid">
-            <div class="logo-wall-item">Elementor Pro</div>
-            <div class="logo-wall-item">WooCommerce</div>
-            <div class="logo-wall-item">Yoast SEO</div>
-            <div class="logo-wall-item">ACF Pro</div>
-            <div class="logo-wall-item">Gravity Forms</div>
-            <div class="logo-wall-item">WPBakery</div>
-            <div class="logo-wall-item">Slider Revolution</div>
-            <div class="logo-wall-item">FLAVOR</div>
+        <div class="section-eyebrow text-center">&#9878; 100% Legal</div>
+        <h2 class="section-title text-center">How Can We Sell Plugins For Such <span class="gradient-text">Low Prices</span>?</h2>
+        <h3 class="section-subtitle text-center">Redistributing plugins and themes is perfectly legit and legal by law!</h3>
+        <div class="gpl-steps">
+            <div class="gpl-step reveal">
+                <div class="gpl-step-number">1</div>
+                <div class="gpl-step-content">
+                    <h3>We Download From the Original Developers</h3>
+                    <p>We have active subscriptions to all the brand name companies. We download the products from the original developers and redistribute them to you. These downloads are original and not altered in any way, shape, or form.</p>
+                </div>
+            </div>
+            <div class="gpl-step reveal">
+                <div class="gpl-step-number">2</div>
+                <div class="gpl-step-content">
+                    <h3>We Verify File Integrity</h3>
+                    <p>Every file is scanned for malware and verified with SHA-256 checksums before being made available. We take security seriously and ensure every download is safe and original.</p>
+                </div>
+            </div>
+            <div class="gpl-step reveal">
+                <div class="gpl-step-number">3</div>
+                <div class="gpl-step-content">
+                    <h3>We Resell Them to You for Cheap</h3>
+                    <p>All WordPress plugins and themes are licensed under the General Public License (GPL). This means that once we have purchased an item, we are free to redistribute it. It is perfectly fine and legal to sell them to you at an amazing price!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="price-comparison reveal" id="savings">
+    <div class="container text-center">
+        <div class="section-eyebrow">&#128200; See The Savings</div>
+        <h2 class="section-title">Can You See Why So Many People <span class="gradient-text">Save A Lot Of Money</span>?</h2>
+        <p class="section-subtitle">Compare original prices vs WPVault prices.</p>
+        <div class="price-table">
+            <div class="price-table-row header">
+                <div class="price-table-cell plugin-name">Plugin</div>
+                <div class="price-table-cell original">Original Price</div>
+                <div class="price-table-cell ours">WPVault Price</div>
+                <div class="price-table-cell savings">Savings</div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">Elementor Pro</div>
+                <div class="price-table-cell original"><s>$59</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">WooCommerce Extensions</div>
+                <div class="price-table-cell original"><s>$99</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">Yoast SEO Premium</div>
+                <div class="price-table-cell original"><s>$89</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">Gravity Forms</div>
+                <div class="price-table-cell original"><s>$159</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">UpdraftPlus Premium</div>
+                <div class="price-table-cell original"><s>$195</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">Divi Builder</div>
+                <div class="price-table-cell original"><s>$89</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">WPForms Pro</div>
+                <div class="price-table-cell original"><s>$49</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">98%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">RafflePress Pro</div>
+                <div class="price-table-cell original"><s>$79</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row">
+                <div class="price-table-cell plugin-name">ACF Pro</div>
+                <div class="price-table-cell original"><s>$79</s></div>
+                <div class="price-table-cell ours">$0.83</div>
+                <div class="price-table-cell savings"><span class="savings-pct">99%</span></div>
+            </div>
+            <div class="price-table-row highlight-row">
+                <div class="price-table-cell plugin-name"><strong>All {{ total_plugins or 12290 }}+ Plugins &amp; Themes</strong></div>
+                <div class="price-table-cell original"><s>Over $50K</s></div>
+                <div class="price-table-cell ours"><strong>$9.99/yr</strong></div>
+                <div class="price-table-cell savings"><span class="savings-pct big">99.9%</span></div>
+            </div>
+        </div>
+        <p class="price-table-note">The examples above are just the tip of the iceberg. We have over {{ total_plugins or 12290 }} plugins and themes!</p>
+    </div>
+</section>
+
+<section class="category-showcase reveal" id="categories">
+    <div class="container text-center">
+        <div class="section-eyebrow">&#128218; Categories</div>
+        <h2 class="section-title">Find Plugins For <span class="gradient-text">Any Purpose</span></h2>
+        <div class="category-grid">
+            <div class="category-card"><div class="category-icon">&#128269;</div><h3>SEO</h3><p>Yoast, Rank Math, SEO Press, All-In-One SEO</p></div>
+            <div class="category-card"><div class="category-icon">&#128722;</div><h3>eCommerce</h3><p>WooCommerce extensions, EDD, Download Monitor</p></div>
+            <div class="category-card"><div class="category-icon">&#127912;</div><h3>Page Builders</h3><p>Elementor, Divi, Oxygen, Beaver Builder</p></div>
+            <div class="category-card"><div class="category-icon">&#128100;</div><h3>Membership</h3><p>Restrict Content Pro, MemberPress, PMPro</p></div>
+            <div class="category-card"><div class="category-icon">&#127891;</div><h3>LMS</h3><p>LearnDash, Sensei, WP Courseware</p></div>
+            <div class="category-card"><div class="category-icon">&#128200;</div><h3>Lead Capture</h3><p>Thrive Leads, Convert Pro, Generate Pro</p></div>
+            <div class="category-card"><div class="category-icon">&#128197;</div><h3>Bookings</h3><p>JetBooking, Bookly, Amelia</p></div>
+            <div class="category-card"><div class="category-icon">&#9889;</div><h3>Caching</h3><p>WP-Rocket, WP-Optimize Pro, WP Fastest Cache</p></div>
+            <div class="category-card"><div class="category-icon">&#128221;</div><h3>Forms</h3><p>WPForms, Ninja Forms, Gravity Forms</p></div>
+            <div class="category-card"><div class="category-icon">&#128640;</div><h3>Gutenberg</h3><p>Kadence Blocks, Stackable, MB Blocks</p></div>
+            <div class="category-card"><div class="category-icon">&#128736;</div><h3>Elementor Addons</h3><p>JetPlugins, Ultimate Addons, Piotnet</p></div>
+            <div class="category-card"><div class="category-icon">&#128295;</div><h3>Utilities</h3><p>ACF Pro, Admin Columns Pro, AffiliateWP</p></div>
         </div>
     </div>
 </section>
@@ -133,7 +289,7 @@
                 <div class="comparison-cell">Individual</div>
             </div>
             <div class="comparison-row">
-                <div class="comparison-cell">12,000+ Plugins</div>
+                <div class="comparison-cell">{{ total_plugins or 12290 }}+ Plugins</div>
                 <div class="comparison-cell"><span class="check">&#10003;</span></div>
                 <div class="comparison-cell"><span class="cross">&#10005;</span></div>
             </div>
@@ -153,6 +309,11 @@
                 <div class="comparison-cell"><span class="cross">&#10005;</span></div>
             </div>
             <div class="comparison-row">
+                <div class="comparison-cell">SHA-256 Checksums</div>
+                <div class="comparison-cell"><span class="check">&#10003;</span></div>
+                <div class="comparison-cell"><span class="cross">&#10005;</span></div>
+            </div>
+            <div class="comparison-row">
                 <div class="comparison-cell">Malware Scanned</div>
                 <div class="comparison-cell"><span class="check">&#10003;</span></div>
                 <div class="comparison-cell"><span class="cross">&#10005;</span></div>
@@ -164,7 +325,7 @@
 <section class="pricing" id="pricing">
     <div class="container text-center">
         <div class="section-eyebrow reveal">&#128176; Simple Pricing</div>
-        <h2 class="section-title reveal">One Plan. Everything Included.</h2>
+        <h2 class="section-title reveal">Want To Download Them All? <span class="gradient-text">We Got You!</span></h2>
         <p class="section-subtitle reveal">No hidden fees. No per-plugin costs. Cancel anytime.</p>
         <div class="pricing-timer-wrap reveal">
             <div class="pricing-timer">
@@ -173,52 +334,61 @@
         </div>
         <div class="pricing-grid">
             <div class="pricing-card reveal">
-                <h3>Free</h3>
-                <p class="plan-desc">Try before you buy</p>
-                <div class="price">$0</div>
-                <div class="price-note">Forever free</div>
+                <div class="pricing-discount-badge">50% OFF</div>
+                <h3>Monthly</h3>
+                <p class="plan-desc">Try risk-free</p>
+                <div class="price-original">$19.99/mo</div>
+                <div class="price">$9.99 <span>/month</span></div>
+                <div class="price-note">Billed monthly</div>
+                <div class="price-savings">Save $10/month</div>
                 <ul class="pricing-features">
-                    <li>Browse all plugins</li>
-                    <li>View descriptions & versions</li>
-                    <li>Search & filter catalog</li>
-                    <li class="disabled">Download plugins</li>
-                    <li class="disabled">Priority support</li>
-                    <li class="disabled">Early access to new plugins</li>
+                    <li>Access all {{ total_plugins or 12290 }}+ plugins</li>
+                    <li>20 downloads / day</li>
+                    <li>Keep the files forever</li>
+                    <li>Updated regularly</li>
+                    <li>Original files</li>
+                    <li>Unlimited domain use</li>
                 </ul>
-                <a href="/register" class="btn btn-ghost btn-full">Get Started Free</a>
+                <a href="/checkout" class="btn btn-ghost btn-full">Get Started</a>
             </div>
             <div class="pricing-card featured reveal">
                 <div class="badge">Most Popular</div>
+                <div class="pricing-discount-badge featured-badge">80% OFF</div>
                 <h3>Premium Yearly</h3>
                 <p class="plan-desc">Best value for professionals</p>
                 <div class="price-original">$49.99/yr</div>
                 <div class="price">$9.99 <span>/year</span></div>
                 <div class="price-note">Billed annually</div>
-                <div class="price-savings">Save 80% &#8212; $40/year</div>
+                <div class="price-savings">Save $40/year &#8212; best value</div>
                 <ul class="pricing-features">
-                    <li>Access all 12,000+ plugins</li>
-                    <li>Unlimited downloads</li>
-                    <li>Unlimited sites</li>
+                    <li>Access all {{ total_plugins or 12290 }}+ plugins</li>
+                    <li>50 downloads / day</li>
+                    <li>Keep the files forever</li>
                     <li>Daily auto-updates</li>
                     <li>Priority support</li>
                     <li>Early access to new plugins</li>
+                    <li>Unlimited domain use</li>
+                    <li>Custom requests</li>
                 </ul>
                 <a href="/checkout" class="btn btn-xl btn-full btn-pulse">Get Premium Now &#8594;</a>
             </div>
             <div class="pricing-card reveal">
+                <div class="pricing-discount-badge">84% OFF</div>
                 <h3>Lifetime</h3>
                 <p class="plan-desc">Pay once, access forever</p>
                 <div class="price-original">$299</div>
                 <div class="price">$49 <span>one-time</span></div>
                 <div class="price-note">No recurring fees</div>
-                <div class="price-savings">Save 84% &#8212; best deal</div>
+                <div class="price-savings">Save $250 &#8212; pay once forever</div>
                 <ul class="pricing-features">
                     <li>Everything in Premium</li>
+                    <li>100 downloads / day</li>
                     <li>Lifetime updates</li>
                     <li>Priority support forever</li>
                     <li>VIP Discord access</li>
                     <li>Custom plugin requests</li>
                     <li>White-label downloads</li>
+                    <li>Unlimited domain use</li>
                 </ul>
                 <a href="/checkout" class="btn btn-gold btn-full">Get Lifetime Access</a>
             </div>

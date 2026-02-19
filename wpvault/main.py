@@ -735,7 +735,12 @@ async def proxy_image(t: str | None = None, url: str | None = None):
 @app.get("/", response_class=HTMLResponse)
 def page_index(request: Request):
     total = database.get_plugin_count()
-    return templates.TemplateResponse("index.html", {"request": request, "total_plugins": total})
+    categories_count = len(database.get_all_categories())
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "total_plugins": total,
+        "categories_count": categories_count,
+    })
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -812,6 +817,8 @@ def page_plugin_detail(request: Request, slug: str):
         raise HTTPException(status_code=404, detail="Plugin not found")
     thumb = plugin.get("thumbnail_url", "") or ""
     raw_desc = plugin.get("description", "") or ""
+    file_hash = plugin.get("file_hash", "") or ""
+    file_size = plugin.get("file_size_bytes", 0) or 0
     plugin_data = {
         "slug": plugin.get("slug"),
         "name": plugin.get("name"),
@@ -821,6 +828,8 @@ def page_plugin_detail(request: Request, slug: str):
         "thumbnail": f"/api/img?t={_img_token(thumb)}" if thumb else "",
         "updated_at": plugin.get("updated_at"),
         "created_at": plugin.get("created_at"),
+        "file_hash": file_hash,
+        "file_size_bytes": file_size,
     }
     return templates.TemplateResponse("plugin_detail.html", {
         "request": request,
