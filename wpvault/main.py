@@ -112,8 +112,10 @@ class LoginRequest(BaseModel):
 
 
 PLAN_PRICING = {
+    "monthly": {"amount": 4.99, "days": 30},
     "yearly": {"amount": 9.99, "days": 365},
     "premium_yearly": {"amount": 9.99, "days": 365},
+    "lifetime": {"amount": 49.00, "days": 36500},
 }
 
 
