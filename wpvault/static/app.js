@@ -1,12 +1,10 @@
-/* WPVault - Viral UI Engine */
+/* WPVault - 3D Minimalistic UI Engine */
 (function() {
     "use strict";
 
     var WPVault = {};
 
-    /* ============================================
-       TOAST NOTIFICATION SYSTEM
-       ============================================ */
+    /* TOAST NOTIFICATION SYSTEM */
     WPVault.toast = function(msg, type) {
         type = type || "info";
         var container = document.getElementById("toastContainer");
@@ -23,9 +21,7 @@
         }, 4000);
     };
 
-    /* ============================================
-       SOCIAL PROOF NOTIFICATION ENGINE
-       ============================================ */
+    /* SOCIAL PROOF NOTIFICATION ENGINE */
     var socialProofNames = [
         "Alex", "Sarah", "Mike", "Emma", "David", "Lisa", "James", "Anna",
         "Chris", "Jessica", "Ryan", "Emily", "Daniel", "Sophie", "Matt",
@@ -40,8 +36,8 @@
     ];
     var socialProofPlugins = [
         "Elementor Pro", "WooCommerce", "Yoast SEO Premium", "ACF Pro",
-        "WP Rocket", "Gravity Forms", "JEPA Theme", "Astra Pro",
-        "Divi Builder", "Slider Revolution", "JEPA Theme", "JEPA Ultimate",
+        "WP Rocket", "Gravity Forms", "Astra Pro",
+        "Divi Builder", "Slider Revolution",
         "TablePress", "Redirection Pro", "MainWP Pro", "MonsterInsights Pro",
         "Wordfence Premium", "All in One SEO", "WP Mail SMTP Pro", "UpdraftPlus Premium"
     ];
@@ -64,23 +60,16 @@
         }, 5000);
     }
 
-    /* ============================================
-       COUNTDOWN TIMER ENGINE
-       ============================================ */
+    /* COUNTDOWN TIMER ENGINE */
     function initCountdowns() {
         var timers = document.querySelectorAll("[data-countdown]");
-        timers.forEach(function(el) {
-            updateCountdown(el);
-        });
-        /* Also handle announcement bar timer */
+        timers.forEach(function(el) { updateCountdown(el); });
         var announcementTimer = document.getElementById("announcementTimer");
-        if (announcementTimer) {
-            updateAnnouncementTimer(announcementTimer);
-        }
+        if (announcementTimer) updateAnnouncementTimer(announcementTimer);
         var checkoutTimer = document.getElementById("checkoutTimer");
-        if (checkoutTimer) {
-            updateCheckoutTimer(checkoutTimer);
-        }
+        if (checkoutTimer) updateCheckoutTimer(checkoutTimer);
+        var topBarTimer = document.getElementById("topBarTimer");
+        if (topBarTimer) updateAnnouncementTimer(topBarTimer);
     }
 
     function updateAnnouncementTimer(el) {
@@ -143,9 +132,7 @@
 
     function pad(n) { return n < 10 ? "0" + n : "" + n; }
 
-    /* ============================================
-       ANIMATED STAT COUNTERS
-       ============================================ */
+    /* ANIMATED STAT COUNTERS */
     function animateCounters() {
         var counters = document.querySelectorAll("[data-count], [data-target]");
         counters.forEach(function(el) {
@@ -175,9 +162,7 @@
         });
     }
 
-    /* ============================================
-       SCROLL ANIMATIONS (REVEAL ON SCROLL)
-       ============================================ */
+    /* SCROLL ANIMATIONS (REVEAL ON SCROLL) */
     function initScrollReveal() {
         var reveals = document.querySelectorAll(".reveal");
         if (!reveals.length) return;
@@ -208,9 +193,7 @@
         }, 2000);
     }
 
-    /* ============================================
-       SCROLL PROGRESS BAR
-       ============================================ */
+    /* SCROLL PROGRESS BAR */
     function initScrollProgress() {
         var bar = document.getElementById("scrollProgress");
         if (!bar) return;
@@ -221,24 +204,20 @@
         }, { passive: true });
     }
 
-    /* ============================================
-       BACK TO TOP BUTTON
-       ============================================ */
+    /* BACK TO TOP BUTTON */
     function initBackToTop() {
         var btn = document.getElementById("backToTop");
         if (!btn) return;
         window.addEventListener("scroll", function() {
-            if (window.scrollY > 400) btn.classList.add("visible");
-            else btn.classList.remove("visible");
+            if (window.scrollY > 400) { btn.classList.add("visible"); btn.classList.add("show"); }
+            else { btn.classList.remove("visible"); btn.classList.remove("show"); }
         }, { passive: true });
         btn.addEventListener("click", function() {
             window.scrollTo({ top: 0, behavior: "smooth" });
         });
     }
 
-    /* ============================================
-       STICKY NAVBAR ON SCROLL
-       ============================================ */
+    /* STICKY NAVBAR ON SCROLL */
     function initStickyNav() {
         var nav = document.querySelector(".navbar");
         if (!nav) return;
@@ -248,25 +227,31 @@
         }, { passive: true });
     }
 
-    /* ============================================
-       FAQ ACCORDION
-       ============================================ */
+    /* MOBILE NAV TOGGLE */
+    function initMobileNav() {
+        var toggle = document.getElementById("navToggle");
+        var links = document.getElementById("navLinks");
+        if (!toggle || !links) return;
+        toggle.addEventListener("click", function() {
+            links.classList.toggle("active");
+            toggle.setAttribute("aria-expanded", links.classList.contains("active"));
+        });
+    }
+
+    /* FAQ ACCORDION */
     function initFAQ() {
         var toggles = document.querySelectorAll(".faq-question");
         toggles.forEach(function(q) {
             q.addEventListener("click", function() {
                 var item = this.closest(".faq-item");
                 var isOpen = item.classList.contains("open");
-                /* Close all */
                 document.querySelectorAll(".faq-item.open").forEach(function(i) { i.classList.remove("open"); });
                 if (!isOpen) item.classList.add("open");
             });
         });
     }
 
-    /* ============================================
-       LIVE VIEWER COUNT SIMULATION
-       ============================================ */
+    /* LIVE VIEWER COUNT SIMULATION */
     function initViewerCount() {
         var el = document.getElementById("viewerCount");
         if (!el) return;
@@ -278,9 +263,7 @@
         }, 3000);
     }
 
-    /* ============================================
-       HERO VIEWER COUNT
-       ============================================ */
+    /* HERO VIEWER COUNT */
     function initHeroViewers() {
         var el = document.getElementById("heroViewers");
         if (!el) return;
@@ -292,9 +275,7 @@
         }, 4000);
     }
 
-    /* ============================================
-       NAVBAR AUTH STATE
-       ============================================ */
+    /* NAVBAR AUTH STATE */
     function initNavAuth() {
         var token = localStorage.getItem("token");
         var authEl = document.getElementById("navAuth");
@@ -312,11 +293,11 @@
         setTimeout(function() { window.location = "/"; }, 500);
     };
 
-    /* ============================================
-       3D CARD TILT ON HOVER
-       ============================================ */
+    /* ================================================
+       3D CARD TILT WITH POINTER TRACKING + GLOW
+       ================================================ */
     function initCardTilt() {
-        var cards = document.querySelectorAll(".plugin-card, .feature-card, .pricing-card");
+        var cards = document.querySelectorAll(".plugin-card, .feature-card, .pricing-card, .gpl-step, .category-card");
         cards.forEach(function(card) {
             card.addEventListener("mousemove", function(e) {
                 var rect = card.getBoundingClientRect();
@@ -324,19 +305,83 @@
                 var y = e.clientY - rect.top;
                 var centerX = rect.width / 2;
                 var centerY = rect.height / 2;
-                var rotateX = ((y - centerY) / centerY) * -4;
-                var rotateY = ((x - centerX) / centerX) * 4;
-                card.style.transform = "perspective(1000px) rotateX(" + rotateX + "deg) rotateY(" + rotateY + "deg) scale(1.02)";
+                var rotateX = ((y - centerY) / centerY) * -5;
+                var rotateY = ((x - centerX) / centerX) * 5;
+                card.style.transform = "perspective(800px) rotateX(" + rotateX + "deg) rotateY(" + rotateY + "deg) translateY(-6px)";
+                card.style.setProperty("--mouse-x", ((x / rect.width) * 100) + "%");
+                card.style.setProperty("--mouse-y", ((y / rect.height) * 100) + "%");
             });
             card.addEventListener("mouseleave", function() {
                 card.style.transform = "";
+                card.style.removeProperty("--mouse-x");
+                card.style.removeProperty("--mouse-y");
             });
         });
     }
 
-    /* ============================================
-       TYPING TEXT EFFECT
-       ============================================ */
+    /* ================================================
+       BRAND ITEM POINTER GLOW
+       ================================================ */
+    function initBrandGlow() {
+        var items = document.querySelectorAll(".brand-item");
+        items.forEach(function(item) {
+            item.addEventListener("mousemove", function(e) {
+                var rect = item.getBoundingClientRect();
+                var x = ((e.clientX - rect.left) / rect.width) * 100;
+                var y = ((e.clientY - rect.top) / rect.height) * 100;
+                item.style.setProperty("--mouse-x", x + "%");
+                item.style.setProperty("--mouse-y", y + "%");
+            });
+        });
+    }
+
+    /* ================================================
+       PARALLAX DEPTH EFFECT ON HERO
+       ================================================ */
+    function initParallax() {
+        var hero = document.querySelector(".hero");
+        if (!hero) return;
+        var orbs = hero.querySelectorAll(".ambient-orb");
+        window.addEventListener("scroll", function() {
+            var scrollY = window.scrollY;
+            var heroH = hero.offsetHeight;
+            if (scrollY > heroH) return;
+            orbs.forEach(function(orb, i) {
+                var speed = 0.15 + (i * 0.08);
+                orb.style.transform = "translateY(" + (scrollY * speed) + "px)";
+            });
+        }, { passive: true });
+    }
+
+    /* ================================================
+       AMBIENT ORB MOUSE TRACKING
+       ================================================ */
+    function initOrbTracking() {
+        var hero = document.querySelector(".hero");
+        if (!hero) return;
+        hero.addEventListener("mousemove", function(e) {
+            var rect = hero.getBoundingClientRect();
+            var x = (e.clientX - rect.left) / rect.width;
+            var y = (e.clientY - rect.top) / rect.height;
+            var orbs = hero.querySelectorAll(".ambient-orb");
+            orbs.forEach(function(orb, i) {
+                var factor = 15 + (i * 10);
+                var ox = (x - 0.5) * factor;
+                var oy = (y - 0.5) * factor;
+                orb.style.transform = "translate(" + ox + "px, " + oy + "px)";
+            });
+        });
+    }
+
+    /* ================================================
+       FOOTER YEAR
+       ================================================ */
+    function initFooterYear() {
+        var el = document.getElementById("footerYear");
+        if (el) el.textContent = new Date().getFullYear();
+    }
+
+    /* TYPING TEXT EFFECT */
     function initTypingEffect() {
         var el = document.getElementById("typingText");
         if (!el) return;
@@ -357,7 +402,6 @@
                 charIdx++;
                 speed = 100;
             }
-
             if (!deleting && charIdx === current.length) {
                 speed = 2000;
                 deleting = true;
@@ -366,15 +410,12 @@
                 wordIdx = (wordIdx + 1) % words.length;
                 speed = 400;
             }
-
             setTimeout(type, speed);
         }
         type();
     }
 
-    /* ============================================
-       PRICING TOGGLE (YEARLY / LIFETIME)
-       ============================================ */
+    /* PRICING TOGGLE */
     function initPricingToggle() {
         var toggles = document.querySelectorAll(".pricing-toggle-btn");
         toggles.forEach(function(btn) {
@@ -385,14 +426,12 @@
         });
     }
 
-    /* ============================================
-       COMPARISON TABLE HIGHLIGHTING
-       ============================================ */
+    /* COMPARISON TABLE HIGHLIGHTING */
     function initComparisonTable() {
-        var rows = document.querySelectorAll(".comparison-row");
+        var rows = document.querySelectorAll(".comparison-row, .price-table-row:not(.header)");
         rows.forEach(function(row) {
             row.addEventListener("mouseenter", function() {
-                this.style.background = "rgba(139, 92, 246, 0.06)";
+                this.style.background = "rgba(124, 92, 231, 0.04)";
             });
             row.addEventListener("mouseleave", function() {
                 this.style.background = "";
@@ -400,9 +439,7 @@
         });
     }
 
-    /* ============================================
-       SMOOTH SCROLL FOR ANCHOR LINKS
-       ============================================ */
+    /* SMOOTH SCROLL FOR ANCHOR LINKS */
     function initSmoothScroll() {
         document.querySelectorAll('a[href^="#"]').forEach(function(a) {
             a.addEventListener("click", function(e) {
@@ -415,9 +452,7 @@
         });
     }
 
-    /* ============================================
-       PREFETCH ON HOVER
-       ============================================ */
+    /* PREFETCH ON HOVER */
     function initPrefetch() {
         var links = document.querySelectorAll("a[href^='/plugin/']");
         links.forEach(function(a) {
@@ -430,11 +465,12 @@
         });
     }
 
-    /* ============================================
+    /* ================================================
        INITIALIZE EVERYTHING ON DOM READY
-       ============================================ */
+       ================================================ */
     function init() {
         initStickyNav();
+        initMobileNav();
         initScrollProgress();
         initBackToTop();
         initScrollReveal();
@@ -445,6 +481,10 @@
         initHeroViewers();
         initNavAuth();
         initCardTilt();
+        initBrandGlow();
+        initParallax();
+        initOrbTracking();
+        initFooterYear();
         initTypingEffect();
         initPricingToggle();
         initComparisonTable();
