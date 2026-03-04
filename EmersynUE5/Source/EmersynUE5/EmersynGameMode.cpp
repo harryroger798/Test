@@ -1825,7 +1825,7 @@ void AEmersynGameMode::BuildBedroom()
     // v46 proved camera works, so restore full room with proper proportions
     FVector RS(450.f, 400.f, 35.f);  // v47: short walls for dollhouse visibility
     float FS = 2.0f;  // v47: large furniture for visibility from isometric view
-    BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWoodHoney, SC::FloorWoodAmber,
+    BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::WoodMaple, SC::WoodOak,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
 
