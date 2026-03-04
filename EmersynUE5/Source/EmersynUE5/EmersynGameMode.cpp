@@ -1,4 +1,4 @@
-// v40: FS moderate 1.2-1.5 (sweet spot between v38 microscopic 0.38 and v39 massive 2.5)
+// v41: Camera farther (maxDim*2.5), pitch -57, FOV 40, target room center. FS 1.1
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1262,24 +1262,24 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float Dist = MaxDim / 0.50f;  // v40: closer for furniture prominence (was 0.42 in v38)
-    return FMath::Clamp(Dist, 400.f, 1800.f);  // v40: tighter clamp for closer view
+    float Dist = MaxDim * 2.5f;  // v41: far enough for true dollhouse overhead view
+    return FMath::Clamp(Dist, 800.f, 3000.f);  // v41: allow much farther camera
 }
 
 // v38: Camera target shifted forward toward furniture zone
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    // v38: target shifted forward (-Y) toward camera, Z at 30% wall for floor focus
-    FVector CamTarget(0.f, -RoomSize.Y * 0.15f, RoomSize.Z * 0.3f);
+    // v41: target at room center, Z at 45% wall height
+    FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.45f);
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-65.f, 35.f, 0.f);  // v38: slightly less steep for better furniture visibility
+    FRotator CamRot(-57.f, 35.f, 0.f);  // v41: -57 pitch for classic dollhouse angle
     FVector CamOffset = CamRot.Vector() * -AutoDist;
     FVector CamPos = CamTarget + CamOffset;
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 55.f;  // v38: wide FOV for full room
+            IsoCam->GetCameraComponent()->FieldOfView = 40.f;  // v41: tighter FOV for clean flat view
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
@@ -1770,9 +1770,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v40: FS=1.4 moderate (bed ~32% of 450 width, height stays proportional)
+    // v41: FS=1.1 baseline for distant camera dollhouse view
     FVector RS(450.f, 400.f, 36.f);
-    float FS = 1.4f;  // v40: sweet spot between v38(0.57) and v39(2.5)
+    float FS = 1.1f;  // v41: moderate for distant overhead camera
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bedroom"));
@@ -1797,9 +1797,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v40: FS=1.3 moderate (counter ~27% of 480 width)
+    // v41: FS=1.1 baseline for distant camera dollhouse view
     FVector RS(480.f, 420.f, 38.f);
-    float FS = 1.3f;  // v40: sweet spot between v38(0.38) and v39(2.2)
+    float FS = 1.1f;  // v41: moderate for distant overhead camera
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1826,9 +1826,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v40: FS=1.2 moderate (fixtures ~20% of 380 width)
+    // v41: FS=1.1 baseline for distant camera dollhouse view
     FVector RS(380.f, 350.f, 30.f);
-    float FS = 1.2f;  // v40: sweet spot between v38(0.46) and v39(2.0)
+    float FS = 1.1f;  // v41: moderate for distant overhead camera
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1849,9 +1849,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v40: FS=1.5 moderate (sofa ~30% of 520 width)
+    // v41: FS=1.2 slightly larger for biggest room
     FVector RS(520.f, 450.f, 42.f);
-    float FS = 1.5f;  // v40: sweet spot between v38(0.45) and v39(2.7)
+    float FS = 1.2f;  // v41: slightly larger for biggest room
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1923,9 +1923,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v40: FS=1.3 moderate (desks ~20% of 480 width)
+    // v41: FS=1.1 baseline for distant camera
     FVector RS(480.f, 420.f, 38.f);
-    float FS = 1.3f;  // v40: sweet spot between v38(0.41) and v39(2.3)
+    float FS = 1.1f;  // v41: moderate for distant overhead camera
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1957,9 +1957,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v40: FS=1.3 moderate (counter ~25% of 500 width)
+    // v41: FS=1.1 baseline for distant camera
     FVector RS(500.f, 440.f, 40.f);
-    float FS = 1.3f;  // v40: sweet spot between v38(0.43) and v39(2.4)
+    float FS = 1.1f;  // v41: moderate for distant overhead camera
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2063,9 +2063,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v40: FS=1.4 moderate (displays ~25% of 550 width)
+    // v41: FS=1.2 slightly larger for biggest room
     FVector RS(550.f, 480.f, 44.f);
-    float FS = 1.4f;  // v40: sweet spot between v38(0.47) and v39(2.5)
+    float FS = 1.2f;  // v41: slightly larger for biggest room
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2097,9 +2097,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v40: FS=1.4 moderate (machines ~25% of 450 width)
+    // v41: FS=1.1 baseline for distant camera
     FVector RS(450.f, 400.f, 36.f);
-    float FS = 1.4f;  // v40: sweet spot between v38(0.49) and v39(2.6)
+    float FS = 1.1f;  // v41: moderate for distant overhead camera
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
