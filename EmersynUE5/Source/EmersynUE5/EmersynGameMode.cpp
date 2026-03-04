@@ -1,4 +1,4 @@
-// v42: FOV 75, pitch -70, dist maxDim*1.4, target Z=wallH*0.15. True overhead dollhouse
+// v43: Walls 8u tall, FS 2.2, pitch -75, FOV 75, dist maxDim*1.4. Short walls + big furniture
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1269,11 +1269,10 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 // v38: Camera target shifted forward toward furniture zone
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    // v42: target near floor level, Z at 15% wall height
-    float WallH = FMath::Max(RoomSize.X, RoomSize.Y) * 0.12f;
-    FVector CamTarget(0.f, 0.f, WallH * 0.15f);
+    // v43: target at floor level, pitch -75 for near-top-down
+    FVector CamTarget(0.f, 0.f, 1.f);
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-70.f, 35.f, 0.f);  // v42: -70 steep overhead for dollhouse
+    FRotator CamRot(-75.f, 35.f, 0.f);  // v43: -75 near top-down for dollhouse
     FVector CamOffset = CamRot.Vector() * -AutoDist;
     FVector CamPos = CamTarget + CamOffset;
 
@@ -1771,9 +1770,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v41: FS=1.1 baseline for distant camera dollhouse view
-    FVector RS(450.f, 400.f, 36.f);
-    float FS = 1.1f;  // v41: moderate for distant overhead camera
+    // v43: Short walls (8u), FS=2.2 for visible furniture from above
+    FVector RS(450.f, 400.f, 8.f);
+    float FS = 2.2f;  // v43: large furniture fills floor
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bedroom"));
@@ -1798,9 +1797,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v41: FS=1.1 baseline for distant camera dollhouse view
-    FVector RS(480.f, 420.f, 38.f);
-    float FS = 1.1f;  // v41: moderate for distant overhead camera
+    // v43: Short walls (8u), FS=2.2 for visible furniture from above
+    FVector RS(480.f, 420.f, 8.f);
+    float FS = 2.2f;  // v43: large furniture fills floor
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1827,9 +1826,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v41: FS=1.1 baseline for distant camera dollhouse view
-    FVector RS(380.f, 350.f, 30.f);
-    float FS = 1.1f;  // v41: moderate for distant overhead camera
+    // v43: Short walls (8u), FS=2.2 for visible furniture from above
+    FVector RS(380.f, 350.f, 8.f);
+    float FS = 2.2f;  // v43: large furniture fills floor
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1850,9 +1849,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v41: FS=1.2 slightly larger for biggest room
-    FVector RS(520.f, 450.f, 42.f);
-    float FS = 1.2f;  // v41: slightly larger for biggest room
+    // v43: Short walls (10u for bigger room), FS=2.4
+    FVector RS(520.f, 450.f, 10.f);
+    float FS = 2.4f;  // v43: largest room gets biggest furniture
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1878,7 +1877,7 @@ void AEmersynGameMode::BuildLivingRoom()
 
 void AEmersynGameMode::BuildGarden()
 {
-    FVector RS(600.f, 500.f, 100.f);
+    FVector RS(600.f, 500.f, 12.f);  // v43: short walls for outdoor
     SetLightingPreset(ELightingPreset::Day);
     SpawnSky();
     SetupPostProcessing();
@@ -1886,7 +1885,7 @@ void AEmersynGameMode::BuildGarden()
     SpawnDirectionalLight(FRotator(-45.f, 130.f, 0.f), 35.f, LightKeyColor);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
-    SpawnRoomLighting(FVector(0, 0, 200), FVector(RS.X, RS.Y, 400));
+    SpawnRoomLighting(FVector(0, 0, 50), FVector(RS.X, RS.Y, 100));
     SpawnRoomLabel(TEXT("Garden"));
 
     // Fence around back and left sides (procedural fence posts + rails)
@@ -1924,9 +1923,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v41: FS=1.1 baseline for distant camera
-    FVector RS(480.f, 420.f, 38.f);
-    float FS = 1.1f;  // v41: moderate for distant overhead camera
+    // v43: Short walls (8u), FS=2.2
+    FVector RS(480.f, 420.f, 8.f);
+    float FS = 2.2f;  // v43: large furniture fills floor
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1958,9 +1957,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v41: FS=1.1 baseline for distant camera
-    FVector RS(500.f, 440.f, 40.f);
-    float FS = 1.1f;  // v41: moderate for distant overhead camera
+    // v43: Short walls (8u), FS=2.2
+    FVector RS(500.f, 440.f, 8.f);
+    float FS = 2.2f;  // v43: large furniture fills floor
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -1983,7 +1982,7 @@ void AEmersynGameMode::BuildShop()
 
 void AEmersynGameMode::BuildPlayground()
 {
-    FVector RS(550.f, 480.f, 100.f);
+    FVector RS(550.f, 480.f, 12.f);  // v43: short walls for outdoor
     SetLightingPreset(ELightingPreset::Day);
     SpawnSky();
     SetupPostProcessing();
@@ -1991,7 +1990,7 @@ void AEmersynGameMode::BuildPlayground()
     SpawnDirectionalLight(FRotator(-42.f, 135.f, 0.f), 32.f, LightKeyColor);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
-    SpawnRoomLighting(FVector(0, 0, 200), FVector(RS.X, RS.Y, 400));
+    SpawnRoomLighting(FVector(0, 0, 50), FVector(RS.X, RS.Y, 100));
     SpawnRoomLabel(TEXT("Playground"));
 
     // Low brick border
@@ -2022,7 +2021,7 @@ void AEmersynGameMode::BuildPlayground()
 
 void AEmersynGameMode::BuildPark()
 {
-    FVector RS(650.f, 550.f, 100.f);
+    FVector RS(650.f, 550.f, 12.f);  // v43: short walls for outdoor
     SetLightingPreset(ELightingPreset::Sunset);
     SpawnSky();
     SetupPostProcessing();
@@ -2030,7 +2029,7 @@ void AEmersynGameMode::BuildPark()
     SpawnDirectionalLight(FRotator(-30.f, 160.f, 0.f), 28.f, LightKeyColor);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
-    SpawnRoomLighting(FVector(0, 0, 200), FVector(RS.X, RS.Y, 400));
+    SpawnRoomLighting(FVector(0, 0, 50), FVector(RS.X, RS.Y, 100));
     SpawnRoomLabel(TEXT("Park"));
 
     // Trees
@@ -2064,9 +2063,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v41: FS=1.2 slightly larger for biggest room
-    FVector RS(550.f, 480.f, 44.f);
-    float FS = 1.2f;  // v41: slightly larger for biggest room
+    // v43: Short walls (10u for biggest room), FS=2.4
+    FVector RS(550.f, 480.f, 10.f);
+    float FS = 2.4f;  // v43: largest room gets biggest furniture
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2098,9 +2097,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v41: FS=1.1 baseline for distant camera
-    FVector RS(450.f, 400.f, 36.f);
-    float FS = 1.1f;  // v41: moderate for distant overhead camera
+    // v43: Short walls (8u), FS=2.2
+    FVector RS(450.f, 400.f, 8.f);
+    float FS = 2.2f;  // v43: large furniture fills floor
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
@@ -2128,7 +2127,7 @@ void AEmersynGameMode::BuildArcade()
 
 void AEmersynGameMode::BuildAmusementPark()
 {
-    FVector RS(700.f, 600.f, 100.f);
+    FVector RS(700.f, 600.f, 12.f);  // v43: short walls for outdoor
     SetLightingPreset(ELightingPreset::Sunset);
     SpawnSky();
     SetupPostProcessing();
@@ -2136,7 +2135,7 @@ void AEmersynGameMode::BuildAmusementPark()
     SpawnDirectionalLight(FRotator(-35.f, 155.f, 0.f), 28.f, LightKeyColor);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
-    SpawnRoomLighting(FVector(0, 0, 200), FVector(RS.X, RS.Y, 400));
+    SpawnRoomLighting(FVector(0, 0, 50), FVector(RS.X, RS.Y, 100));
     SpawnRoomLabel(TEXT("Amusement Park"));
 
     // Carousel (procedural: base platform + center pole + canopy + horses)
