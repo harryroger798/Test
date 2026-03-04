@@ -1,4 +1,4 @@
-// v37: Closer camera (div 0.38), bigger furniture (2x multiplier), walls 12%, pitch -67, Sims dollhouse
+// v38: 1 wall only (back), walls 8%, furniture spread to center/front, camera target forward
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1258,27 +1258,28 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
     }
 }
 
-// v37: Much closer camera - room should fill 70-80% of screen
+// v38: Camera distance for Sims dollhouse — room fills 70-80% screen
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float Dist = MaxDim / 0.38f;  // v37: closer camera, room fills screen
-    return FMath::Clamp(Dist, 400.f, 2000.f);  // v37: tighter clamp
+    float Dist = MaxDim / 0.42f;  // v38: slightly farther for full room view
+    return FMath::Clamp(Dist, 450.f, 2200.f);  // v38: adjusted clamp
 }
 
-// v37: Closer camera, Sims dollhouse view (pitch -67, yaw 35)
+// v38: Camera target shifted forward toward furniture zone
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.5f);  // v37: look at room center height
+    // v38: target shifted forward (-Y) toward camera, Z at 30% wall for floor focus
+    FVector CamTarget(0.f, -RoomSize.Y * 0.15f, RoomSize.Z * 0.3f);
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-67.f, 35.f, 0.f);  // v37: keep steep pitch + shifted yaw
+    FRotator CamRot(-65.f, 35.f, 0.f);  // v38: slightly less steep for better furniture visibility
     FVector CamOffset = CamRot.Vector() * -AutoDist;
     FVector CamPos = CamTarget + CamOffset;
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 55.f;  // v37: slightly wider for better framing
+            IsoCam->GetCameraComponent()->FieldOfView = 55.f;  // v38: wide FOV for full room
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
@@ -1311,24 +1312,21 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v25: Cutaway walls — only BACK wall + LEFT wall (Sims dollhouse style)
-    // Back wall (far side)
+    // v38: BACK WALL ONLY — single wall for cleaner dollhouse view
     SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, WallPattern, WallBase, WallAccent);
-    // Left wall
-    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z, WallPattern, WallBase, WallAccent);
-    // NO front wall, NO right wall — camera sees inside like Sims
+    // v38: Left wall as LOW wall (half height) for depth context
+    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z * 0.5f, WallPattern, WallBase * 0.9f, WallAccent * 0.9f);
 
     // v29: NO CEILING — removed so top-down camera can see inside the room
     // SpawnTexturedCeiling(FVector(0, 0, RS.Z), FVector(RS.X, RS.Y, 0), CeilingColor);
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
 
-    // Baseboards on visible walls
+    // v38: Baseboards on back wall + half-height left wall
     SpawnBaseboard(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), 8.f, SC::WoodMedium);
     SpawnBaseboard(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), 8.f, SC::WoodMedium);
 
-    // Crown molding on visible walls
+    // v38: Crown molding only on back wall (left wall is half height)
     SpawnCrownMolding(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, SC::WoodLight);
-    SpawnCrownMolding(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z, SC::WoodLight);
 
     SpawnRoomLabel(RoomLabel);
 }
@@ -1772,85 +1770,88 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v37: wall=12% floorW=54, furniture S=wallH*2.0/tallest(95)=1.14
-    FVector RS(450.f, 400.f, 54.f);
-    float FS = 1.14f;  // v37: much bigger furniture for visibility
+    // v38: wall=8% floorW=36, furniture centered, FS=wallH*1.5/tallest(95)=0.57
+    FVector RS(450.f, 400.f, 36.f);
+    float FS = 0.57f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bedroom"));
 
-    SpawnDetailedBed(FVector(100, 250, 0), SC::WoodLight, SC::FabricPink, FLinearColor::White, FS);
-    SpawnDetailedTable(FVector(-80, 300, 0), SC::WoodLight, SC::WoodMedium, FS);
-    SpawnDetailedLamp(FVector(-80, 300, 35*FS), SC::MetalGold, SC::FabricCream, FS);
-    SpawnDetailedDresser(FVector(-350, 100, 0), SC::WoodOak, SC::MetalGold, FS);
-    SpawnDetailedBookshelf(FVector(-250, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.6f);
-    SpawnDetailedRug(FVector(0, 50, 0), SC::CarpetPink, SC::FabricCoral, FVector(200, 140, 0));
-    SpawnDetailedDesk(FVector(250, -100, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(250, -200, 0), FRotator::ZeroRotator, SC::FabricPink, SC::MetalBlack, FS);
-    SpawnDetailedPlant(FVector(350, 300, 0), SC::FabricCream, SC::PlantGreen, FS);
-    SpawnDetailedMirror(FVector(-400, -50, 40*FS), FRotator::ZeroRotator, SC::MetalGold, FS);
-    SpawnPictureFrame(FVector(0, 380, 50*FS), FRotator::ZeroRotator, FVector(55*FS, 3, 40*FS), SC::WoodMedium, SC::FabricLavender);
+    // v38: Furniture spread to center and front (closer to camera = larger on screen)
+    SpawnDetailedBed(FVector(0, 50, 0), SC::WoodLight, SC::FabricPink, FLinearColor::White, FS);  // center
+    SpawnDetailedTable(FVector(-120, -80, 0), SC::WoodLight, SC::WoodMedium, FS);  // front-left
+    SpawnDetailedLamp(FVector(-120, -80, 35*FS), SC::MetalGold, SC::FabricCream, FS);
+    SpawnDetailedDresser(FVector(150, -60, 0), SC::WoodOak, SC::MetalGold, FS);  // front-right
+    SpawnDetailedBookshelf(FVector(-200, 200, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.6f);  // back-left
+    SpawnDetailedRug(FVector(0, -30, 0), SC::CarpetPink, SC::FabricCoral, FVector(200, 140, 0));  // center
+    SpawnDetailedDesk(FVector(200, -150, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, FS);  // front-right
+    SpawnDetailedChair(FVector(200, -250, 0), FRotator::ZeroRotator, SC::FabricPink, SC::MetalBlack, FS);
+    SpawnDetailedPlant(FVector(250, 200, 0), SC::FabricCream, SC::PlantGreen, FS);  // back-right
+    SpawnDetailedMirror(FVector(-100, 300, 40*FS), FRotator::ZeroRotator, SC::MetalGold, FS);  // on back wall
+    SpawnPictureFrame(FVector(0, 380, 30*FS), FRotator::ZeroRotator, FVector(55*FS, 3, 40*FS), SC::WoodMedium, SC::FabricLavender);
     SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(50, -50, 0), FRotator(0, 45, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(80, -120, 0), FRotator(0, 45, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);  // front
     SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v37: wall=12% floorW=58, furniture S=wallH*2.0/tallest(150)=0.77
-    FVector RS(480.f, 420.f, 58.f);
-    float FS = 0.77f;  // v37: much bigger furniture for visibility
+    // v38: wall=8% floorW=38, furniture centered, FS=wallH*1.5/tallest(150)=0.38
+    FVector RS(480.f, 420.f, 38.f);
+    float FS = 0.38f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
 
-    SpawnDetailedFridge(FVector(-380, 200, 0), SC::MetalChrome, SC::MetalSilver, FS);
-    SpawnDetailedStove(FVector(-380, 0, 0), SC::MetalChrome, FS);
-    SpawnDetailedCounter(FVector(0, 350, 0), SC::MarbleWhite, SC::WoodOak, FS);
-    SpawnDetailedCounter(FVector(180, 350, 0), SC::MarbleWhite, SC::WoodOak, FS);
-    SpawnDetailedSink(FVector(-180, 350, 0), SC::MetalChrome, SC::MetalSilver, FS);
-    SpawnDetailedTable(FVector(120, -50, 0), SC::WoodMaple, SC::WoodMedium, FS);
-    SpawnDetailedChair(FVector(20, -50, 0), FRotator(0, 90, 0), SC::FabricSage, SC::WoodMaple, FS);
-    SpawnDetailedChair(FVector(220, -50, 0), FRotator(0, -90, 0), SC::FabricSage, SC::WoodMaple, FS);
-    SpawnDetailedChair(FVector(120, -150, 0), FRotator::ZeroRotator, SC::FabricSage, SC::WoodMaple, FS);
-    SpawnDetailedChair(FVector(120, 50, 0), FRotator(0, 180, 0), SC::FabricSage, SC::WoodMaple, FS);
-    SpawnDetailedShelf(FVector(-380, -150, RS.Z*0.7f), FRotator::ZeroRotator, SC::WoodOak, FS);
-    SpawnDetailedPlant(FVector(350, 350, 0), SC::FabricCream, SC::PlantGreen, FS);
-    SpawnDetailedRug(FVector(120, -50, 0), SC::FabricCream, SC::FabricSage, FVector(180, 140, 0));
+    // v38: Furniture spread to center/front
+    SpawnDetailedFridge(FVector(-150, -100, 0), SC::MetalChrome, SC::MetalSilver, FS);  // front-left
+    SpawnDetailedStove(FVector(-150, 100, 0), SC::MetalChrome, FS);  // left-center
+    SpawnDetailedCounter(FVector(0, 250, 0), SC::MarbleWhite, SC::WoodOak, FS);  // near back wall
+    SpawnDetailedCounter(FVector(180, 250, 0), SC::MarbleWhite, SC::WoodOak, FS);
+    SpawnDetailedSink(FVector(-100, 250, 0), SC::MetalChrome, SC::MetalSilver, FS);
+    SpawnDetailedTable(FVector(80, -30, 0), SC::WoodMaple, SC::WoodMedium, FS);  // center
+    SpawnDetailedChair(FVector(-20, -30, 0), FRotator(0, 90, 0), SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedChair(FVector(180, -30, 0), FRotator(0, -90, 0), SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedChair(FVector(80, -130, 0), FRotator::ZeroRotator, SC::FabricSage, SC::WoodMaple, FS);  // front
+    SpawnDetailedChair(FVector(80, 70, 0), FRotator(0, 180, 0), SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedShelf(FVector(-200, 200, RS.Z*0.7f), FRotator::ZeroRotator, SC::WoodOak, FS);
+    SpawnDetailedPlant(FVector(250, 200, 0), SC::FabricCream, SC::PlantGreen, FS);
+    SpawnDetailedRug(FVector(80, -30, 0), SC::FabricCream, SC::FabricSage, FVector(180, 140, 0));
     SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Mia"), FVector(50, 100, 0), FRotator(0, -90, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricGreen);
+    SpawnCharacterMesh(TEXT("Mia"), FVector(50, -80, 0), FRotator(0, -90, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricGreen);  // front
     SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v37: wall=12% floorW=46, furniture S=wallH*2.0/tallest(100)=0.92
-    FVector RS(380.f, 350.f, 46.f);
-    float FS = 0.92f;  // v37: much bigger furniture
+    // v38: wall=8% floorW=30, furniture centered, FS=wallH*1.5/tallest(100)=0.46
+    FVector RS(380.f, 350.f, 30.f);
+    float FS = 0.46f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
 
-    SpawnDetailedBathtub(FVector(120, 200, 0), SC::MarbleWhite, SC::MetalGold, FS);
-    SpawnDetailedToilet(FVector(-200, 200, 0), FRotator::ZeroRotator, SC::MarbleWhite, FS);
-    SpawnDetailedSink(FVector(-300, -50, 0), SC::MetalChrome, SC::MetalSilver, FS);
-    SpawnDetailedMirror(FVector(-340, -50, 40*FS), FRotator::ZeroRotator, SC::MetalChrome, FS);
-    SpawnDetailedRug(FVector(120, 50, 0), SC::FabricMint, SC::TileWhite, FVector(120, 80, 0));
-    SpawnDetailedShelf(FVector(-300, 200, RS.Z*0.7f), FRotator::ZeroRotator, SC::MetalChrome, FS);
-    SpawnDetailedPlant(FVector(250, 250, 0), SC::FabricCream, SC::PlantGreen, FS);
+    // v38: Furniture spread to center/front
+    SpawnDetailedBathtub(FVector(50, 50, 0), SC::MarbleWhite, SC::MetalGold, FS);  // center
+    SpawnDetailedToilet(FVector(-100, -80, 0), FRotator::ZeroRotator, SC::MarbleWhite, FS);  // front-left
+    SpawnDetailedSink(FVector(-100, 150, 0), SC::MetalChrome, SC::MetalSilver, FS);  // back-left
+    SpawnDetailedMirror(FVector(-100, 280, 30*FS), FRotator::ZeroRotator, SC::MetalChrome, FS);  // on back wall
+    SpawnDetailedRug(FVector(50, -30, 0), SC::FabricMint, SC::TileWhite, FVector(120, 80, 0));  // center-front
+    SpawnDetailedShelf(FVector(-150, 200, RS.Z*0.7f), FRotator::ZeroRotator, SC::MetalChrome, FS);
+    SpawnDetailedPlant(FVector(150, 150, 0), SC::FabricCream, SC::PlantGreen, FS);
     SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricBlue);
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -100, 0), FRotator(0, 0, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricBlue);  // front
     SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v37: wall=12% floorW=62, furniture S=wallH*2.0/tallest(140)=0.89
-    FVector RS(520.f, 450.f, 62.f);
-    float FS = 0.89f;  // v37: much bigger furniture
+    // v38: wall=8% floorW=42, furniture centered, FS=wallH*1.5/tallest(140)=0.45
+    FVector RS(520.f, 450.f, 42.f);
+    float FS = 0.45f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1922,9 +1923,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v37: wall=12% floorW=58, furniture S=wallH*2.0/tallest(140)=0.83
-    FVector RS(480.f, 420.f, 58.f);
-    float FS = 0.83f;  // v37: much bigger furniture
+    // v38: wall=8% floorW=38, furniture centered, FS=wallH*1.5/tallest(140)=0.41
+    FVector RS(480.f, 420.f, 38.f);
+    float FS = 0.41f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1956,9 +1957,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v37: wall=12% floorW=60, furniture S=wallH*2.0/tallest(140)=0.86
-    FVector RS(500.f, 440.f, 60.f);
-    float FS = 0.86f;  // v37: much bigger furniture
+    // v38: wall=8% floorW=40, furniture centered, FS=wallH*1.5/tallest(140)=0.43
+    FVector RS(500.f, 440.f, 40.f);
+    float FS = 0.43f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2062,9 +2063,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v37: wall=12% floorW=66, furniture S=wallH*2.0/tallest(140)=0.94
-    FVector RS(550.f, 480.f, 66.f);
-    float FS = 0.94f;  // v37: much bigger furniture
+    // v38: wall=8% floorW=44, furniture centered, FS=wallH*1.5/tallest(140)=0.47
+    FVector RS(550.f, 480.f, 44.f);
+    float FS = 0.47f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2096,9 +2097,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v37: wall=12% floorW=54, furniture S=wallH*2.0/tallest(110)=0.98
-    FVector RS(450.f, 400.f, 54.f);
-    float FS = 0.98f;  // v37: much bigger furniture
+    // v38: wall=8% floorW=36, furniture centered, FS=wallH*1.5/tallest(110)=0.49
+    FVector RS(450.f, 400.f, 36.f);
+    float FS = 0.49f;  // v38: 8% walls, furniture 1.5x wall
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
