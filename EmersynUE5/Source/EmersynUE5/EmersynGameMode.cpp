@@ -565,7 +565,7 @@ void AEmersynGameMode::FillWater(TArray<FColor>& P, int32 W, int32 H, FLinearCol
 UTexture2D* AEmersynGameMode::GenerateProceduralTexture(ETexturePattern Pattern, FLinearColor BaseColor, FLinearColor AccentColor, int32 Size)
 {
     FString Key = FString::Printf(TEXT("%d_%f_%f_%f_%f_%f_%f_%d"), (int)Pattern, BaseColor.R, BaseColor.G, BaseColor.B, AccentColor.R, AccentColor.G, AccentColor.B, Size);
-    if (UTexture2D** Found = TextureCache.Find(Key)) return *Found;
+    if (TObjectPtr<UTexture2D>* Found = TextureCache.Find(Key)) return *Found;
     TArray<FColor> Pixels; Pixels.SetNum(Size * Size);
     switch (Pattern) {
     case ETexturePattern::WoodGrain: FillWoodGrain(Pixels, Size, Size, BaseColor, AccentColor); break;
