@@ -1,4 +1,4 @@
-// v53: TRUE SIMS ISOMETRIC — 35deg yaw + 65deg pitch, walls 15u, furniture 3.5x, L-shaped cutaway. Camera 1.8x distance. Floor-dominant view.
+// v55: TRUE OVERHEAD DOLLHOUSE — furniture scale 0.5x (was 2.0x causing 110u tall objects vs 20u walls), walls 80u, camera 4x altitude at 75deg pitch. Floor fills 60%+ screen.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1292,34 +1292,33 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v54: SIMS ISOMETRIC CAMERA — fixed distance/FOV from v53
-// v53 had furniture too large (3.5x) and camera too close (1.8x) + FOV too tight (45)
-// v54: distance 2.5x, FOV 55, furniture 2.0x — room fills screen without clipping
+// v55: TRUE OVERHEAD DOLLHOUSE CAMERA
+// ROOT CAUSE: v54 furniture at S=2.0 made objects 110u tall vs 20u walls
+// v55: furniture 0.5x (max ~27u), walls 80u, camera 4x altitude, 75deg pitch
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 2.5f;  // v54: farther back so room fits on screen
-    AutoDist = FMath::Clamp(AutoDist, 800.f, 2500.f);
+    float AutoDist = MaxDim * 4.0f;  // v55: MUCH farther — 4x room size for true overhead
+    AutoDist = FMath::Clamp(AutoDist, 1200.f, 4000.f);
 
-    // v54: 60deg pitch = steep overhead (floor dominant, walls visible as short strips)
-    // 35deg yaw = classic Sims isometric corner (see back wall + left wall as L-shape)
-    float PitchDeg = 60.f;
+    // v55: 75deg pitch = nearly straight down (floor fills 60-70% of screen)
+    // 35deg yaw = Sims corner angle (see back wall + left wall as L-shape)
+    float PitchDeg = 75.f;
     float YawDeg = 35.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
-    float CamZ = AutoDist * FMath::Sin(PitchRad);
-    float CamHoriz = AutoDist * FMath::Cos(PitchRad);
-    // v54: Camera offset by yaw angle — looking at room from corner
-    float CamX = -CamHoriz * FMath::Sin(YawRad);  // offset left
-    float CamY = -CamHoriz * FMath::Cos(YawRad);  // offset front
+    float CamZ = AutoDist * FMath::Sin(PitchRad);  // very high up
+    float CamHoriz = AutoDist * FMath::Cos(PitchRad);  // small horizontal offset
+    float CamX = -CamHoriz * FMath::Sin(YawRad);
+    float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v54: Look at center of room, slightly above floor for better framing
-    FVector LookTarget(0.f, 0.f, RoomSize.Z * 0.3f);
+    // v55: Look at floor center
+    FVector LookTarget(0.f, 0.f, 0.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 55.f;  // v54: wider FOV so room fills screen properly
+    float FOV = 45.f;  // v55: tighter FOV at this distance focuses on room
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1829,9 +1828,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v54: 20u walls (visible but not dominant), 2.0x furniture (no clipping)
-    FVector RS(450.f, 400.f, 20.f);
-    float FS = 2.0f;  // v54: properly sized furniture, no overlap
+    // v55: 80u walls (taller than furniture), 0.5x furniture (objects ~27u tall, fits under walls)
+    FVector RS(450.f, 400.f, 80.f);
+    float FS = 0.5f;  // v55: furniture ~27u tall, walls 80u — proper scale
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::WoodMaple, SC::WoodOak,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
@@ -1855,9 +1854,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(480.f, 420.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(480.f, 420.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1884,9 +1883,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(380.f, 350.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(380.f, 350.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1907,9 +1906,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(520.f, 450.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(520.f, 450.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1935,7 +1934,7 @@ void AEmersynGameMode::BuildLivingRoom()
 
 void AEmersynGameMode::BuildGarden()
 {
-    FVector RS(600.f, 500.f, 20.f);  // v54: slightly taller fence
+    FVector RS(600.f, 500.f, 80.f);  // v55: 80u fence height
     SetLightingPreset(ELightingPreset::Day);
     // v44: NO sky dome
     // SpawnSky();
@@ -1984,9 +1983,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(480.f, 420.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(480.f, 420.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -2018,9 +2017,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(500.f, 440.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(500.f, 440.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2043,7 +2042,7 @@ void AEmersynGameMode::BuildShop()
 
 void AEmersynGameMode::BuildPlayground()
 {
-    FVector RS(550.f, 480.f, 20.f);  // v54: slightly taller backdrop
+    FVector RS(550.f, 480.f, 80.f);  // v55: 80u fence height
     SetLightingPreset(ELightingPreset::Day);
     // v44: NO sky dome
     // SpawnSky();
@@ -2085,7 +2084,7 @@ void AEmersynGameMode::BuildPlayground()
 
 void AEmersynGameMode::BuildPark()
 {
-    FVector RS(650.f, 550.f, 20.f);  // v54: slightly taller backdrop
+    FVector RS(650.f, 550.f, 80.f);  // v55: 80u fence height
     SetLightingPreset(ELightingPreset::Sunset);
     // v44: NO sky dome
     // SpawnSky();
@@ -2130,9 +2129,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(550.f, 480.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(550.f, 480.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2164,9 +2163,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v54: 20u walls, 2.0x furniture
-    FVector RS(450.f, 400.f, 20.f);
-    float FS = 2.0f;
+    // v55: 80u walls, 0.5x furniture
+    FVector RS(450.f, 400.f, 80.f);
+    float FS = 0.5f;
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
@@ -2194,7 +2193,7 @@ void AEmersynGameMode::BuildArcade()
 
 void AEmersynGameMode::BuildAmusementPark()
 {
-    FVector RS(700.f, 600.f, 20.f);  // v54: slightly taller for visibility
+    FVector RS(700.f, 600.f, 80.f);  // v55: 80u for visibility
     SetLightingPreset(ELightingPreset::Sunset);
     // v44: NO sky dome
     // SpawnSky();
