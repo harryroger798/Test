@@ -1,4 +1,4 @@
-// v32: Stub walls (15% floor width), FOV 40, distance/0.54, Sims dollhouse look
+// v33: Auto-scaled furniture (90% of wall), wall=20% floor width, FOV 40, Sims dollhouse
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1258,23 +1258,22 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
     }
 }
 
-// v32: Auto-scaling camera distance - Bedrock formula with tighter framing
+// v33: Auto-scaling camera distance
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
     float FloorDiag = FMath::Sqrt(RoomSize.X * RoomSize.X + RoomSize.Y * RoomSize.Y);
     float RoomDiag3D = FMath::Sqrt(FloorDiag * FloorDiag + RoomSize.Z * RoomSize.Z);
-    float FOVRad = FMath::DegreesToRadians(40.f);  // v32: tighter FOV
-    float Dist = (RoomDiag3D / 0.54f) / (2.f * FMath::Tan(FOVRad * 0.5f));  // v32: divisor 0.54
-    return FMath::Clamp(Dist, 1400.f, 4500.f);  // v32: raised clamp
+    float FOVRad = FMath::DegreesToRadians(40.f);
+    float Dist = (RoomDiag3D / 0.54f) / (2.f * FMath::Tan(FOVRad * 0.5f));
+    return FMath::Clamp(Dist, 1400.f, 4500.f);
 }
 
-// v32: Auto-scaling camera setup - Sims dollhouse view
+// v33: Auto-scaling camera setup - Sims dollhouse view
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    // Camera target = center of room volume (not floor!)
     FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.5f);
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-65.f, 45.f, 0.f);  // v32: Steep dollhouse angle
+    FRotator CamRot(-65.f, 45.f, 0.f);
     FVector CamOffset = CamRot.Vector() * -AutoDist;
     FVector CamPos = CamTarget + CamOffset;
 
@@ -1775,102 +1774,106 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    FVector RS(450.f, 400.f, 67.f);  // v32: Wall height = 15% of floor width (450*0.15=67)
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(95)=0.85
+    FVector RS(450.f, 400.f, 90.f);
+    float FS = 0.85f;  // v33: auto-scaled furniture
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bedroom"));
 
-    // v30: 3x furniture scale (Bedrock #2) + adjusted positions for lower walls
-    SpawnDetailedBed(FVector(100, 250, 0), SC::WoodLight, SC::FabricPink, FLinearColor::White, 3.0f);
-    SpawnDetailedTable(FVector(-80, 300, 0), SC::WoodLight, SC::WoodMedium, 1.5f);
-    SpawnDetailedLamp(FVector(-80, 300, 65), SC::MetalGold, SC::FabricCream, 1.2f);
-    SpawnDetailedDresser(FVector(-350, 100, 0), SC::WoodOak, SC::MetalGold, 3.0f);
-    SpawnDetailedBookshelf(FVector(-250, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 2.5f);
+    SpawnDetailedBed(FVector(100, 250, 0), SC::WoodLight, SC::FabricPink, FLinearColor::White, FS);
+    SpawnDetailedTable(FVector(-80, 300, 0), SC::WoodLight, SC::WoodMedium, FS);
+    SpawnDetailedLamp(FVector(-80, 300, 35*FS), SC::MetalGold, SC::FabricCream, FS);
+    SpawnDetailedDresser(FVector(-350, 100, 0), SC::WoodOak, SC::MetalGold, FS);
+    SpawnDetailedBookshelf(FVector(-250, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.6f);
     SpawnDetailedRug(FVector(0, 50, 0), SC::CarpetPink, SC::FabricCoral, FVector(200, 140, 0));
-    SpawnDetailedDesk(FVector(250, -100, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, 2.5f);
-    SpawnDetailedChair(FVector(250, -200, 0), FRotator::ZeroRotator, SC::FabricPink, SC::MetalBlack, 2.5f);
-    SpawnDetailedPlant(FVector(350, 300, 0), SC::FabricCream, SC::PlantGreen, 2.5f);
-    SpawnDetailedMirror(FVector(-400, -50, 80), FRotator::ZeroRotator, SC::MetalGold, 2.5f);
-    SpawnPictureFrame(FVector(0, 380, 120), FRotator::ZeroRotator, FVector(55, 3, 40), SC::WoodMedium, SC::FabricLavender);
-    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 80.f, 100.f, 50.f, SC::WoodLight, SC::GlassBlue);
+    SpawnDetailedDesk(FVector(250, -100, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(250, -200, 0), FRotator::ZeroRotator, SC::FabricPink, SC::MetalBlack, FS);
+    SpawnDetailedPlant(FVector(350, 300, 0), SC::FabricCream, SC::PlantGreen, FS);
+    SpawnDetailedMirror(FVector(-400, -50, 40*FS), FRotator::ZeroRotator, SC::MetalGold, FS);
+    SpawnPictureFrame(FVector(0, 380, 50*FS), FRotator::ZeroRotator, FVector(55*FS, 3, 40*FS), SC::WoodMedium, SC::FabricLavender);
+    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(50, -50, 0), FRotator(0, 45, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(50, -50, 0), FRotator(0, 45, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildKitchen()
 {
-        FVector RS(480.f, 420.f, 72.f);  // v32: Wall height = 15% of floor width (480*0.15=72)
-        BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
-            ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
-            ELightingPreset::Morning, TEXT("Kitchen"));
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(150)=0.576
+    FVector RS(480.f, 420.f, 96.f);
+    float FS = 0.58f;  // v33: auto-scaled to keep fridge under wall height
+    BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
+        ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
+        ELightingPreset::Morning, TEXT("Kitchen"));
 
-    // v30: 3x furniture scale
-    SpawnDetailedFridge(FVector(-380, 200, 0), SC::MetalChrome, SC::MetalSilver, 2.5f);
-    SpawnDetailedStove(FVector(-380, 0, 0), SC::MetalChrome, 2.5f);
-    SpawnDetailedCounter(FVector(0, 350, 0), SC::MarbleWhite, SC::WoodOak, 2.5f);
-    SpawnDetailedCounter(FVector(180, 350, 0), SC::MarbleWhite, SC::WoodOak, 2.5f);
-    SpawnDetailedSink(FVector(-180, 350, 0), SC::MetalChrome, SC::MetalSilver, 2.0f);
-    SpawnDetailedTable(FVector(120, -50, 0), SC::WoodMaple, SC::WoodMedium, 3.0f);
-    SpawnDetailedChair(FVector(20, -50, 0), FRotator(0, 90, 0), SC::FabricSage, SC::WoodMaple, 2.5f);
-    SpawnDetailedChair(FVector(220, -50, 0), FRotator(0, -90, 0), SC::FabricSage, SC::WoodMaple, 2.5f);
-    SpawnDetailedChair(FVector(120, -150, 0), FRotator::ZeroRotator, SC::FabricSage, SC::WoodMaple, 2.5f);
-    SpawnDetailedChair(FVector(120, 50, 0), FRotator(0, 180, 0), SC::FabricSage, SC::WoodMaple, 2.5f);
-    SpawnDetailedShelf(FVector(-380, -150, 120), FRotator::ZeroRotator, SC::WoodOak, 2.0f);
-    SpawnDetailedPlant(FVector(350, 350, 80), SC::FabricCream, SC::PlantGreen, 1.5f);
+    SpawnDetailedFridge(FVector(-380, 200, 0), SC::MetalChrome, SC::MetalSilver, FS);
+    SpawnDetailedStove(FVector(-380, 0, 0), SC::MetalChrome, FS);
+    SpawnDetailedCounter(FVector(0, 350, 0), SC::MarbleWhite, SC::WoodOak, FS);
+    SpawnDetailedCounter(FVector(180, 350, 0), SC::MarbleWhite, SC::WoodOak, FS);
+    SpawnDetailedSink(FVector(-180, 350, 0), SC::MetalChrome, SC::MetalSilver, FS);
+    SpawnDetailedTable(FVector(120, -50, 0), SC::WoodMaple, SC::WoodMedium, FS);
+    SpawnDetailedChair(FVector(20, -50, 0), FRotator(0, 90, 0), SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedChair(FVector(220, -50, 0), FRotator(0, -90, 0), SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedChair(FVector(120, -150, 0), FRotator::ZeroRotator, SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedChair(FVector(120, 50, 0), FRotator(0, 180, 0), SC::FabricSage, SC::WoodMaple, FS);
+    SpawnDetailedShelf(FVector(-380, -150, RS.Z*0.7f), FRotator::ZeroRotator, SC::WoodOak, FS);
+    SpawnDetailedPlant(FVector(350, 350, 0), SC::FabricCream, SC::PlantGreen, FS);
     SpawnDetailedRug(FVector(120, -50, 0), SC::FabricCream, SC::FabricSage, FVector(180, 140, 0));
-    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 70.f, 100.f, 50.f, SC::WoodLight, SC::GlassBlue);
+    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Mia"), FVector(50, 100, 0), FRotator(0, -90, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricGreen);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Mia"), FVector(50, 100, 0), FRotator(0, -90, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricGreen);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildBathroom()
 {
-    FVector RS(380.f, 350.f, 57.f);  // v32: Wall height = 15% of floor width (380*0.15=57)
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(100)=0.684
+    FVector RS(380.f, 350.f, 76.f);
+    float FS = 0.68f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
 
-    // v30: 3x furniture scale
-    SpawnDetailedBathtub(FVector(120, 200, 0), SC::MarbleWhite, SC::MetalGold, 2.5f);
-    SpawnDetailedToilet(FVector(-200, 200, 0), FRotator::ZeroRotator, SC::MarbleWhite, 3.0f);
-    SpawnDetailedSink(FVector(-300, -50, 0), SC::MetalChrome, SC::MetalSilver, 2.5f);
-    SpawnDetailedMirror(FVector(-340, -50, 90), FRotator::ZeroRotator, SC::MetalChrome, 2.5f);
+    SpawnDetailedBathtub(FVector(120, 200, 0), SC::MarbleWhite, SC::MetalGold, FS);
+    SpawnDetailedToilet(FVector(-200, 200, 0), FRotator::ZeroRotator, SC::MarbleWhite, FS);
+    SpawnDetailedSink(FVector(-300, -50, 0), SC::MetalChrome, SC::MetalSilver, FS);
+    SpawnDetailedMirror(FVector(-340, -50, 40*FS), FRotator::ZeroRotator, SC::MetalChrome, FS);
     SpawnDetailedRug(FVector(120, 50, 0), SC::FabricMint, SC::TileWhite, FVector(120, 80, 0));
-    SpawnDetailedShelf(FVector(-300, 200, 100), FRotator::ZeroRotator, SC::MetalChrome, 1.8f);
-    SpawnDetailedPlant(FVector(250, 250, 0), SC::FabricCream, SC::PlantGreen, 2.0f);
-    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 70.f, 80.f, 40.f, SC::WoodLight, SC::GlassBlue);
+    SpawnDetailedShelf(FVector(-300, 200, RS.Z*0.7f), FRotator::ZeroRotator, SC::MetalChrome, FS);
+    SpawnDetailedPlant(FVector(250, 250, 0), SC::FabricCream, SC::PlantGreen, FS);
+    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricBlue);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricBlue);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    FVector RS(520.f, 450.f, 78.f);  // v32: Wall height = 15% of floor width (520*0.15=78)
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(140 bookshelf)=0.67
+    FVector RS(520.f, 450.f, 104.f);
+    float FS = 0.67f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
 
-    // v30: 3x furniture scale
-    SpawnDetailedSofa(FVector(100, -50, 0), FRotator::ZeroRotator, SC::FabricNavy, SC::FabricCream, SC::WoodDark, 3.0f);
-    SpawnDetailedTable(FVector(100, -200, 0), SC::WoodWalnut, SC::MetalGold, 2.0f);
-    SpawnDetailedTV(FVector(-50, 350, 0), FRotator::ZeroRotator, SC::MetalBlack, 3.0f);
-    SpawnDetailedBookshelf(FVector(-420, 150, 0), FRotator::ZeroRotator, SC::WoodWalnut, 2.8f);
-    SpawnDetailedLamp(FVector(350, -20, 0), SC::MetalBrass, SC::FabricCream, 2.2f);
+    SpawnDetailedSofa(FVector(100, -50, 0), FRotator::ZeroRotator, SC::FabricNavy, SC::FabricCream, SC::WoodDark, FS);
+    SpawnDetailedTable(FVector(100, -200, 0), SC::WoodWalnut, SC::MetalGold, FS);
+    SpawnDetailedTV(FVector(-50, 350, 0), FRotator::ZeroRotator, SC::MetalBlack, FS);
+    SpawnDetailedBookshelf(FVector(-420, 150, 0), FRotator::ZeroRotator, SC::WoodWalnut, FS * 0.7f);
+    SpawnDetailedLamp(FVector(350, -20, 0), SC::MetalBrass, SC::FabricCream, FS);
     SpawnDetailedRug(FVector(100, -120, 0), SC::CarpetBeige, SC::WoodDark, FVector(250, 180, 0));
-    SpawnDetailedPlant(FVector(420, 350, 0), SC::FabricCream, SC::PlantGreen, 3.0f);
-    SpawnDetailedPlant(FVector(-420, -100, 0), SC::MetalCopper, SC::PlantDark, 2.5f);
-    SpawnPictureFrame(FVector(250, 420, 120), FRotator::ZeroRotator, FVector(50, 3, 35), SC::MetalGold, SC::FabricCoral);
-    SpawnPictureFrame(FVector(-250, 420, 130), FRotator::ZeroRotator, FVector(40, 3, 48), SC::WoodDark, SC::FabricBlue);
-    SpawnDetailedTable(FVector(-300, -50, 0), SC::WoodDark, SC::MetalGold, 1.5f);
-    SpawnDetailedLamp(FVector(-300, -50, 65), SC::MetalGold, SC::FabricLavender, 1.0f);
-    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 70.f, 120.f, 50.f, SC::WoodMedium, SC::GlassBlue);
+    SpawnDetailedPlant(FVector(420, 350, 0), SC::FabricCream, SC::PlantGreen, FS);
+    SpawnDetailedPlant(FVector(-420, -100, 0), SC::MetalCopper, SC::PlantDark, FS);
+    SpawnPictureFrame(FVector(250, 420, 50*FS), FRotator::ZeroRotator, FVector(50*FS, 3, 35*FS), SC::MetalGold, SC::FabricCoral);
+    SpawnPictureFrame(FVector(-250, 420, 55*FS), FRotator::ZeroRotator, FVector(40*FS, 3, 48*FS), SC::WoodDark, SC::FabricBlue);
+    SpawnDetailedTable(FVector(-300, -50, 0), SC::WoodDark, SC::MetalGold, FS);
+    SpawnDetailedLamp(FVector(-300, -50, 35*FS), SC::MetalGold, SC::FabricLavender, FS * 0.7f);
+    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodMedium, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(-100, -100, 0), FRotator(0, 45, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricCoral);
-    SpawnCharacterMesh(TEXT("Ava"), FVector(200, -250, 0), FRotator(0, 120, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(-100, -100, 0), FRotator(0, 45, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricCoral);
+    SpawnCharacterMesh(TEXT("Ava"), FVector(200, -250, 0), FRotator(0, 120, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildGarden()
@@ -1921,67 +1924,61 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-        FVector RS(480.f, 420.f, 72.f);  // v32: Wall height = 15% of floor width (480*0.15=72)
-        BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
-            ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
-            ELightingPreset::Morning, TEXT("School"));
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(140 bookshelf)=0.617
+    FVector RS(480.f, 420.f, 96.f);
+    float FS = 0.62f;
+    BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
+        ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
+        ELightingPreset::Morning, TEXT("School"));
 
-    // v30: 3x furniture scale
-    SpawnDetailedDesk(FVector(0, 300, 0), FRotator::ZeroRotator, SC::WoodOak, SC::MetalBlack, 3.0f);
-    // Chalkboard on back wall (procedural: frame + green board)
-    SpawnTexturedBox(FVector(0, 380, 170), FVector(120, 3, 60), ETexturePattern::Concrete, FLinearColor(0.15f, 0.32f, 0.18f), FLinearColor(0.10f, 0.25f, 0.12f));
-    SpawnTexturedBox(FVector(0, 378, 170), FVector(125, 2, 65), ETexturePattern::WoodGrain, SC::WoodDark, SC::WoodEbony);
-    // Student desks (2 rows) - v30 scaled
-    SpawnDetailedDesk(FVector(-200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 2.0f);
-    SpawnDetailedDesk(FVector(0, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 2.0f);
-    SpawnDetailedDesk(FVector(200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 2.0f);
-    SpawnDetailedDesk(FVector(-200, -200, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 2.0f);
-    SpawnDetailedDesk(FVector(0, -200, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 2.0f);
-    SpawnDetailedDesk(FVector(200, -200, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 2.0f);
-    SpawnDetailedChair(FVector(-200, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 2.0f);
-    SpawnDetailedChair(FVector(0, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 2.0f);
-    SpawnDetailedChair(FVector(200, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 2.0f);
-    SpawnDetailedChair(FVector(-200, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 2.0f);
-    SpawnDetailedChair(FVector(0, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 2.0f);
-    SpawnDetailedChair(FVector(200, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 2.0f);
-    SpawnDetailedBookshelf(FVector(-400, 100, 0), FRotator::ZeroRotator, SC::WoodOak, 2.5f);
-    // Backpacks (procedural: box + flap)
-    SpawnTexturedBox(FVector(350, -200, 12), FVector(10, 6, 14), ETexturePattern::Fabric, SC::FabricRed, SC::FabricBlue);
-    SpawnTexturedBox(FVector(350, -205, 20), FVector(10, 1, 8), ETexturePattern::Fabric, SC::FabricRed * 0.9f, SC::FabricBlue * 0.9f);
-    // Plant
-    SpawnDetailedPlant(FVector(380, 350, 0), SC::FabricCream, SC::PlantGreen, 2.2f);
-    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 70.f, 100.f, 50.f, SC::WoodLight, SC::GlassBlue);
+    SpawnDetailedDesk(FVector(0, 300, 0), FRotator::ZeroRotator, SC::WoodOak, SC::MetalBlack, FS);
+    SpawnTexturedBox(FVector(0, 380, RS.Z*0.7f), FVector(120*FS, 3, 60*FS), ETexturePattern::Concrete, FLinearColor(0.15f, 0.32f, 0.18f), FLinearColor(0.10f, 0.25f, 0.12f));
+    SpawnTexturedBox(FVector(0, 378, RS.Z*0.7f), FVector(125*FS, 2, 65*FS), ETexturePattern::WoodGrain, SC::WoodDark, SC::WoodEbony);
+    SpawnDetailedDesk(FVector(-200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, FS);
+    SpawnDetailedDesk(FVector(0, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, FS);
+    SpawnDetailedDesk(FVector(200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, FS);
+    SpawnDetailedDesk(FVector(-200, -200, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, FS);
+    SpawnDetailedDesk(FVector(0, -200, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, FS);
+    SpawnDetailedDesk(FVector(200, -200, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(-200, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(0, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(200, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(-200, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(0, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(200, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnDetailedBookshelf(FVector(-400, 100, 0), FRotator::ZeroRotator, SC::WoodOak, FS * 0.65f);
+    SpawnTexturedBox(FVector(350, -200, 12*FS), FVector(10*FS, 6*FS, 14*FS), ETexturePattern::Fabric, SC::FabricRed, SC::FabricBlue);
+    SpawnDetailedPlant(FVector(380, 350, 0), SC::FabricCream, SC::PlantGreen, FS);
+    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
 
-    SpawnCharacterMesh(TEXT("Leo"), FVector(-100, 200, 0), FRotator(0, 180, 0), 5.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricBlue);
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -100, 0), FRotator(0, 0, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Leo"), FVector(-100, 200, 0), FRotator(0, 180, 0), FS * 2.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricBlue);
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -100, 0), FRotator(0, 0, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildShop()
 {
-    FVector RS(500.f, 440.f, 75.f);  // v32: Wall height = 15% of floor width (500*0.15=75)
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(140 bookshelf)=0.643
+    FVector RS(500.f, 440.f, 100.f);
+    float FS = 0.64f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
 
-    // v30: 3x furniture scale
-    SpawnDetailedCounter(FVector(0, -200, 0), SC::MarbleWhite, SC::WoodOak, 2.5f);
-    // Cash register on counter (procedural: box + screen + buttons)
-    SpawnTexturedBox(FVector(0, -170, 85), FVector(15, 12, 10), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
-    SpawnTexturedBox(FVector(0, -178, 95), FVector(12, 2, 8), ETexturePattern::Metal, FLinearColor(0.1f, 0.1f, 0.12f), FLinearColor(0.2f, 0.2f, 0.25f));
-    SpawnTexturedBox(FVector(0, -165, 80), FVector(10, 8, 2), ETexturePattern::Metal, SC::MetalSilver, SC::MetalChrome);
-    SpawnDetailedBookshelf(FVector(-300, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 2.8f);
-    SpawnDetailedBookshelf(FVector(-100, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 2.8f);
-    SpawnDetailedBookshelf(FVector(100, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 2.8f);
-    SpawnDetailedBookshelf(FVector(300, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 2.8f);
-    SpawnDetailedTable(FVector(0, 50, 0), SC::WoodLight, SC::WoodMedium, 2.5f);
-    SpawnDetailedPlant(FVector(400, 350, 0), SC::FabricCream, SC::PlantGreen, 2.5f);
-    SpawnDetailedPlant(FVector(-420, -100, 0), SC::MetalCopper, SC::PlantDark, 2.5f);
-    SpawnDetailedShelf(FVector(-430, 50, 110), FRotator::ZeroRotator, SC::WoodOak, 2.0f);
+    SpawnDetailedCounter(FVector(0, -200, 0), SC::MarbleWhite, SC::WoodOak, FS);
+    SpawnTexturedBox(FVector(0, -170, 40*FS), FVector(15*FS, 12*FS, 10*FS), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    SpawnDetailedBookshelf(FVector(-300, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.65f);
+    SpawnDetailedBookshelf(FVector(-100, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.65f);
+    SpawnDetailedBookshelf(FVector(100, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.65f);
+    SpawnDetailedBookshelf(FVector(300, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.65f);
+    SpawnDetailedTable(FVector(0, 50, 0), SC::WoodLight, SC::WoodMedium, FS);
+    SpawnDetailedPlant(FVector(400, 350, 0), SC::FabricCream, SC::PlantGreen, FS);
+    SpawnDetailedPlant(FVector(-420, -100, 0), SC::MetalCopper, SC::PlantDark, FS);
+    SpawnDetailedShelf(FVector(-430, 50, RS.Z*0.7f), FRotator::ZeroRotator, SC::WoodOak, FS);
     SpawnDetailedRug(FVector(0, 50, 0), SC::FabricCream, SC::FabricPeach, FVector(180, 140, 0));
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -100, 0), FRotator(0, 180, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPurple);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -100, 0), FRotator(0, 180, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPurple);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildPlayground()
@@ -2067,73 +2064,66 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    FVector RS(550.f, 480.f, 82.f);  // v32: Wall height = 15% of floor width (550*0.15=82)
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(140)=0.707
+    FVector RS(550.f, 480.f, 110.f);
+    float FS = 0.71f;
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
 
-    // Escalator (procedural: ramp + side rails + steps)
-    SpawnTexturedBox(FVector(0, 0, 60), FVector(40, 120, 5), ETexturePattern::Metal, SC::MetalSilver, SC::MetalBlack);
-    SpawnTexturedBox(FVector(-42, 0, 65), FVector(3, 120, 30), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
-    SpawnTexturedBox(FVector(42, 0, 65), FVector(3, 120, 30), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    // Escalator (scaled to room)
+    SpawnTexturedBox(FVector(0, 0, 30*FS), FVector(40*FS, 120*FS, 5*FS), ETexturePattern::Metal, SC::MetalSilver, SC::MetalBlack);
+    SpawnTexturedBox(FVector(-42*FS, 0, 35*FS), FVector(3*FS, 120*FS, 30*FS), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    SpawnTexturedBox(FVector(42*FS, 0, 35*FS), FVector(3*FS, 120*FS, 30*FS), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
     for (int32 I = 0; I < 8; I++) {
-        float SY = -100.f + I * 28.f;
-        float SZ = 20.f + I * 15.f;
-        SpawnTexturedBox(FVector(0, SY, SZ), FVector(38, 10, 2), ETexturePattern::Metal, SC::MetalSilver * 0.9f, SC::MetalChrome);
+        float SY = (-100.f + I * 28.f) * FS;
+        float SZ = (20.f + I * 10.f) * FS;
+        SpawnTexturedBox(FVector(0, SY, SZ), FVector(38*FS, 10*FS, 2*FS), ETexturePattern::Metal, SC::MetalSilver * 0.9f, SC::MetalChrome);
     }
-    // Planters
-    SpawnDetailedPlant(FVector(-300, -200, 0), SC::MarbleWhite, SC::PlantGreen, 1.5f);
-    SpawnDetailedPlant(FVector(300, -200, 0), SC::MarbleWhite, SC::PlantDark, 1.5f);
-    SpawnDetailedPlant(FVector(-300, 200, 0), SC::MarbleWhite, SC::PlantGreen, 1.2f);
-    SpawnDetailedPlant(FVector(300, 200, 0), SC::MarbleWhite, SC::PlantDark, 1.2f);
-    // Benches
-    SpawnDetailedBench(FVector(-200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalChrome, 1.0f);
-    SpawnDetailedBench(FVector(200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalChrome, 1.0f);
-    // Shop display (counter + shelf)
-    SpawnDetailedCounter(FVector(-400, 100, 0), SC::MarbleWhite, SC::WoodMaple, 0.8f);
-    SpawnDetailedShelf(FVector(-400, 350, 200), FRotator::ZeroRotator, SC::WoodMaple, 1.0f);
-    SpawnDetailedShelf(FVector(-400, 350, 250), FRotator::ZeroRotator, SC::WoodMaple, 1.0f);
-    // Lamp
-    SpawnDetailedLamp(FVector(400, 350, 0), SC::MetalChrome, SC::FabricCream, 1.2f);
+    SpawnDetailedPlant(FVector(-300, -200, 0), SC::MarbleWhite, SC::PlantGreen, FS);
+    SpawnDetailedPlant(FVector(300, -200, 0), SC::MarbleWhite, SC::PlantDark, FS);
+    SpawnDetailedPlant(FVector(-300, 200, 0), SC::MarbleWhite, SC::PlantGreen, FS);
+    SpawnDetailedPlant(FVector(300, 200, 0), SC::MarbleWhite, SC::PlantDark, FS);
+    SpawnDetailedBench(FVector(-200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalChrome, FS);
+    SpawnDetailedBench(FVector(200, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalChrome, FS);
+    SpawnDetailedCounter(FVector(-400, 100, 0), SC::MarbleWhite, SC::WoodMaple, FS);
+    SpawnDetailedShelf(FVector(-400, 350, RS.Z*0.6f), FRotator::ZeroRotator, SC::WoodMaple, FS);
+    SpawnDetailedShelf(FVector(-400, 350, RS.Z*0.8f), FRotator::ZeroRotator, SC::WoodMaple, FS);
+    SpawnDetailedLamp(FVector(400, 350, 0), SC::MetalChrome, SC::FabricCream, FS);
 
-    SpawnCharacterMesh(TEXT("Ava"), FVector(100, -150, 0), FRotator(0, -90, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
-    SpawnCharacterMesh(TEXT("Mia"), FVector(-100, -100, 0), FRotator(0, 45, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricTeal);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Ava"), FVector(100, -150, 0), FRotator(0, -90, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
+    SpawnCharacterMesh(TEXT("Mia"), FVector(-100, -100, 0), FRotator(0, 45, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricTeal);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildArcade()
 {
-    FVector RS(450.f, 400.f, 67.f);  // v32: Wall height = 15% of floor width (450*0.15=67)
+    // v33: wall=20% of floorW, furniture S=wallH*0.9/tallest(110 cabinet)=0.736
+    FVector RS(450.f, 400.f, 90.f);
+    float FS = 0.74f;
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
 
-    // Arcade cabinets
-    SpawnDetailedCabinet(FVector(-200, 250, 0), SC::FabricBlue, FLinearColor(0.2f, 0.8f, 0.2f), 1.2f);
-    SpawnDetailedCabinet(FVector(0, 250, 0), SC::FabricRed, FLinearColor(0.2f, 0.2f, 0.9f), 1.2f);
-    SpawnDetailedCabinet(FVector(200, 250, 0), SC::FabricPurple, FLinearColor(0.9f, 0.9f, 0.1f), 1.2f);
-    // Claw machine (procedural: glass box + base + claw mechanism)
-    SpawnTexturedBox(FVector(-300, 0, 40), FVector(30, 25, 40), ETexturePattern::Metal, SC::FabricYellow, SC::FabricGreen);
-    SpawnTexturedBox(FVector(-300, 0, 82), FVector(28, 23, 3), ETexturePattern::Metal, SC::FabricYellow * 0.9f, SC::FabricGreen * 0.9f);
-    // Glass sides (semi-transparent look)
-    SpawnTexturedBox(FVector(-300, 0, 55), FVector(26, 21, 25), ETexturePattern::Metal, SC::GlassBlue, FLinearColor(0.8f, 0.9f, 1.0f, 0.5f));
-    // Prize toys inside
-    SpawnSphere(FVector(-310, -5, 10), 5, 6, SC::FabricPink);
-    SpawnSphere(FVector(-295, 5, 10), 5, 6, SC::FabricBlue);
-    SpawnSphere(FVector(-305, 8, 10), 4, 6, SC::FabricYellow);
-    // Counter with register
-    SpawnDetailedCounter(FVector(300, 0, 0), SC::MetalBlack, SC::WoodDark, 0.8f);
-    // Table and chairs
-    SpawnDetailedTable(FVector(0, -150, 0), SC::WoodDark, SC::MetalBlack, 0.8f);
-    SpawnDetailedChair(FVector(-60, -150, 0), FRotator(0, 90, 0), SC::FabricRed, SC::MetalBlack, 0.8f);
-    SpawnDetailedChair(FVector(60, -150, 0), FRotator(0, -90, 0), SC::FabricBlue, SC::MetalBlack, 0.8f);
-    // Neon-like colored lights
-    SpawnLight(FVector(-200, 0, 250), 15.f, FLinearColor(1.0f, 0.1f, 0.8f), 400.f);
-    SpawnLight(FVector(200, 0, 250), 15.f, FLinearColor(0.1f, 0.8f, 1.0f), 400.f);
+    SpawnDetailedCabinet(FVector(-200, 250, 0), SC::FabricBlue, FLinearColor(0.2f, 0.8f, 0.2f), FS);
+    SpawnDetailedCabinet(FVector(0, 250, 0), SC::FabricRed, FLinearColor(0.2f, 0.2f, 0.9f), FS);
+    SpawnDetailedCabinet(FVector(200, 250, 0), SC::FabricPurple, FLinearColor(0.9f, 0.9f, 0.1f), FS);
+    SpawnTexturedBox(FVector(-300, 0, 40*FS), FVector(30*FS, 25*FS, 40*FS), ETexturePattern::Metal, SC::FabricYellow, SC::FabricGreen);
+    SpawnTexturedBox(FVector(-300, 0, 82*FS), FVector(28*FS, 23*FS, 3*FS), ETexturePattern::Metal, SC::FabricYellow * 0.9f, SC::FabricGreen * 0.9f);
+    SpawnTexturedBox(FVector(-300, 0, 55*FS), FVector(26*FS, 21*FS, 25*FS), ETexturePattern::Metal, SC::GlassBlue, FLinearColor(0.8f, 0.9f, 1.0f, 0.5f));
+    SpawnSphere(FVector(-310, -5, 10*FS), 5*FS, 6, SC::FabricPink);
+    SpawnSphere(FVector(-295, 5, 10*FS), 5*FS, 6, SC::FabricBlue);
+    SpawnSphere(FVector(-305, 8, 10*FS), 4*FS, 6, SC::FabricYellow);
+    SpawnDetailedCounter(FVector(300, 0, 0), SC::MetalBlack, SC::WoodDark, FS);
+    SpawnDetailedTable(FVector(0, -150, 0), SC::WoodDark, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(-60, -150, 0), FRotator(0, 90, 0), SC::FabricRed, SC::MetalBlack, FS);
+    SpawnDetailedChair(FVector(60, -150, 0), FRotator(0, -90, 0), SC::FabricBlue, SC::MetalBlack, FS);
+    SpawnLight(FVector(-200, 0, RS.Z), 15.f, FLinearColor(1.0f, 0.1f, 0.8f), 400.f);
+    SpawnLight(FVector(200, 0, RS.Z), 15.f, FLinearColor(0.1f, 0.8f, 1.0f), 400.f);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricHotPink);
-    SpawnCharacterMesh(TEXT("Leo"), FVector(-150, 100, 0), FRotator(0, 180, 0), 5.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricNavy);
-    SetupAutoCamera(RS);  // v31: auto-scaling camera
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricHotPink);
+    SpawnCharacterMesh(TEXT("Leo"), FVector(-150, 100, 0), FRotator(0, 180, 0), FS * 2.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricNavy);
+    SetupAutoCamera(RS);
 }
 
 void AEmersynGameMode::BuildAmusementPark()
