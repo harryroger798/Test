@@ -1,4 +1,4 @@
-// v48: Steeper camera (75deg pitch, maxDim*3.0 altitude) for true Sims dollhouse overhead view. v47 proved camera lock works (stable across frames) but angle was too low.
+// v49: Ultra-short walls (15u), camera maxDim*4.0, FS 3.0. v48 proved steep camera works but walls still too dominant. Make walls barely-visible borders.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1292,16 +1292,16 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v48: Steep isometric camera — 75deg pitch for true Sims dollhouse overhead view
+// v49: High altitude camera for true Sims dollhouse view
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 3.0f;  // v48: much higher for true overhead dollhouse
-    AutoDist = FMath::Clamp(AutoDist, 1000.f, 3500.f);
+    float AutoDist = MaxDim * 4.0f;  // v49: very high for overhead dollhouse
+    AutoDist = FMath::Clamp(AutoDist, 1200.f, 4000.f);
 
-    // v48: Steep isometric (75° below horizontal = nearly overhead, 45° yaw)
-    float PitchDeg = 75.f;
-    float YawDeg = 45.f;
+    // v49: 70° pitch (good balance between overhead and perspective), 35° yaw
+    float PitchDeg = 70.f;
+    float YawDeg = 35.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
@@ -1313,7 +1313,7 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 
     FVector LookDir = (FVector::ZeroVector - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 45.f;  // v48: narrow FOV for tight dollhouse framing
+    float FOV = 35.f;  // v49: very narrow FOV for tight dollhouse framing
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1363,10 +1363,10 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v38: BACK WALL ONLY — single wall for cleaner dollhouse view
+    // v49: BACK WALL — ultra-short border
     SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, WallPattern, WallBase, WallAccent);
-    // v38: Left wall as LOW wall (half height) for depth context
-    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z * 0.5f, WallPattern, WallBase * 0.9f, WallAccent * 0.9f);
+    // v49: LEFT WALL — same ultra-short height for thin border look
+    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z, WallPattern, WallBase * 0.9f, WallAccent * 0.9f);
 
     // v29: NO CEILING — removed so top-down camera can see inside the room
     // SpawnTexturedCeiling(FVector(0, 0, RS.Z), FVector(RS.X, RS.Y, 0), CeilingColor);
@@ -1821,10 +1821,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v47: Sims-quality bedroom — short walls (35u), large furniture (FS 2.0)
-    // v46 proved camera works, so restore full room with proper proportions
-    FVector RS(450.f, 400.f, 35.f);  // v47: short walls for dollhouse visibility
-    float FS = 2.0f;  // v47: large furniture for visibility from isometric view
+    // v49: Ultra-short walls (15u), huge furniture (FS 3.0) for true dollhouse proportions
+    FVector RS(450.f, 400.f, 15.f);  // v49: walls are barely-visible borders
+    float FS = 3.0f;  // v49: large furniture clearly visible from overhead
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::WoodMaple, SC::WoodOak,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
@@ -1854,9 +1853,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v44: Walls 45u, FS=1.5
-    FVector RS(480.f, 420.f, 45.f);
-    float FS = 1.5f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(480.f, 420.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1883,9 +1882,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v44: Walls 45u, FS=1.5
-    FVector RS(380.f, 350.f, 45.f);
-    float FS = 1.5f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(380.f, 350.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1906,9 +1905,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v44: Walls 50u, FS=1.6 for bigger room
-    FVector RS(520.f, 450.f, 50.f);
-    float FS = 1.6f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(520.f, 450.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1934,7 +1933,7 @@ void AEmersynGameMode::BuildLivingRoom()
 
 void AEmersynGameMode::BuildGarden()
 {
-    FVector RS(600.f, 500.f, 50.f);  // v44: walls 50u for outdoor
+    FVector RS(600.f, 500.f, 15.f);  // v49: ultra-short fence posts
     SetLightingPreset(ELightingPreset::Day);
     // v44: NO sky dome
     // SpawnSky();
@@ -1983,9 +1982,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v44: Walls 45u, FS=1.5
-    FVector RS(480.f, 420.f, 45.f);
-    float FS = 1.5f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(480.f, 420.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -2017,9 +2016,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v44: Walls 45u, FS=1.5
-    FVector RS(500.f, 440.f, 45.f);
-    float FS = 1.5f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(500.f, 440.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2042,7 +2041,7 @@ void AEmersynGameMode::BuildShop()
 
 void AEmersynGameMode::BuildPlayground()
 {
-    FVector RS(550.f, 480.f, 50.f);  // v44: walls 50u for outdoor
+    FVector RS(550.f, 480.f, 15.f);  // v49: ultra-short for dollhouse
     SetLightingPreset(ELightingPreset::Day);
     // v44: NO sky dome
     // SpawnSky();
@@ -2056,9 +2055,9 @@ void AEmersynGameMode::BuildPlayground()
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
     SpawnRoomLabel(TEXT("Playground"));
 
-    // Low brick border
-    SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), 40.f, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
-    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), 40.f, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
+    // v49: Ultra-short brick border
+    SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), 15.f, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
+    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), 15.f, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
 
     // Swing set
     SpawnDetailedSwing(FVector(-200, 100, 0), SC::MetalSilver, SC::WoodOak, 1.3f);
@@ -2084,7 +2083,7 @@ void AEmersynGameMode::BuildPlayground()
 
 void AEmersynGameMode::BuildPark()
 {
-    FVector RS(650.f, 550.f, 50.f);  // v44: walls 50u for outdoor
+    FVector RS(650.f, 550.f, 15.f);  // v49: ultra-short for dollhouse
     SetLightingPreset(ELightingPreset::Sunset);
     // v44: NO sky dome
     // SpawnSky();
@@ -2129,9 +2128,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v44: Walls 50u, FS=1.6 for bigger room
-    FVector RS(550.f, 480.f, 50.f);
-    float FS = 1.6f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(550.f, 480.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2163,9 +2162,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v44: Walls 45u, FS=1.5
-    FVector RS(450.f, 400.f, 45.f);
-    float FS = 1.5f;
+    // v49: Ultra-short walls (15u), FS=3.0
+    FVector RS(450.f, 400.f, 15.f);
+    float FS = 3.0f;
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
@@ -2193,7 +2192,7 @@ void AEmersynGameMode::BuildArcade()
 
 void AEmersynGameMode::BuildAmusementPark()
 {
-    FVector RS(700.f, 600.f, 50.f);  // v44: walls 50u for outdoor
+    FVector RS(700.f, 600.f, 15.f);  // v49: ultra-short for dollhouse
     SetLightingPreset(ELightingPreset::Sunset);
     // v44: NO sky dome
     // SpawnSky();
