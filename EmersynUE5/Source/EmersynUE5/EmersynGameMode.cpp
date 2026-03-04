@@ -172,7 +172,10 @@ AEmersynGameMode::AEmersynGameMode()
     bCameraMoving = false;
     CamMoveAlpha = 0.f;
     IsoCam = nullptr;
-    M_VertexColor = nullptr;
+    // Load M_VertexColor material at constructor/CDO time (UE5 requirement)
+    static ConstructorHelpers::FObjectFinder<UMaterial> MatFinder(TEXT("/Game/Materials/M_VertexColor"));
+    if (MatFinder.Succeeded()) { M_VertexColor = MatFinder.Object; }
+    else { M_VertexColor = nullptr; }
     DefaultMID = nullptr;
     RoomIndex = 0;
     RoomTimer = 0.f;
@@ -205,8 +208,7 @@ AEmersynGameMode::AEmersynGameMode()
 void AEmersynGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
     Super::InitGame(MapName, Options, ErrorMessage);
-    static ConstructorHelpers::FObjectFinder<UMaterial> MatFinder(TEXT("/Game/Materials/M_VertexColor"));
-    if (MatFinder.Succeeded()) { M_VertexColor = MatFinder.Object; }
+    // Material is now loaded in the constructor per UE5 API contract
 }
 
 // ============================================================
@@ -996,6 +998,12 @@ AActor* AEmersynGameMode::SpawnMesh(const float* Verts, const float* Norms, cons
     FVector Location, FRotator Rotation, FVector Scale,
     ETexturePattern Pattern, FLinearColor Base, FLinearColor Accent, float Brightness)
 {
+    // Validate raw buffer inputs to prevent null pointer dereference
+    if (!Verts || !Tris || NumVerts <= 0 || NumTris <= 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SpawnMesh: Invalid mesh data (Verts=%p, Tris=%p, NumVerts=%d, NumTris=%d)"), Verts, Tris, NumVerts, NumTris);
+        return nullptr;
+    }
     AActor* A = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform(Rotation, Location, Scale));
     if (!A) return nullptr;
     A->SetRootComponent(NewObject<USceneComponent>(A));

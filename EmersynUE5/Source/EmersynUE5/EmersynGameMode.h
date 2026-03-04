@@ -41,11 +41,12 @@ public:
     void LoadRoom(const FString& RoomName);
     void ClearRoom();
     FString CurrentRoom;
-    TArray<AActor*> RoomActors;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<AActor>> RoomActors;
     TArray<FString> RoomList;
-    int32 RoomIndex;
-    float RoomTimer;
-    float RoomDuration;
+    int32 RoomIndex = 0;
+    float RoomTimer = 0.f;
+    float RoomDuration = 7.f;
 
     // Material
     UPROPERTY() UMaterial* M_VertexColor;
@@ -55,11 +56,12 @@ public:
     UPROPERTY() ACameraActor* IsoCam;
     FVector CamStartPos, CamTargetPos;
     FRotator CamStartRot, CamTargetRot;
-    float CamMoveAlpha;
-    bool bCameraMoving;
+    float CamMoveAlpha = 0.f;
+    bool bCameraMoving = false;
 
     // Texture cache
-    TMap<FString, UTexture2D*> TextureCache;
+    UPROPERTY(Transient)
+    TMap<FString, TObjectPtr<UTexture2D>> TextureCache;
 
     // Noise
     float SimpleNoise(float X, float Y) const;
@@ -87,12 +89,12 @@ public:
     FLinearColor ApplySimsLighting(FLinearColor BaseColor, FVector Normal, FVector WorldPos, float AO = 1.0f) const;
 
     // v25: Lighting preset system
-    ELightingPreset CurrentLightPreset;
+    ELightingPreset CurrentLightPreset = ELightingPreset::Day;
     FLinearColor LightKeyColor;
     FLinearColor LightFillColor;
     FLinearColor LightAmbientColor;
-    float LightKeyIntensity;
-    float LightFillIntensity;
+    float LightKeyIntensity = 1.f;
+    float LightFillIntensity = 0.38f;
     void SetLightingPreset(ELightingPreset Preset);
 
     // Spawn geometry
