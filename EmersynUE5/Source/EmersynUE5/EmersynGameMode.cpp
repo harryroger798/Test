@@ -1,4 +1,4 @@
-// v25: Sims-quality rendering - lighting presets, cutaway walls, multi-part furniture, enhanced AO
+// v26: Sims-quality rendering - fixed camera distance, darker lighting, disabled input, enhanced AO
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -63,38 +63,38 @@ namespace SC {
     const FLinearColor MetalCopper(0.78f, 0.45f, 0.22f);
     const FLinearColor MetalChrome(0.90f, 0.92f, 0.95f);
 
-    // Wall colors
-    const FLinearColor WallWhite(0.98f, 0.97f, 0.94f);
-    const FLinearColor WallCream(0.96f, 0.93f, 0.85f);
-    const FLinearColor WallPink(1.0f, 0.62f, 0.75f);
-    const FLinearColor WallBlue(0.55f, 0.75f, 1.0f);
-    const FLinearColor WallGreen(0.52f, 0.92f, 0.65f);
-    const FLinearColor WallYellow(1.0f, 0.94f, 0.52f);
-    const FLinearColor WallSage(0.72f, 0.82f, 0.68f);
-    const FLinearColor WallLavender(0.82f, 0.75f, 0.98f);
-    const FLinearColor WallPeach(1.0f, 0.82f, 0.68f);
+    // Wall colors (v26: darker/more saturated to be visible against sky)
+    const FLinearColor WallWhite(0.82f, 0.80f, 0.76f);
+    const FLinearColor WallCream(0.78f, 0.72f, 0.62f);
+    const FLinearColor WallPink(0.82f, 0.45f, 0.55f);
+    const FLinearColor WallBlue(0.38f, 0.55f, 0.78f);
+    const FLinearColor WallGreen(0.38f, 0.68f, 0.45f);
+    const FLinearColor WallYellow(0.82f, 0.75f, 0.38f);
+    const FLinearColor WallSage(0.52f, 0.62f, 0.48f);
+    const FLinearColor WallLavender(0.62f, 0.55f, 0.78f);
+    const FLinearColor WallPeach(0.82f, 0.62f, 0.48f);
 
-    // Floor colors
-    const FLinearColor FloorWood(0.72f, 0.50f, 0.28f);
-    const FLinearColor FloorTile(0.92f, 0.92f, 0.88f);
-    const FLinearColor FloorGrass(0.22f, 0.72f, 0.22f);
-    const FLinearColor FloorGrassDark(0.12f, 0.52f, 0.12f);
-    const FLinearColor FloorSand(0.96f, 0.86f, 0.60f);
-    const FLinearColor FloorConcrete(0.72f, 0.70f, 0.66f);
-    const FLinearColor FloorMarble(0.96f, 0.94f, 0.92f);
+    // Floor colors (v26: darker to ground the scene)
+    const FLinearColor FloorWood(0.52f, 0.35f, 0.18f);
+    const FLinearColor FloorTile(0.72f, 0.70f, 0.65f);
+    const FLinearColor FloorGrass(0.15f, 0.55f, 0.15f);
+    const FLinearColor FloorGrassDark(0.08f, 0.38f, 0.08f);
+    const FLinearColor FloorSand(0.75f, 0.65f, 0.42f);
+    const FLinearColor FloorConcrete(0.52f, 0.50f, 0.46f);
+    const FLinearColor FloorMarble(0.78f, 0.75f, 0.72f);
 
-    // Sky colors (different presets)
-    const FLinearColor SkyTopDay(0.30f, 0.55f, 1.0f);
-    const FLinearColor SkyBotDay(0.72f, 0.88f, 1.0f);
-    const FLinearColor SkyTopSunset(0.88f, 0.45f, 0.18f);
-    const FLinearColor SkyBotSunset(1.0f, 0.78f, 0.52f);
-    const FLinearColor SkyTopNight(0.05f, 0.05f, 0.18f);
-    const FLinearColor SkyBotNight(0.12f, 0.12f, 0.28f);
-    const FLinearColor SkyTopMorning(0.62f, 0.82f, 1.0f);
-    const FLinearColor SkyBotMorning(1.0f, 0.92f, 0.78f);
+    // Sky colors (much darker to not overwhelm scene)
+    const FLinearColor SkyTopDay(0.20f, 0.35f, 0.65f);
+    const FLinearColor SkyBotDay(0.45f, 0.55f, 0.68f);
+    const FLinearColor SkyTopSunset(0.55f, 0.28f, 0.12f);
+    const FLinearColor SkyBotSunset(0.65f, 0.48f, 0.32f);
+    const FLinearColor SkyTopNight(0.03f, 0.03f, 0.12f);
+    const FLinearColor SkyBotNight(0.08f, 0.08f, 0.18f);
+    const FLinearColor SkyTopMorning(0.38f, 0.52f, 0.68f);
+    const FLinearColor SkyBotMorning(0.62f, 0.58f, 0.48f);
 
     // Surface colors
-    const FLinearColor CeilingWhite(0.96f, 0.94f, 0.90f);
+    const FLinearColor CeilingWhite(0.72f, 0.70f, 0.66f);
     const FLinearColor TileWhite(0.95f, 0.95f, 0.92f);
     const FLinearColor TileBlue(0.58f, 0.78f, 0.95f);
     const FLinearColor TileMint(0.72f, 0.95f, 0.88f);
@@ -173,10 +173,16 @@ void AEmersynGameMode::BeginPlay()
     Super::BeginPlay();
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC) {
+        // v26: Fully disable ALL input to prevent fuzz test from rotating camera
         PC->SetIgnoreLookInput(true);
         PC->SetIgnoreMoveInput(true);
+        PC->SetCinematicMode(true, false, false, true, true);
         APawn* P = PC->GetPawn();
-        if (P) { P->SetActorHiddenInGame(true); P->SetActorEnableCollision(false); }
+        if (P) {
+            P->SetActorHiddenInGame(true);
+            P->SetActorEnableCollision(false);
+            P->DisableInput(PC);
+        }
     }
     RoomIndex = 1;
     LoadRoom(RoomList[1]);
@@ -240,39 +246,40 @@ void AEmersynGameMode::SetLightingPreset(ELightingPreset Preset)
     CurrentLightPreset = Preset;
     switch (Preset) {
     case ELightingPreset::Day:
-        LightKeyColor     = FLinearColor(1.0f,  0.97f, 0.88f);
-        LightFillColor    = FLinearColor(0.58f, 0.70f, 0.90f);
-        LightAmbientColor = FLinearColor(0.38f, 0.40f, 0.45f);
-        LightKeyIntensity = 1.0f;
-        LightFillIntensity= 0.38f;
-        break;
-    case ELightingPreset::Sunset:
-        LightKeyColor     = FLinearColor(1.0f,  0.65f, 0.28f);
-        LightFillColor    = FLinearColor(0.88f, 0.50f, 0.68f);
-        LightAmbientColor = FLinearColor(0.32f, 0.22f, 0.30f);
-        LightKeyIntensity = 1.1f;
-        LightFillIntensity= 0.45f;
-        break;
-    case ELightingPreset::Night:
-        LightKeyColor     = FLinearColor(0.42f, 0.52f, 0.82f);
-        LightFillColor    = FLinearColor(0.18f, 0.22f, 0.50f);
-        LightAmbientColor = FLinearColor(0.12f, 0.14f, 0.22f);
-        LightKeyIntensity = 0.55f;
+        // v26: Reduced intensity, warmer key, cooler fill (Sims-accurate)
+        LightKeyColor     = FLinearColor(1.0f,  0.95f, 0.85f);
+        LightFillColor    = FLinearColor(0.50f, 0.60f, 0.80f);
+        LightAmbientColor = FLinearColor(0.22f, 0.23f, 0.28f);
+        LightKeyIntensity = 0.70f;
         LightFillIntensity= 0.25f;
         break;
+    case ELightingPreset::Sunset:
+        LightKeyColor     = FLinearColor(1.0f,  0.60f, 0.25f);
+        LightFillColor    = FLinearColor(0.70f, 0.40f, 0.55f);
+        LightAmbientColor = FLinearColor(0.22f, 0.15f, 0.20f);
+        LightKeyIntensity = 0.75f;
+        LightFillIntensity= 0.30f;
+        break;
+    case ELightingPreset::Night:
+        LightKeyColor     = FLinearColor(0.35f, 0.42f, 0.68f);
+        LightFillColor    = FLinearColor(0.15f, 0.18f, 0.40f);
+        LightAmbientColor = FLinearColor(0.08f, 0.10f, 0.16f);
+        LightKeyIntensity = 0.45f;
+        LightFillIntensity= 0.20f;
+        break;
     case ELightingPreset::Morning:
-        LightKeyColor     = FLinearColor(1.0f,  0.90f, 0.72f);
-        LightFillColor    = FLinearColor(0.72f, 0.85f, 1.0f);
-        LightAmbientColor = FLinearColor(0.42f, 0.45f, 0.50f);
-        LightKeyIntensity = 0.88f;
-        LightFillIntensity= 0.42f;
+        LightKeyColor     = FLinearColor(1.0f,  0.88f, 0.68f);
+        LightFillColor    = FLinearColor(0.60f, 0.72f, 0.88f);
+        LightAmbientColor = FLinearColor(0.25f, 0.28f, 0.32f);
+        LightKeyIntensity = 0.65f;
+        LightFillIntensity= 0.28f;
         break;
     case ELightingPreset::Party:
-        LightKeyColor     = FLinearColor(1.0f,  0.30f, 0.80f);
-        LightFillColor    = FLinearColor(0.30f, 0.80f, 1.0f);
-        LightAmbientColor = FLinearColor(0.25f, 0.15f, 0.35f);
-        LightKeyIntensity = 1.2f;
-        LightFillIntensity= 0.55f;
+        LightKeyColor     = FLinearColor(0.85f, 0.25f, 0.65f);
+        LightFillColor    = FLinearColor(0.25f, 0.65f, 0.85f);
+        LightAmbientColor = FLinearColor(0.18f, 0.12f, 0.25f);
+        LightKeyIntensity = 0.80f;
+        LightFillIntensity= 0.35f;
         break;
     }
 }
@@ -309,55 +316,58 @@ FLinearColor AEmersynGameMode::ApplyDirectionalShading(FLinearColor BaseColor, F
 
 FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector Normal, FVector WorldPos, float AO) const
 {
-    // Key light (warm sunlight / key light direction)
-    FVector KeyDir  = FVector(0.45f, -0.35f, -0.75f).GetSafeNormal();
-    FVector FillDir = FVector(-0.55f, 0.42f, -0.35f).GetSafeNormal();
-    FVector SkyDir  = FVector(0.0f,  0.0f,  -1.0f);
-    FVector BouncDir= FVector(0.0f,  0.0f,   1.0f);
+    // v26: Sims-accurate lighting with warm/cool contrast and proper energy levels
+    FVector KeyDir  = FVector(0.6f, 0.4f, 0.8f).GetSafeNormal();
+    FVector FillDir = FVector(-0.5f, -0.3f, 0.4f).GetSafeNormal();
 
-    float KeyDot   = FMath::Max(0.f, FVector::DotProduct(Normal, -KeyDir));
-    float FillDot  = FMath::Max(0.f, FVector::DotProduct(Normal, -FillDir));
-    float SkyDot   = FMath::Max(0.f, FVector::DotProduct(Normal,  SkyDir));
-    float BounceDot= FMath::Max(0.f, FVector::DotProduct(Normal,  BouncDir));
+    float KeyDot   = FMath::Max(0.f, FVector::DotProduct(Normal, KeyDir));
+    float FillDot  = FMath::Max(0.f, FVector::DotProduct(Normal, FillDir));
+    float SkyDot   = FMath::Max(0.f, Normal.Z);   // Up-facing gets sky
+    float GroundDot= FMath::Max(0.f, -Normal.Z);   // Down-facing gets ground bounce
 
-    // Height-based AO — lower objects get darkened (floor-touching)
-    float HeightAO = FMath::Clamp(0.6f + (WorldPos.Z / 300.f) * 0.4f, 0.5f, 1.0f);
+    // Soften the falloff (Sims uses softer lighting than physically accurate)
+    KeyDot = FMath::Pow(KeyDot, 0.7f);
+    FillDot = FMath::Pow(FillDot, 0.8f);
+
+    // Height-based AO — lower objects get darkened more aggressively
+    float HeightAO = FMath::Clamp(0.4f + (WorldPos.Z / 300.f) * 0.6f, 0.35f, 1.0f);
     float FinalAO  = AO * HeightAO;
 
-    // Ambient (preset-driven)
-    FLinearColor Lit = LightAmbientColor;
-    Lit.R *= BaseColor.R;
-    Lit.G *= BaseColor.G;
-    Lit.B *= BaseColor.B;
+    // v26: Edge/corner darkening (fake AO where walls meet floor)
+    float EdgeDarken = 1.0f;
+    if (WorldPos.Z < 30.f) {
+        EdgeDarken *= FMath::Lerp(0.5f, 1.0f, WorldPos.Z / 30.f);
+    }
 
-    // Key light contribution
-    Lit.R += BaseColor.R * KeyDot * LightKeyIntensity * 0.75f * LightKeyColor.R;
-    Lit.G += BaseColor.G * KeyDot * LightKeyIntensity * 0.75f * LightKeyColor.G;
-    Lit.B += BaseColor.B * KeyDot * LightKeyIntensity * 0.75f * LightKeyColor.B;
+    // Combine all light sources (much lower total energy than v25)
+    FLinearColor AccLight =
+        (LightKeyColor * LightKeyIntensity * KeyDot) +
+        (LightFillColor * LightFillIntensity * FillDot) +
+        (FLinearColor(0.45f, 0.50f, 0.58f) * 0.12f * SkyDot) +
+        (FLinearColor(0.35f, 0.30f, 0.25f) * 0.08f * GroundDot);
 
-    // Fill light contribution
-    Lit.R += BaseColor.R * FillDot * LightFillIntensity * LightFillColor.R;
-    Lit.G += BaseColor.G * FillDot * LightFillIntensity * LightFillColor.G;
-    Lit.B += BaseColor.B * FillDot * LightFillIntensity * LightFillColor.B;
+    // Base ambient (dark blue-grey, prevents pure black)
+    AccLight += LightAmbientColor;
 
-    // Sky contribution (top surfaces catch sky color)
-    Lit.R += BaseColor.R * SkyDot * 0.18f * 0.72f;
-    Lit.G += BaseColor.G * SkyDot * 0.18f * 0.88f;
-    Lit.B += BaseColor.B * SkyDot * 0.18f * 1.0f;
+    // Apply to base color
+    FLinearColor Lit;
+    Lit.R = BaseColor.R * AccLight.R;
+    Lit.G = BaseColor.G * AccLight.G;
+    Lit.B = BaseColor.B * AccLight.B;
 
-    // Bounce light (upward-facing surfaces catch warm floor bounce)
-    Lit.R += BaseColor.R * BounceDot * 0.08f * 1.0f;
-    Lit.G += BaseColor.G * BounceDot * 0.08f * 0.88f;
-    Lit.B += BaseColor.B * BounceDot * 0.08f * 0.72f;
-
-    // Rim (edge highlight)
+    // Rim highlight (subtle)
     FVector ViewDir = FVector(-0.5f, -0.5f, 0.3f).GetSafeNormal();
     float RimDot = FMath::Pow(FMath::Max(0.f, 1.f - FVector::DotProduct(Normal, -ViewDir)), 3.0f);
-    Lit.R += RimDot * 0.06f * LightKeyColor.R;
-    Lit.G += RimDot * 0.06f * LightKeyColor.G;
-    Lit.B += RimDot * 0.06f * LightKeyColor.B;
+    Lit.R += RimDot * 0.04f * LightKeyColor.R;
+    Lit.G += RimDot * 0.04f * LightKeyColor.G;
+    Lit.B += RimDot * 0.04f * LightKeyColor.B;
 
-    Lit.R *= FinalAO; Lit.G *= FinalAO; Lit.B *= FinalAO; Lit.A = 1.0f;
+    // Apply AO and edge darkening
+    Lit.R *= FinalAO * EdgeDarken;
+    Lit.G *= FinalAO * EdgeDarken;
+    Lit.B *= FinalAO * EdgeDarken;
+    Lit.A = 1.0f;
+
     Lit.R = FMath::Clamp(Lit.R, 0.f, 1.f);
     Lit.G = FMath::Clamp(Lit.G, 0.f, 1.f);
     Lit.B = FMath::Clamp(Lit.B, 0.f, 1.f);
@@ -1179,15 +1189,23 @@ void AEmersynGameMode::SpawnRoomLabel(const FString& Label)
 
 void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 {
+    // v26: Enforce minimum distance so camera is never inside the room
+    // For 800-unit rooms, need at least 2000 units back
+    float SafeDistance = FMath::Max(Distance, 2000.f);
     FRotator CamRot(-38.f, 32.f, 0.f);
-    FVector CamOffset = CamRot.Vector() * -Distance;
+    FVector CamOffset = CamRot.Vector() * -SafeDistance;
     FVector CamPos = RoomCenter + CamOffset;
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
             IsoCam->GetCameraComponent()->FieldOfView = 42.f;
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
-            if (PC) PC->SetViewTarget(IsoCam);
+            if (PC) {
+                PC->SetViewTarget(IsoCam);
+                // v26: Re-enforce input disable after view target change
+                PC->SetIgnoreLookInput(true);
+                PC->SetIgnoreMoveInput(true);
+            }
         }
     } else {
         CamStartPos = IsoCam->GetActorLocation();
