@@ -49,11 +49,11 @@ public:
     float RoomDuration = 7.f;
 
     // Material
-    UPROPERTY() UMaterial* M_VertexColor;
-    UPROPERTY() UMaterialInstanceDynamic* DefaultMID;
+    UPROPERTY() TObjectPtr<UMaterial> M_VertexColor;
+    UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> DefaultMID;
 
     // Camera
-    UPROPERTY() ACameraActor* IsoCam;
+    UPROPERTY() TObjectPtr<ACameraActor> IsoCam;
     FVector CamStartPos, CamTargetPos;
     FRotator CamStartRot, CamTargetRot;
     float CamMoveAlpha = 0.f;
