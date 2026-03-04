@@ -85,9 +85,9 @@ namespace SC {
     const FLinearColor FloorConcrete(0.52f, 0.50f, 0.46f);
     const FLinearColor FloorMarble(0.78f, 0.75f, 0.72f);
 
-    // Sky colors (much darker to not overwhelm scene)
-    const FLinearColor SkyTopDay(0.20f, 0.35f, 0.65f);
-    const FLinearColor SkyBotDay(0.45f, 0.55f, 0.68f);
+    // Sky colors (v29: warmer, brighter sky like Sims Mobile outdoor feel)
+    const FLinearColor SkyTopDay(0.40f, 0.58f, 0.85f);
+    const FLinearColor SkyBotDay(0.65f, 0.78f, 0.92f);
     const FLinearColor SkyTopSunset(0.55f, 0.28f, 0.12f);
     const FLinearColor SkyBotSunset(0.65f, 0.48f, 0.32f);
     const FLinearColor SkyTopNight(0.03f, 0.03f, 0.12f);
@@ -1220,15 +1220,15 @@ void AEmersynGameMode::SpawnRoomLabel(const FString& Label)
 
 void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 {
-    // v28: Steeper angle + farther distance for proper Sims top-down dollhouse view
-    float SafeDistance = FMath::Max(Distance, 2800.f);
-    FRotator CamRot(-65.f, 32.f, 0.f);
+    // v29: Closer camera with steeper angle - room should fill 70%+ of screen
+    float SafeDistance = FMath::Max(Distance, 1600.f);
+    FRotator CamRot(-55.f, 32.f, 0.f);
     FVector CamOffset = CamRot.Vector() * -SafeDistance;
     FVector CamPos = RoomCenter + CamOffset;
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 35.f;  // v28: Narrower FOV for cleaner isometric look
+            IsoCam->GetCameraComponent()->FieldOfView = 55.f;  // v29: Wider FOV so room fills more of screen
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
@@ -1269,7 +1269,8 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z, WallPattern, WallBase, WallAccent);
     // NO front wall, NO right wall — camera sees inside like Sims
 
-    SpawnTexturedCeiling(FVector(0, 0, RS.Z), FVector(RS.X, RS.Y, 0), CeilingColor);
+    // v29: NO CEILING — removed so top-down camera can see inside the room
+    // SpawnTexturedCeiling(FVector(0, 0, RS.Z), FVector(RS.X, RS.Y, 0), CeilingColor);
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
 
     // Baseboards on visible walls
