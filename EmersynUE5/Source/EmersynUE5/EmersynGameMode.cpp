@@ -1,4 +1,4 @@
-// v44: Remove sky dome (was filling screen), FOV 35 (was 75), pitch -60 (was -75), dist maxDim*1.8, walls 45u, FS 1.5. Neutral bg plane
+// v45: FORCE camera every frame (fuzz test was overriding SetViewTarget). Explicit XYZ position. Re-set view on room change. FOV 50, pitch -70, dist maxDim*2.0
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -198,6 +198,18 @@ void AEmersynGameMode::BeginPlay()
 void AEmersynGameMode::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+
+    // v45: FORCE camera view target EVERY FRAME to prevent fuzz test monkey from overriding
+    if (IsoCam) {
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (PC) {
+            if (PC->GetViewTarget() != IsoCam) {
+                PC->SetViewTargetWithBlend(IsoCam, 0.f);
+            }
+            PC->SetControlRotation(IsoCam->GetActorRotation());
+        }
+    }
+
     if (bCameraMoving && IsoCam) {
         CamMoveAlpha = FMath::Clamp(CamMoveAlpha + DeltaSeconds * 1.8f, 0.f, 1.f);
         float T = FMath::InterpEaseInOut(0.f, 1.f, CamMoveAlpha, 2.2f);
@@ -1258,43 +1270,63 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
     }
 }
 
-// v38: Camera distance for Sims dollhouse — room fills 70-80% screen
+// v45: Camera distance for Sims dollhouse
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float Dist = MaxDim * 1.8f;  // v44: farther back with narrow FOV for isometric look
-    return FMath::Clamp(Dist, 800.f, 1800.f);  // v44: wider range for all room sizes
+    float Dist = MaxDim * 2.0f;  // v45: high above for true dollhouse
+    return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v38: Camera target shifted forward toward furniture zone
+// v45: Camera setup with EXPLICIT position math and forced view target
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    // v44: pitch -60 for oblique isometric, narrow FOV eliminates sky dome visibility
-    float WallH = FMath::Max(RoomSize.X, RoomSize.Y) * 0.1f;
-    FVector CamTarget(0.f, 0.f, WallH * 0.3f);
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-60.f, -135.f, 0.f);  // v44: -60 oblique isometric, -135 yaw for Sims angle
-    FVector CamOffset = CamRot.Vector() * -AutoDist;
-    FVector CamPos = CamTarget + CamOffset;
+
+    // v45: EXPLICIT camera position — no FRotator::Vector() ambiguity
+    // Isometric angle: 70 degrees below horizontal, yaw 45 degrees (front-right looking back-left)
+    float PitchDeg = 70.f;  // degrees below horizontal
+    float YawDeg = 45.f;    // compass direction camera is PLACED at (looking back toward origin)
+    float PitchRad = FMath::DegreesToRadians(PitchDeg);
+    float YawRad = FMath::DegreesToRadians(YawDeg);
+
+    float CamZ = AutoDist * FMath::Sin(PitchRad);           // height above room
+    float CamHoriz = AutoDist * FMath::Cos(PitchRad);       // horizontal distance
+    float CamX = CamHoriz * FMath::Cos(YawRad);             // X position
+    float CamY = CamHoriz * FMath::Sin(YawRad);             // Y position
+    FVector CamPos(CamX, CamY, CamZ);
+
+    // Look direction: from camera toward room center (origin)
+    FVector LookDir = (FVector::ZeroVector - CamPos).GetSafeNormal();
+    FRotator CamRot = LookDir.Rotation();
+
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 35.f;  // v44: narrow FOV eliminates sky dome, reduces distortion
-            APlayerController* PC = GetWorld()->GetFirstPlayerController();
+            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v45: wider FOV for room coverage
             if (PC) {
-                PC->SetViewTarget(IsoCam);
+                PC->SetViewTargetWithBlend(IsoCam, 0.f);  // v45: instant blend, more reliable than SetViewTarget
+                PC->SetControlRotation(CamRot);
                 PC->SetIgnoreLookInput(true);
                 PC->SetIgnoreMoveInput(true);
             }
         }
     } else {
-        CamStartPos = IsoCam->GetActorLocation();
-        CamStartRot = IsoCam->GetActorRotation();
+        // v45: For subsequent rooms, ALSO re-set view target (was missing before!)
+        IsoCam->SetActorLocation(CamPos);
+        IsoCam->SetActorRotation(CamRot);
+        IsoCam->GetCameraComponent()->FieldOfView = 50.f;
+        if (PC) {
+            PC->SetViewTargetWithBlend(IsoCam, 0.f);  // v45: re-force view target on every room change
+            PC->SetControlRotation(CamRot);
+        }
+        CamStartPos = CamPos;
+        CamStartRot = CamRot;
         CamTargetPos = CamPos;
         CamTargetRot = CamRot;
-        CamMoveAlpha = 0.f;
-        bCameraMoving = true;
+        bCameraMoving = false;  // v45: instant camera switch, no smooth interpolation
     }
 }
 
