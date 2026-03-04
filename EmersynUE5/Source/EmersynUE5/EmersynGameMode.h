@@ -166,6 +166,8 @@ public:
     void SpawnWorldText(const FString& Text, FVector Location, float Size, FLinearColor Color);
     void SpawnRoomLabel(const FString& Label);
     void SetupIsometricCamera(FVector RoomCenter, float Distance);
+    // v31: Auto-scaling camera from room dimensions
+    void SetupAutoCamera(FVector RoomSize);
 
     // v25: Room shell builder (cutaway walls - only back and side walls, like Sims)
     void BuildRoomShell(FVector RoomSize, ETexturePattern FloorPattern, FLinearColor FloorBase, FLinearColor FloorAccent,
@@ -173,6 +175,9 @@ public:
         ELightingPreset LightPreset, const FString& RoomLabel);
 
     // Room builders
+    // v31: Auto-scaling helpers
+    float CalcAutoCameraDistance(FVector RoomSize) const;
+
     void BuildSplashScreen();
     void BuildMainMenu();
     void BuildBedroom();

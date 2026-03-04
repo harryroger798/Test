@@ -1,4 +1,4 @@
-// v30: Wall height reduction, 3x furniture scale, camera optimization, lighting depth, detail geometry
+// v31: Auto-scaling camera system, wall height reduction, 3x furniture scale, lighting depth
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1232,19 +1232,59 @@ void AEmersynGameMode::SpawnRoomLabel(const FString& Label)
 
 void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 {
-    // v30: Bedrock Claude recommended - tighter framing, less top-down, closer camera
+    // v31: Legacy wrapper - forward to auto camera when possible
     float SafeDistance = FMath::Max(Distance, 900.f);
-    FRotator CamRot(-42.f, 32.f, 0.f);
+    FRotator CamRot(-65.f, 45.f, 0.f);  // v31: Steep pitch to look DOWN at dollhouse
     FVector CamOffset = CamRot.Vector() * -SafeDistance;
     FVector CamPos = RoomCenter + CamOffset;
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 42.f;  // v30: Tighter FOV for room to fill screen
+            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v31: Wider FOV for room overview
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
-                // v26: Re-enforce input disable after view target change
+                PC->SetIgnoreLookInput(true);
+                PC->SetIgnoreMoveInput(true);
+            }
+        }
+    } else {
+        CamStartPos = IsoCam->GetActorLocation();
+        CamStartRot = IsoCam->GetActorRotation();
+        CamTargetPos = CamPos;
+        CamTargetRot = CamRot;
+        CamMoveAlpha = 0.f;
+        bCameraMoving = true;
+    }
+}
+
+// v31: Auto-scaling camera distance from room dimensions
+float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
+{
+    float FloorDiag = FMath::Sqrt(RoomSize.X * RoomSize.X + RoomSize.Y * RoomSize.Y);
+    float RoomDiag3D = FMath::Sqrt(FloorDiag * FloorDiag + RoomSize.Z * RoomSize.Z);
+    float FOVRad = FMath::DegreesToRadians(50.f);
+    float Dist = (RoomDiag3D / 0.70f) / (2.f * FMath::Tan(FOVRad * 0.5f));
+    return FMath::Clamp(Dist, 1200.f, 4000.f);
+}
+
+// v31: Auto-scaling camera setup from room dimensions
+void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
+{
+    // Camera target = center of room volume (not floor!)
+    FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.5f);
+    float AutoDist = CalcAutoCameraDistance(RoomSize);
+    FRotator CamRot(-65.f, 45.f, 0.f);  // v31: Steep dollhouse angle
+    FVector CamOffset = CamRot.Vector() * -AutoDist;
+    FVector CamPos = CamTarget + CamOffset;
+
+    if (!IsoCam) {
+        IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
+        if (IsoCam) {
+            IsoCam->GetCameraComponent()->FieldOfView = 50.f;
+            APlayerController* PC = GetWorld()->GetFirstPlayerController();
+            if (PC) {
+                PC->SetViewTarget(IsoCam);
                 PC->SetIgnoreLookInput(true);
                 PC->SetIgnoreMoveInput(true);
             }
@@ -1725,7 +1765,7 @@ void AEmersynGameMode::BuildSplashScreen()
     SpawnCharacterMesh(TEXT("Cat"), FVector(80, -30, 0), FRotator(0, -30, 0), 2.0f, FLinearColor(0.85f, 0.65f, 0.45f), FLinearColor(0.85f, 0.65f, 0.45f));
     SpawnCharacterMesh(TEXT("Dog"), FVector(-80, -30, 0), FRotator(0, 30, 0), 2.2f, FLinearColor(0.75f, 0.55f, 0.35f), FLinearColor(0.75f, 0.55f, 0.35f));
 
-    SetupIsometricCamera(FVector(0, 0, 120), 900.f);
+    SetupAutoCamera(FVector(800, 600, 250));  // v31: auto-scaling for splash scene
 }
 
 void AEmersynGameMode::BuildMainMenu()
@@ -1755,7 +1795,7 @@ void AEmersynGameMode::BuildBedroom()
     SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 80.f, 100.f, 50.f, SC::WoodLight, SC::GlassBlue);
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(50, -50, 0), FRotator(0, 45, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildKitchen()
@@ -1782,7 +1822,7 @@ void AEmersynGameMode::BuildKitchen()
     SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 70.f, 100.f, 50.f, SC::WoodLight, SC::GlassBlue);
 
     SpawnCharacterMesh(TEXT("Mia"), FVector(50, 100, 0), FRotator(0, -90, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricGreen);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildBathroom()
@@ -1803,7 +1843,7 @@ void AEmersynGameMode::BuildBathroom()
     SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, 70.f, 80.f, 40.f, SC::WoodLight, SC::GlassBlue);
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricBlue);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildLivingRoom()
@@ -1830,7 +1870,7 @@ void AEmersynGameMode::BuildLivingRoom()
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(-100, -100, 0), FRotator(0, 45, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricCoral);
     SpawnCharacterMesh(TEXT("Ava"), FVector(200, -250, 0), FRotator(0, 120, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildGarden()
@@ -1876,7 +1916,7 @@ void AEmersynGameMode::BuildGarden()
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -100, 0), FRotator(0, 15, 0), 3.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricYellow);
     SpawnCharacterMesh(TEXT("Dog"), FVector(120, -60, 0), FRotator(0, -45, 0), 2.0f, FLinearColor(0.75f, 0.55f, 0.35f), FLinearColor(0.75f, 0.55f, 0.35f));
-    SetupIsometricCamera(FVector(0, 0, 80), RS.X * 1.4f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildSchool()
@@ -1914,7 +1954,7 @@ void AEmersynGameMode::BuildSchool()
 
     SpawnCharacterMesh(TEXT("Leo"), FVector(-100, 200, 0), FRotator(0, 180, 0), 5.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricBlue);
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -100, 0), FRotator(0, 0, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildShop()
@@ -1941,7 +1981,7 @@ void AEmersynGameMode::BuildShop()
     SpawnDetailedRug(FVector(0, 50, 0), SC::FabricCream, SC::FabricPeach, FVector(180, 140, 0));
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -100, 0), FRotator(0, 180, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPurple);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildPlayground()
@@ -1980,7 +2020,7 @@ void AEmersynGameMode::BuildPlayground()
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, 0, 0), FRotator::ZeroRotator, 3.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricOrange);
     SpawnCharacterMesh(TEXT("Leo"), FVector(-150, -80, 0), FRotator(0, 60, 0), 3.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricGreen);
-    SetupIsometricCamera(FVector(0, 0, 80), RS.X * 1.4f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildPark()
@@ -2022,7 +2062,7 @@ void AEmersynGameMode::BuildPark()
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(-50, -150, 0), FRotator(0, 30, 0), 3.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricGreen);
     SpawnCharacterMesh(TEXT("Cat"), FVector(80, -120, 0), FRotator(0, -60, 0), 1.5f, FLinearColor(0.85f, 0.65f, 0.45f), FLinearColor(0.85f, 0.65f, 0.45f));
-    SetupIsometricCamera(FVector(0, 0, 80), RS.X * 1.3f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildMall()
@@ -2058,7 +2098,7 @@ void AEmersynGameMode::BuildMall()
 
     SpawnCharacterMesh(TEXT("Ava"), FVector(100, -150, 0), FRotator(0, -90, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
     SpawnCharacterMesh(TEXT("Mia"), FVector(-100, -100, 0), FRotator(0, 45, 0), 5.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricTeal);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildArcade()
@@ -2093,7 +2133,7 @@ void AEmersynGameMode::BuildArcade()
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -50, 0), FRotator(0, 0, 0), 5.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricHotPink);
     SpawnCharacterMesh(TEXT("Leo"), FVector(-150, 100, 0), FRotator(0, 180, 0), 5.0f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricNavy);
-    SetupIsometricCamera(FVector(0, 0, RS.Z * 0.4f), RS.X * 2.2f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
 
 void AEmersynGameMode::BuildAmusementPark()
@@ -2163,5 +2203,5 @@ void AEmersynGameMode::BuildAmusementPark()
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -100, 0), FRotator(0, 15, 0), 3.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricCoral);
     SpawnCharacterMesh(TEXT("Ava"), FVector(-120, -50, 0), FRotator(0, 45, 0), 3.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricLavender);
     SpawnCharacterMesh(TEXT("Dog"), FVector(100, -60, 0), FRotator(0, -30, 0), 2.0f, FLinearColor(0.75f, 0.55f, 0.35f), FLinearColor(0.75f, 0.55f, 0.35f));
-    SetupIsometricCamera(FVector(0, 0, 80), RS.X * 1.3f);
+    SetupAutoCamera(RS);  // v31: auto-scaling camera
 }
