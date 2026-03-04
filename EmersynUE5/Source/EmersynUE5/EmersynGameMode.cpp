@@ -1,4 +1,4 @@
-// v35: FOV 50 (fixed mismatch bug), div 0.68, pitch -55, target Z*0.4, furniture 0.75x wall, Sims dollhouse
+// v36: Walls 12% floor (was 20%), pitch -67, yaw 35, target Z*0.85 wall, divisor 0.62, Sims dollhouse
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1240,7 +1240,7 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v35: Sims-style near-orthographic
+            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v36: Sims-style near-orthographic
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
@@ -1258,29 +1258,27 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
     }
 }
 
-// v35: Fixed FOV mismatch bug, tighter framing for Sims dollhouse
+// v36: Camera distance for steep top-down Sims dollhouse view
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
-    float FloorDiag = FMath::Sqrt(RoomSize.X * RoomSize.X + RoomSize.Y * RoomSize.Y);
-    float RoomDiag3D = FMath::Sqrt(FloorDiag * FloorDiag + RoomSize.Z * RoomSize.Z);
-    float FOVRad = FMath::DegreesToRadians(50.f);  // v35: FOV 50 matches SetupAutoCamera
-    float Dist = (RoomDiag3D / 0.68f) / (2.f * FMath::Tan(FOVRad * 0.5f));  // v35: divisor 0.68 for cutaway walls
-    return FMath::Clamp(Dist, 500.f, 2800.f);  // v35: tighter clamp range
+    float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
+    float Dist = MaxDim / 0.62f;  // v36: use max floor dim, divisor 0.62
+    return FMath::Clamp(Dist, 600.f, 3000.f);  // v36: adjusted clamp
 }
 
-// v35: Fixed FOV mismatch, Sims dollhouse camera (FOV 50, pitch -55, target Z*0.4)
+// v36: Steep top-down Sims dollhouse camera (pitch -67, yaw 35, target at wall tops)
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.4f);  // v35: focus on furniture zone, not ceiling
+    FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.85f);  // v36: look at wall tops, not middle
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-55.f, 45.f, 0.f);  // v35: Sims-style pitch shows floor+walls equally
+    FRotator CamRot(-67.f, 35.f, 0.f);  // v36: steep pitch + shifted yaw toward open corner
     FVector CamOffset = CamRot.Vector() * -AutoDist;
     FVector CamPos = CamTarget + CamOffset;
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v35: MATCHES CalcAutoCameraDistance FOV
+            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v36: FOV 50 for near-orthographic
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
@@ -1774,9 +1772,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(95)=0.71
-    FVector RS(450.f, 400.f, 90.f);
-    float FS = 0.71f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=54, furniture S=wallH*0.75/tallest(95)=0.43
+    FVector RS(450.f, 400.f, 54.f);
+    float FS = 0.43f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bedroom"));
@@ -1800,9 +1798,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(150)=0.48
-    FVector RS(480.f, 420.f, 96.f);
-    float FS = 0.48f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=58, furniture S=wallH*0.75/tallest(150)=0.29
+    FVector RS(480.f, 420.f, 58.f);
+    float FS = 0.29f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1828,9 +1826,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(100)=0.57
-    FVector RS(380.f, 350.f, 76.f);
-    float FS = 0.57f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=46, furniture S=wallH*0.75/tallest(100)=0.34
+    FVector RS(380.f, 350.f, 46.f);
+    float FS = 0.34f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1850,9 +1848,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(140)=0.56
-    FVector RS(520.f, 450.f, 104.f);
-    float FS = 0.56f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=62, furniture S=wallH*0.75/tallest(140)=0.33
+    FVector RS(520.f, 450.f, 62.f);
+    float FS = 0.33f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1924,9 +1922,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(140)=0.51
-    FVector RS(480.f, 420.f, 96.f);
-    float FS = 0.51f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=58, furniture S=wallH*0.75/tallest(140)=0.31
+    FVector RS(480.f, 420.f, 58.f);
+    float FS = 0.31f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1958,9 +1956,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(140)=0.54
-    FVector RS(500.f, 440.f, 100.f);
-    float FS = 0.54f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=60, furniture S=wallH*0.75/tallest(140)=0.32
+    FVector RS(500.f, 440.f, 60.f);
+    float FS = 0.32f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2064,9 +2062,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(140)=0.59
-    FVector RS(550.f, 480.f, 110.f);
-    float FS = 0.59f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=66, furniture S=wallH*0.75/tallest(140)=0.35
+    FVector RS(550.f, 480.f, 66.f);
+    float FS = 0.35f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2098,9 +2096,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v35: wall=20% floorW, furniture S=wallH*0.75/tallest(110)=0.61
-    FVector RS(450.f, 400.f, 90.f);
-    float FS = 0.61f;  // v35: furniture 75% of wall height
+    // v36: wall=12% floorW=54, furniture S=wallH*0.75/tallest(110)=0.37
+    FVector RS(450.f, 400.f, 54.f);
+    float FS = 0.37f;  // v36: 12% walls, furniture 75% of wall height
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
