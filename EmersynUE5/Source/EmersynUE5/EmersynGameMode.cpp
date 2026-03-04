@@ -1,4 +1,4 @@
-// v45: FORCE camera every frame (fuzz test was overriding SetViewTarget). Explicit XYZ position. Re-set view on room change. FOV 50, pitch -70, dist maxDim*2.0
+// v46: DIAGNOSTIC BUILD - bright red floor, no walls, camera at Z=2000 looking straight down. Proves camera system works.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1278,55 +1278,36 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v45: Camera setup with EXPLICIT position math and forced view target
+// v46: DIAGNOSTIC camera - straight down from very high
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    float AutoDist = CalcAutoCameraDistance(RoomSize);
-
-    // v45: EXPLICIT camera position — no FRotator::Vector() ambiguity
-    // Isometric angle: 70 degrees below horizontal, yaw 45 degrees (front-right looking back-left)
-    float PitchDeg = 70.f;  // degrees below horizontal
-    float YawDeg = 45.f;    // compass direction camera is PLACED at (looking back toward origin)
-    float PitchRad = FMath::DegreesToRadians(PitchDeg);
-    float YawRad = FMath::DegreesToRadians(YawDeg);
-
-    float CamZ = AutoDist * FMath::Sin(PitchRad);           // height above room
-    float CamHoriz = AutoDist * FMath::Cos(PitchRad);       // horizontal distance
-    float CamX = CamHoriz * FMath::Cos(YawRad);             // X position
-    float CamY = CamHoriz * FMath::Sin(YawRad);             // Y position
-    FVector CamPos(CamX, CamY, CamZ);
-
-    // Look direction: from camera toward room center (origin)
-    FVector LookDir = (FVector::ZeroVector - CamPos).GetSafeNormal();
-    FRotator CamRot = LookDir.Rotation();
+    // v46: Camera directly above room center, looking STRAIGHT DOWN
+    float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
+    FVector CamPos(0.f, 0.f, MaxDim * 3.0f);  // v46: 3x room size above = ~1350 for bedroom
+    FRotator CamRot(-89.f, 0.f, 0.f);  // v46: nearly straight down
 
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 50.f;  // v45: wider FOV for room coverage
+            IsoCam->GetCameraComponent()->FieldOfView = 70.f;  // v46: wide FOV for diagnostic
             if (PC) {
-                PC->SetViewTargetWithBlend(IsoCam, 0.f);  // v45: instant blend, more reliable than SetViewTarget
+                PC->SetViewTargetWithBlend(IsoCam, 0.f);
                 PC->SetControlRotation(CamRot);
                 PC->SetIgnoreLookInput(true);
                 PC->SetIgnoreMoveInput(true);
             }
         }
     } else {
-        // v45: For subsequent rooms, ALSO re-set view target (was missing before!)
         IsoCam->SetActorLocation(CamPos);
         IsoCam->SetActorRotation(CamRot);
-        IsoCam->GetCameraComponent()->FieldOfView = 50.f;
+        IsoCam->GetCameraComponent()->FieldOfView = 70.f;
         if (PC) {
-            PC->SetViewTargetWithBlend(IsoCam, 0.f);  // v45: re-force view target on every room change
+            PC->SetViewTargetWithBlend(IsoCam, 0.f);
             PC->SetControlRotation(CamRot);
         }
-        CamStartPos = CamPos;
-        CamStartRot = CamRot;
-        CamTargetPos = CamPos;
-        CamTargetRot = CamRot;
-        bCameraMoving = false;  // v45: instant camera switch, no smooth interpolation
+        bCameraMoving = false;
     }
 }
 
@@ -1806,28 +1787,24 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v44: Walls 45u (thin borders at FOV 35), FS=1.5
-    FVector RS(450.f, 400.f, 45.f);
-    float FS = 1.5f;  // v44: moderate furniture with narrow FOV
-    BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
-        ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
-        ELightingPreset::Day, TEXT("Bedroom"));
+    // v46: DIAGNOSTIC - minimal scene to prove camera works
+    FVector RS(450.f, 400.f, 10.f);  // v46: walls only 10u for diagnostic
 
-    // v38: Furniture spread to center and front (closer to camera = larger on screen)
-    SpawnDetailedBed(FVector(0, 50, 0), SC::WoodLight, SC::FabricPink, FLinearColor::White, FS);  // center
-    SpawnDetailedTable(FVector(-120, -80, 0), SC::WoodLight, SC::WoodMedium, FS);  // front-left
-    SpawnDetailedLamp(FVector(-120, -80, 35*FS), SC::MetalGold, SC::FabricCream, FS);
-    SpawnDetailedDresser(FVector(150, -60, 0), SC::WoodOak, SC::MetalGold, FS);  // front-right
-    SpawnDetailedBookshelf(FVector(-200, 200, 0), FRotator::ZeroRotator, SC::WoodMaple, FS * 0.6f);  // back-left
-    SpawnDetailedRug(FVector(0, -30, 0), SC::CarpetPink, SC::FabricCoral, FVector(200, 140, 0));  // center
-    SpawnDetailedDesk(FVector(200, -150, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, FS);  // front-right
-    SpawnDetailedChair(FVector(200, -250, 0), FRotator::ZeroRotator, SC::FabricPink, SC::MetalBlack, FS);
-    SpawnDetailedPlant(FVector(250, 200, 0), SC::FabricCream, SC::PlantGreen, FS);  // back-right
-    SpawnDetailedMirror(FVector(-100, 300, 40*FS), FRotator::ZeroRotator, SC::MetalGold, FS);  // on back wall
-    SpawnPictureFrame(FVector(0, 380, 30*FS), FRotator::ZeroRotator, FVector(55*FS, 3, 40*FS), SC::WoodMedium, SC::FabricLavender);
-    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
+    // v46: Just lighting + floor + one furniture piece. NO walls, NO background plane
+    SetLightingPreset(ELightingPreset::Day);
+    SetupPostProcessing();
+    SpawnSkyLight(12.f);
+    SpawnDirectionalLight(FRotator(-45.f, -90.f, 0.f), 30.f, LightKeyColor);
 
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(80, -120, 0), FRotator(0, 45, 0), FS * 2.0f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);  // front
+    // v46: BRIGHT RED floor so it's unmistakable from above
+    SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, FLinearColor(1.f, 0.f, 0.f), FLinearColor(0.8f, 0.f, 0.f), 2.f);
+
+    // v46: ONE bright green box in center as furniture marker
+    SpawnTexturedBox(FVector(0, 0, 30), FVector(80, 80, 30), ETexturePattern::Concrete, FLinearColor(0.f, 1.f, 0.f), FLinearColor(0.f, 0.8f, 0.f));
+
+    // v46: ONE bright blue box offset to prove orientation
+    SpawnTexturedBox(FVector(200, 100, 20), FVector(60, 60, 20), ETexturePattern::Concrete, FLinearColor(0.f, 0.f, 1.f), FLinearColor(0.f, 0.f, 0.8f));
+
     SetupAutoCamera(RS);
 }
 
