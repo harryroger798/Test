@@ -181,9 +181,6 @@ void AEmersynGameMode::BeginPlay()
         PC->SetCinematicMode(true, false, false, true, true);
         // v27: Remove virtual joystick widgets completely
         PC->ActivateTouchInterface(nullptr);
-        if (GEngine && GEngine->GameViewport) {
-            GEngine->GameViewport->SetVirtualJoystickVisibility(false);
-        }
         APawn* P = PC->GetPawn();
         if (P) {
             P->SetActorHiddenInGame(true);
