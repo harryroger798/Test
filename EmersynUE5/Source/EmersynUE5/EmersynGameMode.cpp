@@ -1,4 +1,4 @@
-// v47: CAMERA LOCK FIX — v46 diagnostic PROVED camera works (red floor visible from above). Root cause: fuzz test touch inputs rotate DefaultPawn camera after initial setup. Fix: force IsoCam position+rotation+FOV EVERY FRAME in Tick(). Restore full bedroom with Sims proportions.
+// v48: Steeper camera (75deg pitch, maxDim*3.0 altitude) for true Sims dollhouse overhead view. v47 proved camera lock works (stable across frames) but angle was too low.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1292,15 +1292,15 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v47: Sims isometric camera — 55° pitch, 45° yaw, explicit XYZ, locked every frame via Tick()
+// v48: Steep isometric camera — 75deg pitch for true Sims dollhouse overhead view
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 2.2f;  // v47: distance for dollhouse framing
-    AutoDist = FMath::Clamp(AutoDist, 800.f, 2500.f);
+    float AutoDist = MaxDim * 3.0f;  // v48: much higher for true overhead dollhouse
+    AutoDist = FMath::Clamp(AutoDist, 1000.f, 3500.f);
 
-    // v47: Sims-style isometric angle (55° below horizontal, 45° yaw)
-    float PitchDeg = 55.f;
+    // v48: Steep isometric (75° below horizontal = nearly overhead, 45° yaw)
+    float PitchDeg = 75.f;
     float YawDeg = 45.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
@@ -1313,7 +1313,7 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 
     FVector LookDir = (FVector::ZeroVector - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 50.f;  // v47: narrow FOV for Sims-style framing
+    float FOV = 45.f;  // v48: narrow FOV for tight dollhouse framing
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
