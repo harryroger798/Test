@@ -56,6 +56,9 @@ public:
     UPROPERTY() TObjectPtr<ACameraActor> IsoCam;
     FVector CamStartPos, CamTargetPos;
     FRotator CamStartRot, CamTargetRot;
+    FVector LockedCamPos;    // v47: locked position for every-frame enforcement
+    FRotator LockedCamRot;   // v47: locked rotation for every-frame enforcement
+    float LockedCamFOV = 50.f; // v47: locked FOV
     float CamMoveAlpha = 0.f;
     bool bCameraMoving = false;
 

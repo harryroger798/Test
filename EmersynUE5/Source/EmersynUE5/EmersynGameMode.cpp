@@ -1,4 +1,4 @@
-// v46: DIAGNOSTIC BUILD - bright red floor, no walls, camera at Z=2000 looking straight down. Proves camera system works.
+// v47: CAMERA LOCK FIX — v46 diagnostic PROVED camera works (red floor visible from above). Root cause: fuzz test touch inputs rotate DefaultPawn camera after initial setup. Fix: force IsoCam position+rotation+FOV EVERY FRAME in Tick(). Restore full bedroom with Sims proportions.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -199,14 +199,28 @@ void AEmersynGameMode::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
-    // v45: FORCE camera view target EVERY FRAME to prevent fuzz test monkey from overriding
+    // v47: FORCE camera position + rotation + view target EVERY FRAME
+    // v46 diagnostic proved camera works initially but fuzz test rotates it via pawn input
     if (IsoCam) {
+        // v47: Force camera actor back to locked position every frame
+        IsoCam->SetActorLocation(LockedCamPos);
+        IsoCam->SetActorRotation(LockedCamRot);
+        IsoCam->GetCameraComponent()->FieldOfView = LockedCamFOV;
+        
         APlayerController* PC = GetWorld()->GetFirstPlayerController();
         if (PC) {
-            if (PC->GetViewTarget() != IsoCam) {
-                PC->SetViewTargetWithBlend(IsoCam, 0.f);
+            // v47: Force view target every frame
+            PC->SetViewTargetWithBlend(IsoCam, 0.f);
+            PC->SetControlRotation(LockedCamRot);
+            // v47: Re-disable input every frame (fuzz test may re-enable)
+            PC->SetIgnoreLookInput(true);
+            PC->SetIgnoreMoveInput(true);
+            // v47: Also force pawn to stay disabled
+            APawn* P = PC->GetPawn();
+            if (P) {
+                P->SetActorHiddenInGame(true);
+                P->SetActorEnableCollision(false);
             }
-            PC->SetControlRotation(IsoCam->GetActorRotation());
         }
     }
 
@@ -1278,20 +1292,40 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v46: DIAGNOSTIC camera - straight down from very high
+// v47: Sims isometric camera — 55° pitch, 45° yaw, explicit XYZ, locked every frame via Tick()
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    // v46: Camera directly above room center, looking STRAIGHT DOWN
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    FVector CamPos(0.f, 0.f, MaxDim * 3.0f);  // v46: 3x room size above = ~1350 for bedroom
-    FRotator CamRot(-89.f, 0.f, 0.f);  // v46: nearly straight down
+    float AutoDist = MaxDim * 2.2f;  // v47: distance for dollhouse framing
+    AutoDist = FMath::Clamp(AutoDist, 800.f, 2500.f);
+
+    // v47: Sims-style isometric angle (55° below horizontal, 45° yaw)
+    float PitchDeg = 55.f;
+    float YawDeg = 45.f;
+    float PitchRad = FMath::DegreesToRadians(PitchDeg);
+    float YawRad = FMath::DegreesToRadians(YawDeg);
+
+    float CamZ = AutoDist * FMath::Sin(PitchRad);
+    float CamHoriz = AutoDist * FMath::Cos(PitchRad);
+    float CamX = CamHoriz * FMath::Cos(YawRad);
+    float CamY = CamHoriz * FMath::Sin(YawRad);
+    FVector CamPos(CamX, CamY, CamZ);
+
+    FVector LookDir = (FVector::ZeroVector - CamPos).GetSafeNormal();
+    FRotator CamRot = LookDir.Rotation();
+    float FOV = 50.f;  // v47: narrow FOV for Sims-style framing
+
+    // v47: Store locked values for every-frame enforcement in Tick()
+    LockedCamPos = CamPos;
+    LockedCamRot = CamRot;
+    LockedCamFOV = FOV;
 
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 70.f;  // v46: wide FOV for diagnostic
+            IsoCam->GetCameraComponent()->FieldOfView = FOV;
             if (PC) {
                 PC->SetViewTargetWithBlend(IsoCam, 0.f);
                 PC->SetControlRotation(CamRot);
@@ -1302,7 +1336,7 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     } else {
         IsoCam->SetActorLocation(CamPos);
         IsoCam->SetActorRotation(CamRot);
-        IsoCam->GetCameraComponent()->FieldOfView = 70.f;
+        IsoCam->GetCameraComponent()->FieldOfView = FOV;
         if (PC) {
             PC->SetViewTargetWithBlend(IsoCam, 0.f);
             PC->SetControlRotation(CamRot);
@@ -1787,23 +1821,33 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v46: DIAGNOSTIC - minimal scene to prove camera works
-    FVector RS(450.f, 400.f, 10.f);  // v46: walls only 10u for diagnostic
+    // v47: Sims-quality bedroom — short walls (35u), large furniture (FS 2.0)
+    // v46 proved camera works, so restore full room with proper proportions
+    FVector RS(450.f, 400.f, 35.f);  // v47: short walls for dollhouse visibility
+    float FS = 2.0f;  // v47: large furniture for visibility from isometric view
+    BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWoodHoney, SC::FloorWoodAmber,
+        ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
+        SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
 
-    // v46: Just lighting + floor + one furniture piece. NO walls, NO background plane
-    SetLightingPreset(ELightingPreset::Day);
-    SetupPostProcessing();
-    SpawnSkyLight(12.f);
-    SpawnDirectionalLight(FRotator(-45.f, -90.f, 0.f), 30.f, LightKeyColor);
-
-    // v46: BRIGHT RED floor so it's unmistakable from above
-    SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, FLinearColor(1.f, 0.f, 0.f), FLinearColor(0.8f, 0.f, 0.f), 2.f);
-
-    // v46: ONE bright green box in center as furniture marker
-    SpawnTexturedBox(FVector(0, 0, 30), FVector(80, 80, 30), ETexturePattern::Concrete, FLinearColor(0.f, 1.f, 0.f), FLinearColor(0.f, 0.8f, 0.f));
-
-    // v46: ONE bright blue box offset to prove orientation
-    SpawnTexturedBox(FVector(200, 100, 20), FVector(60, 60, 20), ETexturePattern::Concrete, FLinearColor(0.f, 0.f, 1.f), FLinearColor(0.f, 0.f, 0.8f));
+    // v47: Bed — large, centered in room
+    SpawnDetailedBed(FVector(0, 100, 0), SC::WoodOak, SC::FabricPink, FLinearColor::White, FS);
+    // v47: Dresser against back wall
+    SpawnDetailedDresser(FVector(-250, 280, 0), SC::WoodOak, SC::MetalGold, FS);
+    // v47: Lamp on dresser
+    SpawnDetailedLamp(FVector(-250, 280, 50*FS), SC::MetalGold, SC::FabricCream, FS);
+    // v47: Bookshelf against left wall
+    SpawnDetailedBookshelf(FVector(-320, 0, 0), FRotator(0, 90, 0), SC::WoodOak, FS);
+    // v47: Desk with chair
+    SpawnDetailedDesk(FVector(200, -100, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::WoodMedium, FS);
+    SpawnDetailedChair(FVector(200, -200, 0), FRotator::ZeroRotator, SC::FabricPink, SC::WoodMaple, FS);
+    // v47: Rug under bed area
+    SpawnDetailedRug(FVector(0, 50, 0), SC::FabricLavender, SC::FabricPurple, FVector(300, 250, 0));
+    // v47: Plant in corner
+    SpawnDetailedPlant(FVector(300, 280, 0), SC::FabricCream, SC::PlantGreen, FS);
+    // v47: Window on back wall
+    SpawnWindowFrame(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, RS.Z*0.3f, RS.Z*0.5f, RS.Z*0.4f, SC::WoodLight, SC::GlassBlue);
+    // v47: Character
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -50, 0), FRotator(0, -90, 0), FS * 2.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPink);
 
     SetupAutoCamera(RS);
 }
