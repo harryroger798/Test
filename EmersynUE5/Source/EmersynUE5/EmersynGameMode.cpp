@@ -1,4 +1,4 @@
-// v26: Sims-quality rendering - fixed camera distance, darker lighting, disabled input, enhanced AO
+// v27: Sims-quality rendering - hidden joysticks, fixed camera, darker floors, better proportions
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -19,6 +19,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture2D.h"
 #include "TextureResource.h"
+#include "GameFramework/TouchInterface.h"
+#include "Engine/GameViewportClient.h"
 
 // v25b: MeshData headers removed to fix mobile init crash (29MB binary too large)
 // Using lightweight procedural geometry (SpawnDetailed* builders) instead
@@ -173,10 +175,15 @@ void AEmersynGameMode::BeginPlay()
     Super::BeginPlay();
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (PC) {
-        // v26: Fully disable ALL input to prevent fuzz test from rotating camera
+        // v27: Fully disable ALL input AND hide virtual joystick overlays
         PC->SetIgnoreLookInput(true);
         PC->SetIgnoreMoveInput(true);
         PC->SetCinematicMode(true, false, false, true, true);
+        // v27: Remove virtual joystick widgets completely
+        PC->ActivateTouchInterface(nullptr);
+        if (GEngine && GEngine->GameViewport) {
+            GEngine->GameViewport->SetVirtualJoystickVisibility(false);
+        }
         APawn* P = PC->GetPawn();
         if (P) {
             P->SetActorHiddenInGame(true);
@@ -316,37 +323,40 @@ FLinearColor AEmersynGameMode::ApplyDirectionalShading(FLinearColor BaseColor, F
 
 FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector Normal, FVector WorldPos, float AO) const
 {
-    // v26: Sims-accurate lighting with warm/cool contrast and proper energy levels
-    FVector KeyDir  = FVector(0.6f, 0.4f, 0.8f).GetSafeNormal();
-    FVector FillDir = FVector(-0.5f, -0.3f, 0.4f).GetSafeNormal();
+    // v27: Key light direction more from side (less from above) to reduce floor wash-out
+    FVector KeyDir  = FVector(0.7f, 0.5f, 0.35f).GetSafeNormal();
+    FVector FillDir = FVector(-0.5f, -0.3f, 0.2f).GetSafeNormal();
 
     float KeyDot   = FMath::Max(0.f, FVector::DotProduct(Normal, KeyDir));
     float FillDot  = FMath::Max(0.f, FVector::DotProduct(Normal, FillDir));
-    float SkyDot   = FMath::Max(0.f, Normal.Z);   // Up-facing gets sky
-    float GroundDot= FMath::Max(0.f, -Normal.Z);   // Down-facing gets ground bounce
+    float SkyDot   = FMath::Max(0.f, Normal.Z);
+    float GroundDot= FMath::Max(0.f, -Normal.Z);
 
-    // Soften the falloff (Sims uses softer lighting than physically accurate)
+    // Soften the falloff
     KeyDot = FMath::Pow(KeyDot, 0.7f);
     FillDot = FMath::Pow(FillDot, 0.8f);
 
-    // Height-based AO — lower objects get darkened more aggressively
+    // v27: Reduce sky contribution on floors (they were getting too bright)
+    float SkyMult = (Normal.Z > 0.8f) ? 0.04f : 0.10f;
+
+    // Height-based AO
     float HeightAO = FMath::Clamp(0.4f + (WorldPos.Z / 300.f) * 0.6f, 0.35f, 1.0f);
     float FinalAO  = AO * HeightAO;
 
-    // v26: Edge/corner darkening (fake AO where walls meet floor)
+    // Edge/corner darkening
     float EdgeDarken = 1.0f;
     if (WorldPos.Z < 30.f) {
         EdgeDarken *= FMath::Lerp(0.5f, 1.0f, WorldPos.Z / 30.f);
     }
 
-    // Combine all light sources (much lower total energy than v25)
+    // v27: Lower total energy — ambient is the dominant term for consistent look
     FLinearColor AccLight =
         (LightKeyColor * LightKeyIntensity * KeyDot) +
         (LightFillColor * LightFillIntensity * FillDot) +
-        (FLinearColor(0.45f, 0.50f, 0.58f) * 0.12f * SkyDot) +
-        (FLinearColor(0.35f, 0.30f, 0.25f) * 0.08f * GroundDot);
+        (FLinearColor(0.35f, 0.40f, 0.48f) * SkyMult * SkyDot) +
+        (FLinearColor(0.30f, 0.25f, 0.20f) * 0.06f * GroundDot);
 
-    // Base ambient (dark blue-grey, prevents pure black)
+    // Base ambient (darker)
     AccLight += LightAmbientColor;
 
     // Apply to base color
@@ -355,12 +365,12 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
     Lit.G = BaseColor.G * AccLight.G;
     Lit.B = BaseColor.B * AccLight.B;
 
-    // Rim highlight (subtle)
+    // Rim highlight (very subtle)
     FVector ViewDir = FVector(-0.5f, -0.5f, 0.3f).GetSafeNormal();
     float RimDot = FMath::Pow(FMath::Max(0.f, 1.f - FVector::DotProduct(Normal, -ViewDir)), 3.0f);
-    Lit.R += RimDot * 0.04f * LightKeyColor.R;
-    Lit.G += RimDot * 0.04f * LightKeyColor.G;
-    Lit.B += RimDot * 0.04f * LightKeyColor.B;
+    Lit.R += RimDot * 0.03f * LightKeyColor.R;
+    Lit.G += RimDot * 0.03f * LightKeyColor.G;
+    Lit.B += RimDot * 0.03f * LightKeyColor.B;
 
     // Apply AO and edge darkening
     Lit.R *= FinalAO * EdgeDarken;
@@ -368,9 +378,10 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
     Lit.B *= FinalAO * EdgeDarken;
     Lit.A = 1.0f;
 
-    Lit.R = FMath::Clamp(Lit.R, 0.f, 1.f);
-    Lit.G = FMath::Clamp(Lit.G, 0.f, 1.f);
-    Lit.B = FMath::Clamp(Lit.B, 0.f, 1.f);
+    // v27: Overall gamma darken to prevent washed out look
+    Lit.R = FMath::Pow(FMath::Clamp(Lit.R, 0.f, 1.f), 1.15f);
+    Lit.G = FMath::Pow(FMath::Clamp(Lit.G, 0.f, 1.f), 1.15f);
+    Lit.B = FMath::Pow(FMath::Clamp(Lit.B, 0.f, 1.f), 1.15f);
     return Lit;
 }
 
@@ -1189,9 +1200,9 @@ void AEmersynGameMode::SpawnRoomLabel(const FString& Label)
 
 void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 {
-    // v26: Enforce minimum distance so camera is never inside the room
-    // For 800-unit rooms, need at least 2000 units back
-    float SafeDistance = FMath::Max(Distance, 2000.f);
+    // v27: Camera distance tuned for 800-unit rooms
+    // 1200 fills screen nicely with isometric view
+    float SafeDistance = FMath::Max(Distance, 1200.f);
     FRotator CamRot(-38.f, 32.f, 0.f);
     FVector CamOffset = CamRot.Vector() * -SafeDistance;
     FVector CamPos = RoomCenter + CamOffset;
