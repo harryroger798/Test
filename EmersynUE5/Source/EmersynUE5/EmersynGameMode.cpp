@@ -76,8 +76,8 @@ namespace SC {
     const FLinearColor WallLavender(0.62f, 0.55f, 0.78f);
     const FLinearColor WallPeach(0.82f, 0.62f, 0.48f);
 
-    // Floor colors (v26: darker to ground the scene)
-    const FLinearColor FloorWood(0.52f, 0.35f, 0.18f);
+    // Floor colors (v28: much darker to actually appear as wood, not white)
+    const FLinearColor FloorWood(0.28f, 0.19f, 0.10f);
     const FLinearColor FloorTile(0.72f, 0.70f, 0.65f);
     const FLinearColor FloorGrass(0.15f, 0.55f, 0.15f);
     const FLinearColor FloorGrassDark(0.08f, 0.38f, 0.08f);
@@ -320,7 +320,7 @@ FLinearColor AEmersynGameMode::ApplyDirectionalShading(FLinearColor BaseColor, F
 
 FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector Normal, FVector WorldPos, float AO) const
 {
-    // v27: Key light direction more from side (less from above) to reduce floor wash-out
+    // v28: Key light from side, steep angle for top-down view
     FVector KeyDir  = FVector(0.7f, 0.5f, 0.35f).GetSafeNormal();
     FVector FillDir = FVector(-0.5f, -0.3f, 0.2f).GetSafeNormal();
 
@@ -333,8 +333,11 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
     KeyDot = FMath::Pow(KeyDot, 0.7f);
     FillDot = FMath::Pow(FillDot, 0.8f);
 
-    // v27: Reduce sky contribution on floors (they were getting too bright)
-    float SkyMult = (Normal.Z > 0.8f) ? 0.04f : 0.10f;
+    // v28: Detect floor surfaces (upward-facing) and drastically reduce their brightness
+    bool bIsFloor = (Normal.Z > 0.8f);
+    float SkyMult = bIsFloor ? 0.02f : 0.10f;
+    float KeyMult = bIsFloor ? 0.3f : 1.0f;  // v28: Floors get 30% of key light
+    float FillMult = bIsFloor ? 0.15f : 1.0f; // v28: Floors get 15% of fill
 
     // Height-based AO
     float HeightAO = FMath::Clamp(0.4f + (WorldPos.Z / 300.f) * 0.6f, 0.35f, 1.0f);
@@ -346,21 +349,33 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
         EdgeDarken *= FMath::Lerp(0.5f, 1.0f, WorldPos.Z / 30.f);
     }
 
-    // v27: Lower total energy — ambient is the dominant term for consistent look
+    // v28: Reduced light accumulation with floor-specific multipliers
     FLinearColor AccLight =
-        (LightKeyColor * LightKeyIntensity * KeyDot) +
-        (LightFillColor * LightFillIntensity * FillDot) +
+        (LightKeyColor * LightKeyIntensity * KeyDot * KeyMult) +
+        (LightFillColor * LightFillIntensity * FillDot * FillMult) +
         (FLinearColor(0.35f, 0.40f, 0.48f) * SkyMult * SkyDot) +
         (FLinearColor(0.30f, 0.25f, 0.20f) * 0.06f * GroundDot);
 
-    // Base ambient (darker)
-    AccLight += LightAmbientColor;
+    // Base ambient (darker for floors)
+    if (bIsFloor) {
+        AccLight += LightAmbientColor * 0.4f;  // v28: Floors get 40% ambient
+    } else {
+        AccLight += LightAmbientColor;
+    }
 
     // Apply to base color
     FLinearColor Lit;
     Lit.R = BaseColor.R * AccLight.R;
     Lit.G = BaseColor.G * AccLight.G;
     Lit.B = BaseColor.B * AccLight.B;
+
+    // v28: Saturation boost for non-floor surfaces (makes colors pop like Sims)
+    if (!bIsFloor) {
+        float Lum = Lit.R * 0.299f + Lit.G * 0.587f + Lit.B * 0.114f;
+        Lit.R = FMath::Lerp(Lum, Lit.R, 1.4f);
+        Lit.G = FMath::Lerp(Lum, Lit.G, 1.4f);
+        Lit.B = FMath::Lerp(Lum, Lit.B, 1.4f);
+    }
 
     // Rim highlight (very subtle)
     FVector ViewDir = FVector(-0.5f, -0.5f, 0.3f).GetSafeNormal();
@@ -375,10 +390,18 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
     Lit.B *= FinalAO * EdgeDarken;
     Lit.A = 1.0f;
 
-    // v27: Overall gamma darken to prevent washed out look
-    Lit.R = FMath::Pow(FMath::Clamp(Lit.R, 0.f, 1.f), 1.15f);
-    Lit.G = FMath::Pow(FMath::Clamp(Lit.G, 0.f, 1.f), 1.15f);
-    Lit.B = FMath::Pow(FMath::Clamp(Lit.B, 0.f, 1.f), 1.15f);
+    // v28: Aggressive gamma darken — floors get pow(1.8), furniture gets pow(1.15)
+    float GammaPow = bIsFloor ? 1.8f : 1.15f;
+    Lit.R = FMath::Pow(FMath::Clamp(Lit.R, 0.f, 1.f), GammaPow);
+    Lit.G = FMath::Pow(FMath::Clamp(Lit.G, 0.f, 1.f), GammaPow);
+    Lit.B = FMath::Pow(FMath::Clamp(Lit.B, 0.f, 1.f), GammaPow);
+
+    // v28: Extra floor brightness cut
+    if (bIsFloor) {
+        Lit.R *= 0.5f;
+        Lit.G *= 0.5f;
+        Lit.B *= 0.5f;
+    }
     return Lit;
 }
 
@@ -1197,16 +1220,15 @@ void AEmersynGameMode::SpawnRoomLabel(const FString& Label)
 
 void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 {
-    // v27: Camera distance tuned for 800-unit rooms
-    // 1200 fills screen nicely with isometric view
-    float SafeDistance = FMath::Max(Distance, 1200.f);
-    FRotator CamRot(-38.f, 32.f, 0.f);
+    // v28: Steeper angle + farther distance for proper Sims top-down dollhouse view
+    float SafeDistance = FMath::Max(Distance, 2800.f);
+    FRotator CamRot(-65.f, 32.f, 0.f);
     FVector CamOffset = CamRot.Vector() * -SafeDistance;
     FVector CamPos = RoomCenter + CamOffset;
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 42.f;
+            IsoCam->GetCameraComponent()->FieldOfView = 35.f;  // v28: Narrower FOV for cleaner isometric look
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
