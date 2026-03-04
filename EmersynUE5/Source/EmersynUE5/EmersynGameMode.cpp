@@ -1,4 +1,4 @@
-// v38: 1 wall only (back), walls 8%, furniture spread to center/front, camera target forward
+// v39: FS scaled to FLOOR dimensions (2.0-2.7x), not wall height. Furniture fills 40-50% of room.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1262,8 +1262,8 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float Dist = MaxDim / 0.42f;  // v38: slightly farther for full room view
-    return FMath::Clamp(Dist, 450.f, 2200.f);  // v38: adjusted clamp
+    float Dist = MaxDim / 0.45f;  // v39: 7% closer for furniture prominence
+    return FMath::Clamp(Dist, 450.f, 2200.f);  // v39: adjusted clamp
 }
 
 // v38: Camera target shifted forward toward furniture zone
@@ -1770,9 +1770,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v38: wall=8% floorW=36, furniture centered, FS=wallH*1.5/tallest(95)=0.57
+    // v39: FS=2.5 scaled to FLOOR (bed occupies ~40% of 450 width)
     FVector RS(450.f, 400.f, 36.f);
-    float FS = 0.57f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.5f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallPink, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bedroom"));
@@ -1797,9 +1797,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v38: wall=8% floorW=38, furniture centered, FS=wallH*1.5/tallest(150)=0.38
+    // v39: FS=2.2 scaled to FLOOR (counter spans ~30% of 480 width)
     FVector RS(480.f, 420.f, 38.f);
-    float FS = 0.38f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.2f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1826,9 +1826,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v38: wall=8% floorW=30, furniture centered, FS=wallH*1.5/tallest(100)=0.46
+    // v39: FS=2.0 scaled to FLOOR (fixtures 20-25% of 380 width)
     FVector RS(380.f, 350.f, 30.f);
-    float FS = 0.46f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.0f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1849,9 +1849,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v38: wall=8% floorW=42, furniture centered, FS=wallH*1.5/tallest(140)=0.45
+    // v39: FS=2.7 scaled to FLOOR (sofa ~38% of 520 width)
     FVector RS(520.f, 450.f, 42.f);
-    float FS = 0.45f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.7f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1923,9 +1923,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v38: wall=8% floorW=38, furniture centered, FS=wallH*1.5/tallest(140)=0.41
+    // v39: FS=2.3 scaled to FLOOR (desks ~24% of 480 width)
     FVector RS(480.f, 420.f, 38.f);
-    float FS = 0.41f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.3f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1957,9 +1957,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v38: wall=8% floorW=40, furniture centered, FS=wallH*1.5/tallest(140)=0.43
+    // v39: FS=2.4 scaled to FLOOR (counter ~30% of 500 width)
     FVector RS(500.f, 440.f, 40.f);
-    float FS = 0.43f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.4f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2063,9 +2063,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v38: wall=8% floorW=44, furniture centered, FS=wallH*1.5/tallest(140)=0.47
+    // v39: FS=2.5 scaled to FLOOR (displays ~30% of 550 width)
     FVector RS(550.f, 480.f, 44.f);
-    float FS = 0.47f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.5f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2097,9 +2097,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v38: wall=8% floorW=36, furniture centered, FS=wallH*1.5/tallest(110)=0.49
+    // v39: FS=2.6 scaled to FLOOR (machines ~33% of 450 width)
     FVector RS(450.f, 400.f, 36.f);
-    float FS = 0.49f;  // v38: 8% walls, furniture 1.5x wall
+    float FS = 2.6f;  // v39: floor-based scale, furniture fills room
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
