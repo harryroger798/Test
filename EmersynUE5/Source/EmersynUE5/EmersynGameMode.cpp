@@ -1,7 +1,6 @@
 // v25: Sims-quality rendering - lighting presets, cutaway walls, multi-part furniture, enhanced AO
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
-#include "MeshLoader.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/PointLight.h"
 #include "Components/DirectionalLightComponent.h"
@@ -21,53 +20,8 @@
 #include "Engine/Texture2D.h"
 #include "TextureResource.h"
 
-// Mesh data includes
-#include "MeshData/Mesh_bedroom_bed.h"
-#include "MeshData/Mesh_bedroom_dresser.h"
-#include "MeshData/Mesh_bedroom_bookshelf.h"
-#include "MeshData/Mesh_bedroom_lamp.h"
-#include "MeshData/Mesh_bedroom_rug.h"
-#include "MeshData/Mesh_kitchen_table.h"
-#include "MeshData/Mesh_kitchen_chair.h"
-#include "MeshData/Mesh_kitchen_fridge.h"
-#include "MeshData/Mesh_kitchen_stove.h"
-#include "MeshData/Mesh_kitchen_counter.h"
-#include "MeshData/Mesh_bathroom_tub.h"
-#include "MeshData/Mesh_bathroom_sink.h"
-#include "MeshData/Mesh_bathroom_mirror.h"
-#include "MeshData/Mesh_bathroom_towelrack.h"
-#include "MeshData/Mesh_livingroom_sofa.h"
-#include "MeshData/Mesh_livingroom_coffeetable.h"
-#include "MeshData/Mesh_livingroom_tv.h"
-#include "MeshData/Mesh_livingroom_plant.h"
-#include "MeshData/Mesh_garden_tree.h"
-#include "MeshData/Mesh_garden_fence.h"
-#include "MeshData/Mesh_garden_flowerbed.h"
-#include "MeshData/Mesh_school_desk.h"
-#include "MeshData/Mesh_school_chalkboard.h"
-#include "MeshData/Mesh_school_backpack.h"
-#include "MeshData/Mesh_arcade_cabinet.h"
-#include "MeshData/Mesh_arcade_claw_machine.h"
-#include "MeshData/Mesh_park_bench.h"
-#include "MeshData/Mesh_park_fountain.h"
-#include "MeshData/Mesh_park_lamppost.h"
-#include "MeshData/Mesh_playground_slide.h"
-#include "MeshData/Mesh_playground_swing.h"
-#include "MeshData/Mesh_playground_sandbox.h"
-#include "MeshData/Mesh_shop_counter.h"
-#include "MeshData/Mesh_shop_shelf.h"
-#include "MeshData/Mesh_shop_register.h"
-#include "MeshData/Mesh_mall_escalator.h"
-#include "MeshData/Mesh_mall_planter.h"
-#include "MeshData/Mesh_amusement_carousel.h"
-#include "MeshData/Mesh_amusement_ferriswheel.h"
-#include "MeshData/Mesh_amusement_foodcart.h"
-#include "MeshData/Mesh_emersyn.h"
-#include "MeshData/Mesh_ava.h"
-#include "MeshData/Mesh_leo.h"
-#include "MeshData/Mesh_mia.h"
-#include "MeshData/Mesh_cat.h"
-#include "MeshData/Mesh_dog.h"
+// v25b: MeshData headers removed to fix mobile init crash (29MB binary too large)
+// Using lightweight procedural geometry (SpawnDetailed* builders) instead
 
 // ============================================================
 // v25 SIMS-QUALITY COLOR PALETTE (60+ colors)
@@ -1054,17 +1008,48 @@ AActor* AEmersynGameMode::SpawnMeshVC(const float* Verts, const float* Norms, co
 AActor* AEmersynGameMode::SpawnCharacterMesh(const FString& Name, FVector Location, FRotator Rotation,
     float InScale, const FLinearColor& SkinTint, const FLinearColor& OutfitTint)
 {
-    const float* V = nullptr; const float* N = nullptr; const float* UV = nullptr;
-    const int32* T = nullptr; int32 NV = 0, NT = 0;
-    if (Name == TEXT("Emersyn")) { V = MeshData_EMERSYN::Vertices; N = MeshData_EMERSYN::Normals; UV = MeshData_EMERSYN::UVs; T = MeshData_EMERSYN::Triangles; NV = MeshData_EMERSYN::NumVertices; NT = MeshData_EMERSYN::NumTriangles; }
-    if (Name == TEXT("Ava"))     { V = MeshData_AVA::Vertices; N = MeshData_AVA::Normals; UV = MeshData_AVA::UVs; T = MeshData_AVA::Triangles; NV = MeshData_AVA::NumVertices; NT = MeshData_AVA::NumTriangles; }
-    if (Name == TEXT("Leo"))     { V = MeshData_LEO::Vertices; N = MeshData_LEO::Normals; UV = MeshData_LEO::UVs; T = MeshData_LEO::Triangles; NV = MeshData_LEO::NumVertices; NT = MeshData_LEO::NumTriangles; }
-    if (Name == TEXT("Mia"))     { V = MeshData_MIA::Vertices; N = MeshData_MIA::Normals; UV = MeshData_MIA::UVs; T = MeshData_MIA::Triangles; NV = MeshData_MIA::NumVertices; NT = MeshData_MIA::NumTriangles; }
-    if (Name == TEXT("Cat"))     { V = MeshData_CAT::Vertices; N = MeshData_CAT::Normals; UV = MeshData_CAT::UVs; T = MeshData_CAT::Triangles; NV = MeshData_CAT::NumVertices; NT = MeshData_CAT::NumTriangles; }
-    if (Name == TEXT("Dog"))     { V = MeshData_DOG::Vertices; N = MeshData_DOG::Normals; UV = MeshData_DOG::UVs; T = MeshData_DOG::Triangles; NV = MeshData_DOG::NumVertices; NT = MeshData_DOG::NumTriangles; }
-    if (!V) return nullptr;
-    FLinearColor SkinAccent = SkinTint * 0.85f + OutfitTint * 0.15f;
-    return SpawnMesh(V, N, UV, T, NV, NT, Location, Rotation, FVector(InScale), ETexturePattern::Fabric, SkinTint, SkinAccent, 1.2f);
+    // v25b: Lightweight procedural character (head + body + arms + legs)
+    // Replaces heavy MeshData headers to fix mobile init crash
+    float S = InScale * 10.f;
+    bool bIsPet = (Name == TEXT("Cat") || Name == TEXT("Dog"));
+    if (bIsPet) {
+        // Pet: body + head + legs + tail
+        SpawnTexturedBox(Location + FVector(0, 0, 12*S), FVector(8*S, 14*S, 7*S), ETexturePattern::Fabric, SkinTint, SkinTint * 0.9f);
+        SpawnSphere(Location + FVector(0, -14*S, 16*S), 6*S, 8, SkinTint * 1.05f);
+        // Legs
+        SpawnCylinder(Location + FVector(-5*S, -8*S, 0), 2*S, 12*S, 6, SkinTint * 0.85f);
+        SpawnCylinder(Location + FVector(5*S, -8*S, 0), 2*S, 12*S, 6, SkinTint * 0.85f);
+        SpawnCylinder(Location + FVector(-5*S, 8*S, 0), 2*S, 12*S, 6, SkinTint * 0.85f);
+        SpawnCylinder(Location + FVector(5*S, 8*S, 0), 2*S, 12*S, 6, SkinTint * 0.85f);
+        // Ears
+        SpawnTexturedBox(Location + FVector(-3*S, -18*S, 22*S), FVector(2*S, 2*S, 4*S), ETexturePattern::Fabric, SkinTint * 0.9f, SkinTint);
+        SpawnTexturedBox(Location + FVector(3*S, -18*S, 22*S), FVector(2*S, 2*S, 4*S), ETexturePattern::Fabric, SkinTint * 0.9f, SkinTint);
+        // Tail
+        SpawnCylinder(Location + FVector(0, 14*S, 18*S), 1.5f*S, 8*S, 6, SkinTint * 0.8f);
+    } else {
+        // Human: head + torso + arms + legs + hair
+        // Legs (outfit color)
+        SpawnCylinder(Location + FVector(-4*S, 0, 0), 3*S, 25*S, 8, OutfitTint * 0.85f);
+        SpawnCylinder(Location + FVector(4*S, 0, 0), 3*S, 25*S, 8, OutfitTint * 0.85f);
+        // Torso (outfit)
+        SpawnTexturedBox(Location + FVector(0, 0, 38*S), FVector(10*S, 6*S, 14*S), ETexturePattern::Fabric, OutfitTint, OutfitTint * 0.95f);
+        // Arms (skin)
+        SpawnCylinder(Location + FVector(-12*S, 0, 35*S), 2.5f*S, 14*S, 6, SkinTint * 0.95f);
+        SpawnCylinder(Location + FVector(12*S, 0, 35*S), 2.5f*S, 14*S, 6, SkinTint * 0.95f);
+        // Head (skin)
+        SpawnSphere(Location + FVector(0, 0, 58*S), 7*S, 10, SkinTint);
+        // Hair
+        FLinearColor HairColor = FLinearColor(0.15f, 0.10f, 0.05f);
+        if (Name == TEXT("Emersyn")) HairColor = FLinearColor(0.85f, 0.55f, 0.20f);
+        if (Name == TEXT("Ava")) HairColor = FLinearColor(0.12f, 0.08f, 0.04f);
+        if (Name == TEXT("Leo")) HairColor = FLinearColor(0.25f, 0.15f, 0.08f);
+        if (Name == TEXT("Mia")) HairColor = FLinearColor(0.55f, 0.25f, 0.10f);
+        SpawnSphere(Location + FVector(0, 1*S, 62*S), 7.5f*S, 8, HairColor);
+        // Shoes
+        SpawnTexturedBox(Location + FVector(-4*S, -1*S, 1*S), FVector(3.5f*S, 5*S, 2*S), ETexturePattern::Fabric, OutfitTint * 0.5f, OutfitTint * 0.4f);
+        SpawnTexturedBox(Location + FVector(4*S, -1*S, 1*S), FVector(3.5f*S, 5*S, 2*S), ETexturePattern::Fabric, OutfitTint * 0.5f, OutfitTint * 0.4f);
+    }
+    return nullptr;
 }
 
 // ============================================================
@@ -1836,8 +1821,13 @@ void AEmersynGameMode::BuildGarden()
     SpawnRoomLighting(FVector(0, 0, 200), FVector(RS.X, RS.Y, 400));
     SpawnRoomLabel(TEXT("Garden"));
 
-    // Fence around back and left sides
-    SpawnMesh(MeshData_GARDEN_FENCE::Vertices, MeshData_GARDEN_FENCE::Normals, MeshData_GARDEN_FENCE::UVs, MeshData_GARDEN_FENCE::Triangles, MeshData_GARDEN_FENCE::NumVertices, MeshData_GARDEN_FENCE::NumTriangles, FVector(-RS.X, RS.Y, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::WoodGrain, SC::WoodLight, SC::WoodMedium);
+    // Fence around back and left sides (procedural fence posts + rails)
+    for (int32 I = 0; I < 12; I++) {
+        float FX = -RS.X + I * (2.f * RS.X / 11.f);
+        SpawnCylinder(FVector(FX, RS.Y, 0), 3.f, 60.f, 6, SC::WoodLight, 0.85f);
+    }
+    SpawnTexturedBox(FVector(0, RS.Y, 50), FVector(RS.X, 2, 3), ETexturePattern::WoodGrain, SC::WoodMedium, SC::WoodLight);
+    SpawnTexturedBox(FVector(0, RS.Y, 25), FVector(RS.X, 2, 3), ETexturePattern::WoodGrain, SC::WoodMedium, SC::WoodLight);
 
     // Trees
     SpawnDetailedTree(FVector(-350, 300, 0), SC::WoodMedium, SC::PlantGreen, 1.5f);
@@ -1873,8 +1863,9 @@ void AEmersynGameMode::BuildSchool()
 
     // Teacher's desk at front
     SpawnDetailedDesk(FVector(0, 300, 0), FRotator::ZeroRotator, SC::WoodOak, SC::MetalBlack, 1.2f);
-    // Chalkboard on back wall
-    SpawnMesh(MeshData_SCHOOL_CHALKBOARD::Vertices, MeshData_SCHOOL_CHALKBOARD::Normals, MeshData_SCHOOL_CHALKBOARD::UVs, MeshData_SCHOOL_CHALKBOARD::Triangles, MeshData_SCHOOL_CHALKBOARD::NumVertices, MeshData_SCHOOL_CHALKBOARD::NumTriangles, FVector(0, 380, 120), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Concrete, FLinearColor(0.15f, 0.32f, 0.18f), FLinearColor(0.10f, 0.25f, 0.12f));
+    // Chalkboard on back wall (procedural: frame + green board)
+    SpawnTexturedBox(FVector(0, 380, 170), FVector(120, 3, 60), ETexturePattern::Concrete, FLinearColor(0.15f, 0.32f, 0.18f), FLinearColor(0.10f, 0.25f, 0.12f));
+    SpawnTexturedBox(FVector(0, 378, 170), FVector(125, 2, 65), ETexturePattern::WoodGrain, SC::WoodDark, SC::WoodEbony);
     // Student desks (2 rows)
     SpawnDetailedDesk(FVector(-180, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 0.8f);
     SpawnDetailedDesk(FVector(0, -50, 0), FRotator::ZeroRotator, SC::WoodMaple, SC::MetalBlack, 0.8f);
@@ -1891,8 +1882,9 @@ void AEmersynGameMode::BuildSchool()
     SpawnDetailedChair(FVector(180, -230, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, 0.8f);
     // Bookshelf on left wall
     SpawnDetailedBookshelf(FVector(-400, 100, 0), FRotator::ZeroRotator, SC::WoodOak, 1.0f);
-    // Backpacks
-    SpawnMesh(MeshData_SCHOOL_BACKPACK::Vertices, MeshData_SCHOOL_BACKPACK::Normals, MeshData_SCHOOL_BACKPACK::UVs, MeshData_SCHOOL_BACKPACK::Triangles, MeshData_SCHOOL_BACKPACK::NumVertices, MeshData_SCHOOL_BACKPACK::NumTriangles, FVector(350, -200, 0), FRotator::ZeroRotator, FVector(2.5f), ETexturePattern::Fabric, SC::FabricRed, SC::FabricBlue);
+    // Backpacks (procedural: box + flap)
+    SpawnTexturedBox(FVector(350, -200, 12), FVector(10, 6, 14), ETexturePattern::Fabric, SC::FabricRed, SC::FabricBlue);
+    SpawnTexturedBox(FVector(350, -205, 20), FVector(10, 1, 8), ETexturePattern::Fabric, SC::FabricRed * 0.9f, SC::FabricBlue * 0.9f);
     // Plant
     SpawnDetailedPlant(FVector(380, 350, 0), SC::FabricCream, SC::PlantGreen, 0.9f);
     // Window
@@ -1912,8 +1904,10 @@ void AEmersynGameMode::BuildShop()
 
     // Counter at front
     SpawnDetailedCounter(FVector(0, -200, 0), SC::MarbleWhite, SC::WoodOak, 1.0f);
-    // Cash register on counter
-    SpawnMesh(MeshData_SHOP_REGISTER::Vertices, MeshData_SHOP_REGISTER::Normals, MeshData_SHOP_REGISTER::UVs, MeshData_SHOP_REGISTER::Triangles, MeshData_SHOP_REGISTER::NumVertices, MeshData_SHOP_REGISTER::NumTriangles, FVector(0, -170, 80), FRotator::ZeroRotator, FVector(2.5f), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    // Cash register on counter (procedural: box + screen + buttons)
+    SpawnTexturedBox(FVector(0, -170, 85), FVector(15, 12, 10), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    SpawnTexturedBox(FVector(0, -178, 95), FVector(12, 2, 8), ETexturePattern::Metal, FLinearColor(0.1f, 0.1f, 0.12f), FLinearColor(0.2f, 0.2f, 0.25f));
+    SpawnTexturedBox(FVector(0, -165, 80), FVector(10, 8, 2), ETexturePattern::Metal, SC::MetalSilver, SC::MetalChrome);
     // Shelves along back wall
     SpawnDetailedBookshelf(FVector(-300, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 1.1f);
     SpawnDetailedBookshelf(FVector(-100, 350, 0), FRotator::ZeroRotator, SC::WoodMaple, 1.1f);
@@ -1954,8 +1948,12 @@ void AEmersynGameMode::BuildPlayground()
     SpawnDetailedSwing(FVector(-200, 100, 0), SC::MetalSilver, SC::WoodOak, 1.3f);
     // Slide
     SpawnDetailedSlide(FVector(200, 150, 0), SC::FabricRed, SC::FabricYellow, 1.3f);
-    // Sandbox (existing mesh)
-    SpawnMesh(MeshData_PLAYGROUND_SANDBOX::Vertices, MeshData_PLAYGROUND_SANDBOX::Normals, MeshData_PLAYGROUND_SANDBOX::UVs, MeshData_PLAYGROUND_SANDBOX::Triangles, MeshData_PLAYGROUND_SANDBOX::NumVertices, MeshData_PLAYGROUND_SANDBOX::NumTriangles, FVector(0, -150, 0), FRotator::ZeroRotator, FVector(4.f), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow);
+    // Sandbox (procedural: wooden frame + sand fill)
+    SpawnTexturedBox(FVector(0, -150, 8), FVector(60, 60, 8), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow);
+    SpawnTexturedBox(FVector(0, -150, 4), FVector(65, 65, 4), ETexturePattern::WoodGrain, SC::WoodLight, SC::WoodMedium);
+    // Sand toys
+    SpawnCylinder(FVector(-20, -140, 16), 5, 8, 8, SC::FabricRed);
+    SpawnCylinder(FVector(15, -160, 16), 4, 6, 8, SC::FabricBlue);
     // Bench for parents
     SpawnDetailedBench(FVector(-350, -200, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, 1.0f);
     // Tree
@@ -1990,9 +1988,13 @@ void AEmersynGameMode::BuildPark()
     // Benches
     SpawnDetailedBench(FVector(-250, -100, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, 1.2f);
     SpawnDetailedBench(FVector(250, -100, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, 1.2f);
-    // Lamp posts
-    SpawnMesh(MeshData_PARK_LAMPPOST::Vertices, MeshData_PARK_LAMPPOST::Normals, MeshData_PARK_LAMPPOST::UVs, MeshData_PARK_LAMPPOST::Triangles, MeshData_PARK_LAMPPOST::NumVertices, MeshData_PARK_LAMPPOST::NumTriangles, FVector(-350, 0, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::MetalBlack, SC::MetalGold);
-    SpawnMesh(MeshData_PARK_LAMPPOST::Vertices, MeshData_PARK_LAMPPOST::Normals, MeshData_PARK_LAMPPOST::UVs, MeshData_PARK_LAMPPOST::Triangles, MeshData_PARK_LAMPPOST::NumVertices, MeshData_PARK_LAMPPOST::NumTriangles, FVector(350, 0, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::MetalBlack, SC::MetalGold);
+    // Lamp posts (procedural: pole + globe + light)
+    SpawnCylinder(FVector(-350, 0, 0), 4, 120, 8, SC::MetalBlack, 0.9f);
+    SpawnSphere(FVector(-350, 0, 125), 12, 8, SC::MetalGold);
+    SpawnLight(FVector(-350, 0, 130), 8.f, FLinearColor(1.0f, 0.92f, 0.72f), 350.f);
+    SpawnCylinder(FVector(350, 0, 0), 4, 120, 8, SC::MetalBlack, 0.9f);
+    SpawnSphere(FVector(350, 0, 125), 12, 8, SC::MetalGold);
+    SpawnLight(FVector(350, 0, 130), 8.f, FLinearColor(1.0f, 0.92f, 0.72f), 350.f);
     // Path
     for (int32 I = 0; I < 8; I++) {
         SpawnTexturedBox(FVector(-350 + I * 100.f, -200, 1), FVector(30, 25, 2), ETexturePattern::Concrete, SC::FloorConcrete, SC::MarbleVein);
@@ -2013,8 +2015,15 @@ void AEmersynGameMode::BuildMall()
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
 
-    // Escalator
-    SpawnMesh(MeshData_MALL_ESCALATOR::Vertices, MeshData_MALL_ESCALATOR::Normals, MeshData_MALL_ESCALATOR::UVs, MeshData_MALL_ESCALATOR::Triangles, MeshData_MALL_ESCALATOR::NumVertices, MeshData_MALL_ESCALATOR::NumTriangles, FVector(0, 0, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::MetalSilver, SC::MetalBlack);
+    // Escalator (procedural: ramp + side rails + steps)
+    SpawnTexturedBox(FVector(0, 0, 60), FVector(40, 120, 5), ETexturePattern::Metal, SC::MetalSilver, SC::MetalBlack);
+    SpawnTexturedBox(FVector(-42, 0, 65), FVector(3, 120, 30), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    SpawnTexturedBox(FVector(42, 0, 65), FVector(3, 120, 30), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
+    for (int32 I = 0; I < 8; I++) {
+        float SY = -100.f + I * 28.f;
+        float SZ = 20.f + I * 15.f;
+        SpawnTexturedBox(FVector(0, SY, SZ), FVector(38, 10, 2), ETexturePattern::Metal, SC::MetalSilver * 0.9f, SC::MetalChrome);
+    }
     // Planters
     SpawnDetailedPlant(FVector(-300, -200, 0), SC::MarbleWhite, SC::PlantGreen, 1.5f);
     SpawnDetailedPlant(FVector(300, -200, 0), SC::MarbleWhite, SC::PlantDark, 1.5f);
@@ -2046,8 +2055,15 @@ void AEmersynGameMode::BuildArcade()
     SpawnDetailedCabinet(FVector(-200, 250, 0), SC::FabricBlue, FLinearColor(0.2f, 0.8f, 0.2f), 1.2f);
     SpawnDetailedCabinet(FVector(0, 250, 0), SC::FabricRed, FLinearColor(0.2f, 0.2f, 0.9f), 1.2f);
     SpawnDetailedCabinet(FVector(200, 250, 0), SC::FabricPurple, FLinearColor(0.9f, 0.9f, 0.1f), 1.2f);
-    // Claw machine
-    SpawnMesh(MeshData_ARCADE_CLAW_MACHINE::Vertices, MeshData_ARCADE_CLAW_MACHINE::Normals, MeshData_ARCADE_CLAW_MACHINE::UVs, MeshData_ARCADE_CLAW_MACHINE::Triangles, MeshData_ARCADE_CLAW_MACHINE::NumVertices, MeshData_ARCADE_CLAW_MACHINE::NumTriangles, FVector(-300, 0, 0), FRotator::ZeroRotator, FVector(4.f), ETexturePattern::Metal, SC::FabricYellow, SC::FabricGreen);
+    // Claw machine (procedural: glass box + base + claw mechanism)
+    SpawnTexturedBox(FVector(-300, 0, 40), FVector(30, 25, 40), ETexturePattern::Metal, SC::FabricYellow, SC::FabricGreen);
+    SpawnTexturedBox(FVector(-300, 0, 82), FVector(28, 23, 3), ETexturePattern::Metal, SC::FabricYellow * 0.9f, SC::FabricGreen * 0.9f);
+    // Glass sides (semi-transparent look)
+    SpawnTexturedBox(FVector(-300, 0, 55), FVector(26, 21, 25), ETexturePattern::Metal, SC::GlassBlue, FLinearColor(0.8f, 0.9f, 1.0f, 0.5f));
+    // Prize toys inside
+    SpawnSphere(FVector(-310, -5, 10), 5, 6, SC::FabricPink);
+    SpawnSphere(FVector(-295, 5, 10), 5, 6, SC::FabricBlue);
+    SpawnSphere(FVector(-305, 8, 10), 4, 6, SC::FabricYellow);
     // Counter with register
     SpawnDetailedCounter(FVector(300, 0, 0), SC::MetalBlack, SC::WoodDark, 0.8f);
     // Table and chairs
@@ -2076,12 +2092,37 @@ void AEmersynGameMode::BuildAmusementPark()
     SpawnRoomLighting(FVector(0, 0, 200), FVector(RS.X, RS.Y, 400));
     SpawnRoomLabel(TEXT("Amusement Park"));
 
-    // Carousel
-    SpawnMesh(MeshData_AMUSEMENT_CAROUSEL::Vertices, MeshData_AMUSEMENT_CAROUSEL::Normals, MeshData_AMUSEMENT_CAROUSEL::UVs, MeshData_AMUSEMENT_CAROUSEL::Triangles, MeshData_AMUSEMENT_CAROUSEL::NumVertices, MeshData_AMUSEMENT_CAROUSEL::NumTriangles, FVector(-250, 200, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::FabricPink, SC::MetalGold);
-    // Ferris wheel
-    SpawnMesh(MeshData_AMUSEMENT_FERRISWHEEL::Vertices, MeshData_AMUSEMENT_FERRISWHEEL::Normals, MeshData_AMUSEMENT_FERRISWHEEL::UVs, MeshData_AMUSEMENT_FERRISWHEEL::Triangles, MeshData_AMUSEMENT_FERRISWHEEL::NumVertices, MeshData_AMUSEMENT_FERRISWHEEL::NumTriangles, FVector(250, 250, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::FabricRed, SC::FabricYellow);
-    // Food cart
-    SpawnMesh(MeshData_AMUSEMENT_FOODCART::Vertices, MeshData_AMUSEMENT_FOODCART::Normals, MeshData_AMUSEMENT_FOODCART::UVs, MeshData_AMUSEMENT_FOODCART::Triangles, MeshData_AMUSEMENT_FOODCART::NumVertices, MeshData_AMUSEMENT_FOODCART::NumTriangles, FVector(0, -200, 0), FRotator::ZeroRotator, FVector(4.f), ETexturePattern::Metal, SC::FabricRed, SC::FabricYellow);
+    // Carousel (procedural: base platform + center pole + canopy + horses)
+    SpawnCylinder(FVector(-250, 200, 0), 80, 8, 16, SC::FabricPink, 0.95f);
+    SpawnCylinder(FVector(-250, 200, 8), 6, 120, 8, SC::MetalGold, 1.0f);
+    SpawnCylinder(FVector(-250, 200, 110), 85, 10, 16, SC::FabricPink * 0.9f, 0.9f);
+    // Horses (colored cylinders around the edge)
+    for (int32 I = 0; I < 6; I++) {
+        float Angle = I * 60.f * PI / 180.f;
+        FVector HP(-250 + FMath::Cos(Angle) * 55.f, 200 + FMath::Sin(Angle) * 55.f, 35);
+        FLinearColor HC = (I % 2 == 0) ? SC::FabricPink : SC::MetalGold;
+        SpawnCylinder(HP, 4, 30, 6, HC);
+        SpawnTexturedBox(HP + FVector(0, 0, 15), FVector(8, 4, 6), ETexturePattern::Fabric, HC * 1.1f, HC * 0.9f);
+    }
+    // Ferris wheel (procedural: support struts + hub + gondolas)
+    SpawnTexturedBox(FVector(250, 250, 100), FVector(5, 5, 100), ETexturePattern::Metal, SC::FabricRed, SC::MetalSilver);
+    SpawnTexturedBox(FVector(230, 250, 100), FVector(5, 5, 100), ETexturePattern::Metal, SC::FabricRed, SC::MetalSilver);
+    SpawnSphere(FVector(240, 250, 180), 10, 10, SC::MetalSilver);
+    // Gondolas around the wheel
+    for (int32 I = 0; I < 8; I++) {
+        float Angle = I * 45.f * PI / 180.f;
+        FVector GP(240 + FMath::Cos(Angle) * 70.f, 250, 180 + FMath::Sin(Angle) * 70.f);
+        FLinearColor GC = (I % 2 == 0) ? SC::FabricRed : SC::FabricYellow;
+        SpawnTexturedBox(GP, FVector(8, 6, 10), ETexturePattern::Metal, GC, GC * 0.85f);
+    }
+    // Food cart (procedural: cart body + wheels + umbrella)
+    SpawnTexturedBox(FVector(0, -200, 30), FVector(35, 20, 25), ETexturePattern::Metal, SC::FabricRed, SC::FabricYellow);
+    SpawnTexturedBox(FVector(0, -200, 56), FVector(37, 22, 2), ETexturePattern::Metal, SC::FabricRed * 0.95f, SC::FabricYellow);
+    SpawnCylinder(FVector(-30, -200, 0), 8, 8, 8, SC::MetalBlack);
+    SpawnCylinder(FVector(30, -200, 0), 8, 8, 8, SC::MetalBlack);
+    // Umbrella
+    SpawnCylinder(FVector(0, -200, 56), 3, 60, 6, SC::MetalChrome);
+    SpawnCylinder(FVector(0, -200, 110), 40, 8, 12, SC::FabricRed * 0.9f, 0.95f);
     // Benches
     SpawnDetailedBench(FVector(-350, -150, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, 1.2f);
     SpawnDetailedBench(FVector(350, -150, 0), FRotator::ZeroRotator, SC::WoodLight, SC::MetalBlack, 1.2f);
@@ -2091,9 +2132,13 @@ void AEmersynGameMode::BuildAmusementPark()
     // Plants
     SpawnDetailedPlant(FVector(-400, 400, 0), SC::BrickRed, SC::FabricPink, 1.2f);
     SpawnDetailedPlant(FVector(400, 400, 0), SC::BrickRed, SC::FabricYellow, 1.2f);
-    // Lamp posts
-    SpawnMesh(MeshData_PARK_LAMPPOST::Vertices, MeshData_PARK_LAMPPOST::Normals, MeshData_PARK_LAMPPOST::UVs, MeshData_PARK_LAMPPOST::Triangles, MeshData_PARK_LAMPPOST::NumVertices, MeshData_PARK_LAMPPOST::NumTriangles, FVector(-200, -300, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::MetalBlack, SC::MetalGold);
-    SpawnMesh(MeshData_PARK_LAMPPOST::Vertices, MeshData_PARK_LAMPPOST::Normals, MeshData_PARK_LAMPPOST::UVs, MeshData_PARK_LAMPPOST::Triangles, MeshData_PARK_LAMPPOST::NumVertices, MeshData_PARK_LAMPPOST::NumTriangles, FVector(200, -300, 0), FRotator::ZeroRotator, FVector(5.f), ETexturePattern::Metal, SC::MetalBlack, SC::MetalGold);
+    // Lamp posts (procedural: pole + globe + light)
+    SpawnCylinder(FVector(-200, -300, 0), 4, 120, 8, SC::MetalBlack, 0.9f);
+    SpawnSphere(FVector(-200, -300, 125), 12, 8, SC::MetalGold);
+    SpawnLight(FVector(-200, -300, 130), 8.f, FLinearColor(1.0f, 0.92f, 0.72f), 350.f);
+    SpawnCylinder(FVector(200, -300, 0), 4, 120, 8, SC::MetalBlack, 0.9f);
+    SpawnSphere(FVector(200, -300, 125), 12, 8, SC::MetalGold);
+    SpawnLight(FVector(200, -300, 130), 8.f, FLinearColor(1.0f, 0.92f, 0.72f), 350.f);
     // Colorful lights
     SpawnLight(FVector(-250, 200, 150), 12.f, FLinearColor(1.0f, 0.3f, 0.8f), 500.f);
     SpawnLight(FVector(250, 250, 150), 12.f, FLinearColor(0.3f, 0.8f, 1.0f), 500.f);
