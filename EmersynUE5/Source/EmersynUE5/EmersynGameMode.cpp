@@ -1,4 +1,4 @@
-// v41: Camera farther (maxDim*2.5), pitch -57, FOV 40, target room center. FS 1.1
+// v42: FOV 75, pitch -70, dist maxDim*1.4, target Z=wallH*0.15. True overhead dollhouse
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1262,24 +1262,25 @@ void AEmersynGameMode::SetupIsometricCamera(FVector RoomCenter, float Distance)
 float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float Dist = MaxDim * 2.5f;  // v41: far enough for true dollhouse overhead view
-    return FMath::Clamp(Dist, 800.f, 3000.f);  // v41: allow much farther camera
+    float Dist = MaxDim * 1.4f;  // v42: closer + wide FOV = see entire room
+    return FMath::Clamp(Dist, 600.f, 1200.f);  // v42: dollhouse range
 }
 
 // v38: Camera target shifted forward toward furniture zone
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
-    // v41: target at room center, Z at 45% wall height
-    FVector CamTarget(0.f, 0.f, RoomSize.Z * 0.45f);
+    // v42: target near floor level, Z at 15% wall height
+    float WallH = FMath::Max(RoomSize.X, RoomSize.Y) * 0.12f;
+    FVector CamTarget(0.f, 0.f, WallH * 0.15f);
     float AutoDist = CalcAutoCameraDistance(RoomSize);
-    FRotator CamRot(-57.f, 35.f, 0.f);  // v41: -57 pitch for classic dollhouse angle
+    FRotator CamRot(-70.f, 35.f, 0.f);  // v42: -70 steep overhead for dollhouse
     FVector CamOffset = CamRot.Vector() * -AutoDist;
     FVector CamPos = CamTarget + CamOffset;
 
     if (!IsoCam) {
         IsoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(CamRot, CamPos));
         if (IsoCam) {
-            IsoCam->GetCameraComponent()->FieldOfView = 40.f;  // v41: tighter FOV for clean flat view
+            IsoCam->GetCameraComponent()->FieldOfView = 75.f;  // v42: wide FOV to see entire room floor
             APlayerController* PC = GetWorld()->GetFirstPlayerController();
             if (PC) {
                 PC->SetViewTarget(IsoCam);
