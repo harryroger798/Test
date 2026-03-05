@@ -1,4 +1,4 @@
-// v64: ROOT CAUSE FIX — ApplySimsLighting was pre-baking dark vertex colors (floor 0.5x * gamma 1.8 = nearly black). v64: bright vertex shading (no floor darkening, high ambient), no walls, no baseboard, camera 55deg/1.2x, FS 2.0.
+// v65: BRIGHT + FLAT — v64 fixed brightness (vertex shading root cause). v65: FS 1.0 (tall furniture at 2.0 looked like walls), remove ALL outdoor walls, camera 55deg/1.2x.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1803,7 +1803,7 @@ void AEmersynGameMode::BuildBedroom()
 {
     // v61: walls 20u (thin Sims border), FS 1.5 (visible furniture)
     FVector RS(450.f, 400.f, 20.f);  // v61: 20u walls (thin border, no beam)
-    float FS = 2.0f;  // v61: visible furniture
+    float FS = 1.0f;  // v61: visible furniture
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::WoodMaple, SC::WoodOak,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
@@ -1827,7 +1827,7 @@ void AEmersynGameMode::BuildKitchen()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(480.f, 420.f, 20.f);
-    float FS = 2.0f;
+    float FS = 1.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1856,7 +1856,7 @@ void AEmersynGameMode::BuildBathroom()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(380.f, 350.f, 20.f);  // v61: 20u walls
-    float FS = 2.0f;  // v61: visible furniture
+    float FS = 1.0f;  // v61: visible furniture
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1879,7 +1879,7 @@ void AEmersynGameMode::BuildLivingRoom()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(520.f, 450.f, 20.f);  // v61: 20u walls
-    float FS = 2.0f;  // v61: visible furniture
+    float FS = 1.0f;  // v61: visible furniture
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1952,7 +1952,7 @@ void AEmersynGameMode::BuildSchool()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(480.f, 420.f, 20.f);
-    float FS = 2.0f;
+    float FS = 1.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1986,7 +1986,7 @@ void AEmersynGameMode::BuildShop()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(500.f, 440.f, 20.f);
-    float FS = 2.0f;
+    float FS = 1.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2019,9 +2019,7 @@ void AEmersynGameMode::BuildPlayground()
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
-    // v61: Low fence walls (20u thin border)
-    SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), 20.f, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
-    SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), 20.f, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
+    // v65: NO WALLS — even outdoor rooms get clean dollhouse view
 
     // Swing set
     SpawnDetailedSwing(FVector(-200, 100, 0), SC::MetalSilver, SC::WoodOak, 1.3f);
@@ -2090,7 +2088,7 @@ void AEmersynGameMode::BuildMall()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(550.f, 480.f, 20.f);
-    float FS = 2.0f;
+    float FS = 1.0f;
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2124,7 +2122,7 @@ void AEmersynGameMode::BuildArcade()
 {
     // v61: walls 20u, FS 1.5
     FVector RS(450.f, 400.f, 20.f);
-    float FS = 2.0f;
+    float FS = 1.0f;
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
