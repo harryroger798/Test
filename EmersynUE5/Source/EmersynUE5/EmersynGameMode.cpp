@@ -1193,41 +1193,14 @@ void AEmersynGameMode::SetupPostProcessing()
     PPV->Settings.bOverride_AmbientOcclusionRadius = true; PPV->Settings.AmbientOcclusionRadius = 250.f;
     PPV->Settings.bOverride_AmbientOcclusionQuality = true; PPV->Settings.AmbientOcclusionQuality = 100.f;
     PPV->Settings.bOverride_VignetteIntensity = true; PPV->Settings.VignetteIntensity = 0.06f;
-    // v74: MANUAL EXPOSURE — disable auto-exposure entirely to prevent washing out dark background
-    PPV->Settings.bOverride_AutoExposureMethod = true;
-    PPV->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
-    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 12.0f;  // v74: manual mode — this controls overall brightness
-    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 1.0f;
-    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 1.0f;  // v74: lock min==max to prevent auto-adjust
-    // Preset-specific color grading
-    switch (CurrentLightPreset) {
-    case ELightingPreset::Day:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.80f, 1.80f, 1.80f, 1.0f);  // v62: boost
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.10f, 1.10f, 1.10f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.85f, 0.85f, 0.85f, 1.0f);
-        break;
-    case ELightingPreset::Sunset:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.80f, 1.60f, 1.40f, 1.0f);  // v62: boost
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.15f, 1.10f, 1.05f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.85f, 0.88f, 0.92f, 1.0f);
-        break;
-    case ELightingPreset::Night:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.20f, 1.25f, 1.50f, 1.0f);  // v62: boost
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.20f, 1.20f, 1.25f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(1.0f, 0.98f, 0.90f, 1.0f);
-        break;
-    case ELightingPreset::Morning:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.65f, 1.70f, 1.60f, 1.0f);  // v62: boost
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.08f, 1.10f, 1.12f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.88f, 0.86f, 0.84f, 1.0f);
-        break;
-    case ELightingPreset::Party:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(2.00f, 2.00f, 2.00f, 1.0f);  // v62: max
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.25f, 1.25f, 1.25f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.82f, 0.82f, 0.82f, 1.0f);
-        PPV->Settings.BloomIntensity = 0.85f;
-        break;
-    }
+    // v75: AUTO exposure — back to working v63 settings
+    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 10.0f;
+    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 9.0f;
+    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 12.0f;
+    // v75: HIGH saturation for vivid Sims-style colors
+    PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(2.20f, 2.20f, 2.20f, 1.0f);
+    PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.30f, 1.30f, 1.30f, 1.0f);
+    PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.80f, 0.80f, 0.80f, 1.0f);
     RoomActors.Add(PPV);
 }
 
@@ -1356,8 +1329,7 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     ELightingPreset LightPreset, const FString& RoomLabel)
 {
     SetLightingPreset(LightPreset);
-    DestroyDefaultAtmosphere();  // v74: remove UE5 default atmosphere/fog
-    SpawnSky();  // v73: dark sky dome
+    // v75: Removed DestroyDefaultAtmosphere/SpawnSky — not effective for background
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
@@ -1770,8 +1742,6 @@ void AEmersynGameMode::SpawnDetailedTree(FVector Loc, FLinearColor TrunkColor, F
 void AEmersynGameMode::BuildSplashScreen()
 {
     SetLightingPreset(ELightingPreset::Morning);
-    DestroyDefaultAtmosphere();  // v74
-    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(35.f);
     SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
@@ -1907,11 +1877,8 @@ void AEmersynGameMode::BuildGarden()
 {
     FVector RS(600.f, 500.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Day);
-    DestroyDefaultAtmosphere();  // v74
-    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2006,11 +1973,8 @@ void AEmersynGameMode::BuildPlayground()
 {
     FVector RS(550.f, 480.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Day);
-    DestroyDefaultAtmosphere();  // v74
-    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2042,11 +2006,8 @@ void AEmersynGameMode::BuildPark()
 {
     FVector RS(650.f, 550.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Sunset);
-    DestroyDefaultAtmosphere();  // v74
-    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2147,11 +2108,8 @@ void AEmersynGameMode::BuildAmusementPark()
 {
     FVector RS(700.f, 600.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Sunset);
-    DestroyDefaultAtmosphere();  // v74
-    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
