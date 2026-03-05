@@ -1,4 +1,4 @@
-// v58: SIMS DOLLHOUSE — v57 walls 15u too thin (invisible strips), characters 10x multiplier = 744u tall vs 15u walls. v58: walls 80u (proportionate to FS 0.8 furniture), character multiplier 10→0.67 (chars ~50u = 62% of walls = Sims ratio), background plane 20x (no edge visible), camera 2.5x/55pitch/50FOV, auto-exposure locked bright.
+// v59: SIMS DOLLHOUSE — v58 walls 80u still towered (camera too low at 55deg). v59: STEEP camera 72deg pitch (look DOWN at floor), walls 35u (short border), FS 0.35 (fits in 35u), char mult 0.25, NO baseboard/crown (diagonal artifact), bg plane at Z=-1 (no step edge), 50x size. Floor dominates 60-70% of screen like Sims.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1087,9 +1087,9 @@ AActor* AEmersynGameMode::SpawnMeshVC(const float* Verts, const float* Norms, co
 AActor* AEmersynGameMode::SpawnCharacterMesh(const FString& Name, FVector Location, FRotator Rotation,
     float InScale, const FLinearColor& SkinTint, const FLinearColor& OutfitTint)
 {
-    // v58: Character scale proportionate to 80u walls (was InScale*10 = 744u tall!)
-    // Now InScale*0.67 → chars ~50u tall = 62% of 80u walls = Sims proportion
-    float S = InScale * 0.67f;
+    // v59: Character scale proportionate to 35u walls
+    // InScale*0.25 → chars ~19u tall = 54% of 35u walls = Sims proportion
+    float S = InScale * 0.25f;
     bool bIsPet = (Name == TEXT("Cat") || Name == TEXT("Dog"));
     if (bIsPet) {
         // Pet: body + head + legs + tail
@@ -1201,9 +1201,9 @@ void AEmersynGameMode::SetupPostProcessing()
     PPV->Settings.bOverride_AmbientOcclusionRadius = true; PPV->Settings.AmbientOcclusionRadius = 250.f;
     PPV->Settings.bOverride_AmbientOcclusionQuality = true; PPV->Settings.AmbientOcclusionQuality = 100.f;
     PPV->Settings.bOverride_VignetteIntensity = true; PPV->Settings.VignetteIntensity = 0.06f;
-    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 2.5f;  // v58: brighter
-    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 2.0f;  // v58: lock bright
-    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 3.0f;  // v58: lock bright
+    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 3.0f;  // v59: very bright
+    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 2.5f;  // v59: lock bright
+    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 4.0f;  // v59: lock bright
     // Preset-specific color grading
     switch (CurrentLightPreset) {
     case ELightingPreset::Day:
@@ -1297,18 +1297,18 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v58: SIMS DOLLHOUSE CAMERA
-// v57 was 1.5x/60pitch/65FOV — room visible but too small on screen
-// v58: 2.5x distance, 55deg pitch (more floor visible), 50deg FOV (tighter frame)
+// v59: SIMS DOLLHOUSE CAMERA — STEEP overhead view
+// v58 was 2.5x/55pitch — walls STILL towered. Need to look DOWN at floor.
+// v59: 3.5x distance, 72deg pitch (nearly top-down), 50deg FOV
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 2.5f;  // v58: farther back for full room view
-    AutoDist = FMath::Clamp(AutoDist, 900.f, 2500.f);
+    float AutoDist = MaxDim * 3.5f;  // v59: very far back — see entire room from above
+    AutoDist = FMath::Clamp(AutoDist, 1200.f, 3500.f);
 
-    // v58: 55deg pitch = Sims angle (slightly less steep = more floor visible)
+    // v59: 72deg pitch = steep overhead (floor dominates, walls are short bands)
     // 30deg yaw = Sims corner angle
-    float PitchDeg = 55.f;
+    float PitchDeg = 72.f;
     float YawDeg = 30.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
@@ -1319,11 +1319,11 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v58: Look at wall-height center (not floor — keeps walls in frame)
-    FVector LookTarget(0.f, 0.f, RoomSize.Z * 0.3f);
+    // v59: Look at floor center (Z=0) — floor should dominate view
+    FVector LookTarget(0.f, 0.f, 0.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 50.f;  // v58: tighter FOV = room fills more screen
+    float FOV = 50.f;  // v59: tight FOV = room fills screen
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1366,30 +1366,25 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     // v44: NO sky dome — it was filling the screen as huge colored triangles
     // SpawnSky();
     SetupPostProcessing();
-    SpawnSkyLight(20.f);  // v58: bright sky light (no directional = need strong ambient)
-    // v58: NO directional light (caused diagonal white line artifact)
-    // v58: Background plane 20x room size — edges pushed far outside viewport
-    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Concrete, FLinearColor(0.88f, 0.90f, 0.92f), FLinearColor(0.85f, 0.87f, 0.90f), 1.f);
+    SpawnSkyLight(22.f);  // v59: very bright sky light
+    // v59: NO directional light (caused diagonal white line artifact)
+    // v59: Background plane at Z=-1 (minimal step), 50x room size, LIGHT color
+    SpawnTexturedFloor(FVector(0.f, 0.f, -1.f), FVector(RS.X * 50.f, RS.Y * 50.f, 0), ETexturePattern::Concrete, FLinearColor(0.92f, 0.93f, 0.95f), FLinearColor(0.90f, 0.91f, 0.93f), 1.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v58: L-SHAPED CUTAWAY — walls at RS.Z (80u) proportionate to FS 0.8 furniture
-    float WallH = RS.Z;  // v58: use room's Z dimension (80u)
+    // v59: L-SHAPED CUTAWAY — walls at RS.Z (35u short border)
+    float WallH = RS.Z;  // v59: short walls (35u)
     // BACK WALL (along +Y edge)
     SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), WallH, WallPattern, WallBase, WallAccent);
     // LEFT WALL (along -X edge)
     SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), WallH, WallPattern, WallBase, WallAccent);
 
-    // v58: Room lighting decoupled from wall height
+    // v59: Room lighting decoupled from wall height
     SpawnRoomLighting(FVector(0, 0, WallH * 0.5f), RS);
 
-    // v58: Baseboards on both visible walls
-    SpawnBaseboard(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), 3.f, SC::WoodMedium);
-    SpawnBaseboard(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), 3.f, SC::WoodMedium);
-
-    // v58: Crown molding at wall height (80u)
-    SpawnCrownMolding(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), WallH, SC::WoodLight);
-    SpawnCrownMolding(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), WallH, SC::WoodLight);
+    // v59: REMOVED baseboard and crown molding — suspected diagonal line artifact source
+    // SpawnBaseboard / SpawnCrownMolding removed to test if diagonal line disappears
 
     SpawnRoomLabel(RoomLabel);
 }
@@ -1803,8 +1798,8 @@ void AEmersynGameMode::BuildSplashScreen()
     SetLightingPreset(ELightingPreset::Morning);
     SpawnSky();
     SetupPostProcessing();
-    SpawnSkyLight(20.f);
-    // v58: no directional light (avoids diagonal light gizmo/artifact)
+    SpawnSkyLight(22.f);
+    // v59: no directional light (avoids diagonal light gizmo/artifact)
     SpawnTexturedFloor(FVector::ZeroVector, FVector(800, 600, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
 
     SpawnWorldText(TEXT("Emersyn's Big Day"), FVector(0, 0, 250), 80.f, FLinearColor(1.f, 0.85f, 0.2f));
@@ -1833,9 +1828,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v58: walls 80u (proportionate to FS 0.8 furniture), characters now 0.67x multiplier
-    FVector RS(450.f, 400.f, 80.f);
-    float FS = 0.8f;  // v58: furniture fits within 80u walls
+    // v59: walls 35u (short border), FS 0.35 (furniture fits within 35u)
+    FVector RS(450.f, 400.f, 35.f);
+    float FS = 0.35f;  // v59: small furniture within short walls
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::WoodMaple, SC::WoodOak,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
@@ -1857,9 +1852,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v58: walls 80u proportionate
-    FVector RS(480.f, 420.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(480.f, 420.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::FloorConcrete,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1886,9 +1881,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v58: walls 80u proportionate
-    FVector RS(380.f, 350.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(380.f, 350.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileWhite, SC::TileBlue,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1909,9 +1904,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v58: walls 80u proportionate
-    FVector RS(520.f, 450.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(520.f, 450.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodMedium,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Sunset, TEXT("Living Room"));
@@ -1937,12 +1932,12 @@ void AEmersynGameMode::BuildLivingRoom()
 
 void AEmersynGameMode::BuildGarden()
 {
-    FVector RS(600.f, 500.f, 60.f);  // v58: 60u fence height (outdoor)
+    FVector RS(600.f, 500.f, 25.f);  // v59: 25u fence height (outdoor, short)
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
-    SpawnSkyLight(20.f);  // v58: bright sky light
-    // v58: Background plane 20x
-    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Concrete, FLinearColor(0.88f, 0.90f, 0.92f), FLinearColor(0.85f, 0.87f, 0.90f), 1.f);
+    SpawnSkyLight(22.f);  // v59: very bright sky light
+    // v59: Background plane at Z=-1, 50x, light color
+    SpawnTexturedFloor(FVector(0.f, 0.f, -1.f), FVector(RS.X * 50.f, RS.Y * 50.f, 0), ETexturePattern::Concrete, FLinearColor(0.92f, 0.93f, 0.95f), FLinearColor(0.90f, 0.91f, 0.93f), 1.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
@@ -1983,9 +1978,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v58: walls 80u proportionate
-    FVector RS(480.f, 420.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(480.f, 420.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodLight,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -2017,9 +2012,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v58: walls 80u proportionate
-    FVector RS(500.f, 440.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(500.f, 440.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
@@ -2042,18 +2037,18 @@ void AEmersynGameMode::BuildShop()
 
 void AEmersynGameMode::BuildPlayground()
 {
-    FVector RS(550.f, 480.f, 60.f);  // v58: 60u fence height (outdoor)
+    FVector RS(550.f, 480.f, 25.f);  // v59: 25u fence height (outdoor, short)
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
-    SpawnSkyLight(20.f);  // v58: bright sky light
-    // v58: Background plane 20x
-    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Concrete, FLinearColor(0.88f, 0.90f, 0.92f), FLinearColor(0.85f, 0.87f, 0.90f), 1.f);
+    SpawnSkyLight(22.f);  // v59: very bright sky light
+    // v59: Background plane at Z=-1, 50x, light color
+    SpawnTexturedFloor(FVector(0.f, 0.f, -1.f), FVector(RS.X * 50.f, RS.Y * 50.f, 0), ETexturePattern::Concrete, FLinearColor(0.92f, 0.93f, 0.95f), FLinearColor(0.90f, 0.91f, 0.93f), 1.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
     SpawnRoomLabel(TEXT("Playground"));
 
-    // v58: L-shaped fence at RS.Z height (60u)
+    // v59: L-shaped fence at RS.Z height (25u short)
     SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), RS.Z, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
     SpawnTexturedWall(FVector(-RS.X, -RS.Y, 0), FVector(-RS.X, RS.Y, 0), RS.Z, ETexturePattern::Brick, SC::BrickRed, SC::BrickMortar);
 
@@ -2081,12 +2076,12 @@ void AEmersynGameMode::BuildPlayground()
 
 void AEmersynGameMode::BuildPark()
 {
-    FVector RS(650.f, 550.f, 60.f);  // v58: 60u fence height (outdoor)
+    FVector RS(650.f, 550.f, 25.f);  // v59: 25u fence height (outdoor, short)
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
-    SpawnSkyLight(20.f);  // v58: bright sky light
-    // v58: Background plane 20x
-    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Concrete, FLinearColor(0.88f, 0.90f, 0.92f), FLinearColor(0.85f, 0.87f, 0.90f), 1.f);
+    SpawnSkyLight(22.f);  // v59: very bright sky light
+    // v59: Background plane at Z=-1, 50x, light color
+    SpawnTexturedFloor(FVector(0.f, 0.f, -1.f), FVector(RS.X * 50.f, RS.Y * 50.f, 0), ETexturePattern::Concrete, FLinearColor(0.92f, 0.93f, 0.95f), FLinearColor(0.90f, 0.91f, 0.93f), 1.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
@@ -2123,9 +2118,9 @@ void AEmersynGameMode::BuildPark()
 
 void AEmersynGameMode::BuildMall()
 {
-    // v58: walls 80u proportionate
-    FVector RS(550.f, 480.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(550.f, 480.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::Marble, SC::FloorMarble, SC::MarbleVein,
         ETexturePattern::Wallpaper, SC::WallCream, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Mall"));
@@ -2157,9 +2152,9 @@ void AEmersynGameMode::BuildMall()
 
 void AEmersynGameMode::BuildArcade()
 {
-    // v58: walls 80u proportionate
-    FVector RS(450.f, 400.f, 80.f);
-    float FS = 0.8f;
+    // v59: walls 35u, FS 0.35
+    FVector RS(450.f, 400.f, 35.f);
+    float FS = 0.35f;
     BuildRoomShell(RS, ETexturePattern::Concrete, SC::FloorConcrete, SC::MetalBlack,
         ETexturePattern::Brick, SC::MetalBlack, SC::FabricPurple, SC::MetalBlack,
         ELightingPreset::Party, TEXT("Arcade"));
@@ -2187,12 +2182,12 @@ void AEmersynGameMode::BuildArcade()
 
 void AEmersynGameMode::BuildAmusementPark()
 {
-    FVector RS(700.f, 600.f, 60.f);  // v58: 60u fence height (outdoor)
+    FVector RS(700.f, 600.f, 25.f);  // v59: 25u fence height (outdoor, short)
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
-    SpawnSkyLight(20.f);  // v58: bright sky light
-    // v58: Background plane 20x
-    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Concrete, FLinearColor(0.88f, 0.90f, 0.92f), FLinearColor(0.85f, 0.87f, 0.90f), 1.f);
+    SpawnSkyLight(22.f);  // v59: very bright sky light
+    // v59: Background plane at Z=-1, 50x, light color
+    SpawnTexturedFloor(FVector(0.f, 0.f, -1.f), FVector(RS.X * 50.f, RS.Y * 50.f, 0), ETexturePattern::Concrete, FLinearColor(0.92f, 0.93f, 0.95f), FLinearColor(0.90f, 0.91f, 0.93f), 1.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, RS.Z * 0.5f), RS);
