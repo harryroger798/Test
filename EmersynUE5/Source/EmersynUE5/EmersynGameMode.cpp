@@ -1371,13 +1371,28 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
-    // v72: MASSIVE dark background plane — must be larger than sky dome (10000 radius)
+    // v72: MASSIVE dark background plane
     SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     // Room floor on top
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v64: NO WALLS, NO BASEBOARD
-    SpawnRoomLighting(FVector(0, 0, 120.f), RS);
+    // v80: RE-ADD 3 WALLS for Sims dollhouse look (back wall + 2 side walls, front open)
+    float WH = RS.Z;  // Wall height (80u)
+    float WT = 8.f;   // Wall thickness
+    // Back wall (along +Y edge)
+    SpawnTexturedBox(FVector(0, RS.Y, WH * 0.5f), FVector(RS.X, WT, WH * 0.5f), WallPattern, WallBase, WallAccent);
+    // Left wall (along -X edge)
+    SpawnTexturedBox(FVector(-RS.X, 0, WH * 0.5f), FVector(WT, RS.Y, WH * 0.5f), WallPattern, WallBase, WallAccent);
+    // Right wall (along +X edge)
+    SpawnTexturedBox(FVector(RS.X, 0, WH * 0.5f), FVector(WT, RS.Y, WH * 0.5f), WallPattern, WallBase, WallAccent);
+    // Baseboard trim (back wall)
+    SpawnTexturedBox(FVector(0, RS.Y - 2.f, 4.f), FVector(RS.X, WT + 2.f, 4.f), ETexturePattern::WoodGrain, WallAccent * 0.7f, WallAccent * 0.5f);
+    // Baseboard trim (left wall)
+    SpawnTexturedBox(FVector(-RS.X + 2.f, 0, 4.f), FVector(WT + 2.f, RS.Y, 4.f), ETexturePattern::WoodGrain, WallAccent * 0.7f, WallAccent * 0.5f);
+    // Baseboard trim (right wall)
+    SpawnTexturedBox(FVector(RS.X - 2.f, 0, 4.f), FVector(WT + 2.f, RS.Y, 4.f), ETexturePattern::WoodGrain, WallAccent * 0.7f, WallAccent * 0.5f);
+
+    SpawnRoomLighting(FVector(0, 0, WH + 20.f), RS);
 }
 
 // ============================================================
