@@ -944,15 +944,10 @@ void AEmersynGameMode::SpawnSky()
     UProceduralMeshComponent* PMC = NewObject<UProceduralMeshComponent>(A);
     PMC->SetupAttachment(A->GetRootComponent());
     PMC->RegisterComponent();
-    // Use sky colors based on current preset
-    FLinearColor SkyTop, SkyBot;
-    switch (CurrentLightPreset) {
-    case ELightingPreset::Day:     SkyTop = SC::SkyTopDay;     SkyBot = SC::SkyBotDay;     break;
-    case ELightingPreset::Sunset:  SkyTop = SC::SkyTopSunset;  SkyBot = SC::SkyBotSunset;  break;
-    case ELightingPreset::Night:   SkyTop = SC::SkyTopNight;   SkyBot = SC::SkyBotNight;   break;
-    case ELightingPreset::Morning: SkyTop = SC::SkyTopMorning; SkyBot = SC::SkyBotMorning; break;
-    case ELightingPreset::Party:   SkyTop = FLinearColor(0.15f, 0.05f, 0.30f); SkyBot = FLinearColor(0.35f, 0.15f, 0.50f); break;
-    }
+    // v73: ALWAYS dark sky dome — warm sky colors were causing beige background
+    // The auto-exposure system amplifies any warm sky color into tan/beige
+    FLinearColor SkyTop(0.02f, 0.02f, 0.04f);  // near black
+    FLinearColor SkyBot(0.03f, 0.03f, 0.05f);  // very dark grey
     int32 Seg = 32; float Radius = 10000.f;
     TArray<FVector> V; TArray<int32> T; TArray<FColor> C;
     TArray<FVector> N; TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
@@ -1172,9 +1167,9 @@ void AEmersynGameMode::SetupPostProcessing()
     PPV->Settings.bOverride_AmbientOcclusionRadius = true; PPV->Settings.AmbientOcclusionRadius = 250.f;
     PPV->Settings.bOverride_AmbientOcclusionQuality = true; PPV->Settings.AmbientOcclusionQuality = 100.f;
     PPV->Settings.bOverride_VignetteIntensity = true; PPV->Settings.VignetteIntensity = 0.06f;
-    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 10.0f;  // v63: MAX bright
-    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 9.0f;  // v63: lock very bright
-    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 12.0f;  // v63: lock very bright
+    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 1.5f;  // v73: REDUCED from 10.0 — high exposure was washing dark bg to beige
+    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 1.0f;  // v73: REDUCED from 9.0
+    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 3.0f;  // v73: REDUCED from 12.0
     // Preset-specific color grading
     switch (CurrentLightPreset) {
     case ELightingPreset::Day:
@@ -1333,7 +1328,7 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
 {
     SetLightingPreset(LightPreset);
     // v44: NO sky dome — it was filling the screen as huge colored triangles
-    // SpawnSky();
+    SpawnSky();  // v73: re-enabled with dark colors to eliminate beige UE default sky
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
@@ -1746,11 +1741,11 @@ void AEmersynGameMode::SpawnDetailedTree(FVector Loc, FLinearColor TrunkColor, F
 void AEmersynGameMode::BuildSplashScreen()
 {
     SetLightingPreset(ELightingPreset::Morning);
-    // v72: REMOVED SpawnSky() — the warm sky dome was creating beige background
+    // v73: Dark sky dome + dark flat plane + reduced auto-exposure
+    SpawnSky();  // v73: sky dome now uses dark colors
     SetupPostProcessing();
     SpawnSkyLight(35.f);
-    // v72: MASSIVE dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(800, 600, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
 
     // v60: REMOVED world text — TextRender can appear as a diagonal line when viewed edge-on
