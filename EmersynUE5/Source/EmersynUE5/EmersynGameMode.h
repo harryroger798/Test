@@ -101,6 +101,7 @@ public:
     void SetLightingPreset(ELightingPreset Preset);
 
     // Spawn geometry
+    void DestroyDefaultAtmosphere(); // v74: remove UE5 default atmosphere/fog
     void SpawnFlatPlane(FVector Center, FVector Size, FLinearColor Color); // v71: solid dark background
     AActor* SpawnTexturedFloor(FVector Center, FVector Size, ETexturePattern Pattern, FLinearColor Base, FLinearColor Accent, float UVScale = 1.f);
     AActor* SpawnTexturedWall(FVector Start, FVector End, float Height, ETexturePattern Pattern, FLinearColor Base, FLinearColor Accent);

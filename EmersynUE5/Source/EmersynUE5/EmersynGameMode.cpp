@@ -21,6 +21,11 @@
 #include "TextureResource.h"
 #include "GameFramework/TouchInterface.h"
 #include "Engine/GameViewportClient.h"
+#include "Atmosphere/AtmosphericFog.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "EngineUtils.h"
 
 // v25b: MeshData headers removed to fix mobile init crash (29MB binary too large)
 // Using lightweight procedural geometry (SpawnDetailed* builders) instead
@@ -1153,6 +1158,27 @@ void AEmersynGameMode::SpawnRoomLighting(FVector RC, FVector RS)
 }
 
 // ============================================================
+// v74: DESTROY DEFAULT ATMOSPHERE — UE5's built-in sky/fog creates beige background
+// ============================================================
+void AEmersynGameMode::DestroyDefaultAtmosphere()
+{
+    UWorld* W = GetWorld();
+    if (!W) return;
+    // Destroy any existing atmospheric fog actors
+    for (TActorIterator<AAtmosphericFog> It(W); It; ++It) { It->Destroy(); }
+    // Destroy any existing exponential height fog actors
+    for (TActorIterator<AExponentialHeightFog> It(W); It; ++It) { It->Destroy(); }
+    // Destroy any existing sky atmosphere components on actors
+    for (TActorIterator<AActor> It(W); It; ++It) {
+        TArray<USkyAtmosphereComponent*> AtmoComps;
+        It->GetComponents<USkyAtmosphereComponent>(AtmoComps);
+        for (auto* Comp : AtmoComps) {
+            Comp->DestroyComponent();
+        }
+    }
+}
+
+// ============================================================
 // POST-PROCESSING (v25: preset-aware)
 // ============================================================
 void AEmersynGameMode::SetupPostProcessing()
@@ -1167,9 +1193,12 @@ void AEmersynGameMode::SetupPostProcessing()
     PPV->Settings.bOverride_AmbientOcclusionRadius = true; PPV->Settings.AmbientOcclusionRadius = 250.f;
     PPV->Settings.bOverride_AmbientOcclusionQuality = true; PPV->Settings.AmbientOcclusionQuality = 100.f;
     PPV->Settings.bOverride_VignetteIntensity = true; PPV->Settings.VignetteIntensity = 0.06f;
-    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 1.5f;  // v73: REDUCED from 10.0 — high exposure was washing dark bg to beige
-    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 1.0f;  // v73: REDUCED from 9.0
-    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 3.0f;  // v73: REDUCED from 12.0
+    // v74: MANUAL EXPOSURE — disable auto-exposure entirely to prevent washing out dark background
+    PPV->Settings.bOverride_AutoExposureMethod = true;
+    PPV->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 12.0f;  // v74: manual mode — this controls overall brightness
+    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 1.0f;
+    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 1.0f;  // v74: lock min==max to prevent auto-adjust
     // Preset-specific color grading
     switch (CurrentLightPreset) {
     case ELightingPreset::Day:
@@ -1327,8 +1356,8 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     ELightingPreset LightPreset, const FString& RoomLabel)
 {
     SetLightingPreset(LightPreset);
-    // v44: NO sky dome — it was filling the screen as huge colored triangles
-    SpawnSky();  // v73: re-enabled with dark colors to eliminate beige UE default sky
+    DestroyDefaultAtmosphere();  // v74: remove UE5 default atmosphere/fog
+    SpawnSky();  // v73: dark sky dome
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
@@ -1741,8 +1770,8 @@ void AEmersynGameMode::SpawnDetailedTree(FVector Loc, FLinearColor TrunkColor, F
 void AEmersynGameMode::BuildSplashScreen()
 {
     SetLightingPreset(ELightingPreset::Morning);
-    // v73: Dark sky dome + dark flat plane + reduced auto-exposure
-    SpawnSky();  // v73: sky dome now uses dark colors
+    DestroyDefaultAtmosphere();  // v74
+    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(35.f);
     SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
@@ -1878,10 +1907,11 @@ void AEmersynGameMode::BuildGarden()
 {
     FVector RS(600.f, 500.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Day);
+    DestroyDefaultAtmosphere();  // v74
+    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v72: MASSIVE dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -1976,10 +2006,11 @@ void AEmersynGameMode::BuildPlayground()
 {
     FVector RS(550.f, 480.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Day);
+    DestroyDefaultAtmosphere();  // v74
+    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v72: MASSIVE dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2011,10 +2042,11 @@ void AEmersynGameMode::BuildPark()
 {
     FVector RS(650.f, 550.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Sunset);
+    DestroyDefaultAtmosphere();  // v74
+    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v72: MASSIVE dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2115,10 +2147,11 @@ void AEmersynGameMode::BuildAmusementPark()
 {
     FVector RS(700.f, 600.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Sunset);
+    DestroyDefaultAtmosphere();  // v74
+    SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v72: MASSIVE dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.02f, 0.02f, 0.04f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
