@@ -1057,9 +1057,9 @@ AActor* AEmersynGameMode::SpawnMeshVC(const float* Verts, const float* Norms, co
 }
 
 // ============================================================
-// v85: SPAWN AI-GENERATED MESH FROM MeshData.h
-// High-poly bedroom meshes (4000 tris) + standard meshes (800 tris)
-// Auto-detects normalized meshes and scales them to room coordinate system
+// v87: SPAWN AI-GENERATED MESH FROM MeshData.h
+// Pre-scales normalized TripoSR vertices to room coordinate range (~100 units)
+// so the existing rendering pipeline (lighting, colors, Z-offset) works correctly.
 // ============================================================
 AActor* AEmersynGameMode::SpawnAIMesh(int32 MeshIndex, FVector Location, FRotator Rotation, FVector Scale, FLinearColor Tint)
 {
@@ -1069,40 +1069,48 @@ AActor* AEmersynGameMode::SpawnAIMesh(int32 MeshIndex, FVector Location, FRotato
     }
     int32 NV = *MeshData::MeshVertCounts[MeshIndex];
     int32 NT = *MeshData::MeshTriCounts[MeshIndex];
-    const float* Verts = MeshData::MeshVertData[MeshIndex];
-    const float* Norms = MeshData::MeshNormalData[MeshIndex];
+    const float* SrcVerts = MeshData::MeshVertData[MeshIndex];
+    const float* SrcNorms = MeshData::MeshNormalData[MeshIndex];
     const int32* Tris = MeshData::MeshTriData[MeshIndex];
     
-    // v85: Auto-detect mesh coordinate range and normalize to room scale
-    // High-poly TripoSR meshes are normalized to ~1 unit extent
-    // Old meshes are ~100 units extent. We want all meshes to fill ~100 units before user scale.
+    // v87: Compute mesh bounding box to detect normalized meshes
+    float MinZ = 99999.f, MaxZ = -99999.f;
     float MinX = 99999.f, MaxX = -99999.f;
     float MinY = 99999.f, MaxY = -99999.f;
-    float MinZ = 99999.f, MaxZ = -99999.f;
     for (int32 i = 0; i < NV; i++) {
-        float X = Verts[i * 3 + 0];
-        float Y = Verts[i * 3 + 1];
-        float Z = Verts[i * 3 + 2];
+        float X = SrcVerts[i * 3 + 0];
+        float Y = SrcVerts[i * 3 + 1];
+        float Z = SrcVerts[i * 3 + 2];
         if (X < MinX) MinX = X; if (X > MaxX) MaxX = X;
         if (Y < MinY) MinY = Y; if (Y > MaxY) MaxY = Y;
         if (Z < MinZ) MinZ = Z; if (Z > MaxZ) MaxZ = Z;
     }
     float Extent = FMath::Max3(MaxX - MinX, MaxY - MinY, MaxZ - MinZ);
     
-    // If mesh extent is very small (< 5 units), it's a normalized TripoSR mesh
-    // Scale it up so its base extent is ~80 units (roughly furniture-sized in room coords)
-    float AutoScale = 1.0f;
+    // v87: If mesh is normalized (extent < 5 units), pre-scale vertices to ~80 units
+    // This puts them in the same coordinate range as old meshes so lighting/colors work
+    float PreScale = 1.0f;
     if (Extent > 0.01f && Extent < 5.0f) {
-        AutoScale = 80.0f / Extent;
+        PreScale = 80.0f / Extent;
     }
     
-    FVector FinalScale = Scale * AutoScale;
+    // v87: Create pre-scaled vertex buffer (heap-allocated, freed after spawn)
+    TArray<float> ScaledVerts;
+    const float* FinalVerts = SrcVerts;
+    if (PreScale > 1.01f) {
+        ScaledVerts.SetNum(NV * 3);
+        for (int32 i = 0; i < NV * 3; i++) {
+            ScaledVerts[i] = SrcVerts[i] * PreScale;
+        }
+        FinalVerts = ScaledVerts.GetData();
+        MinZ *= PreScale;  // Update MinZ for Z offset calculation
+    }
     
     // Auto-compute Z offset so mesh sits ON the floor
     FVector AdjustedLoc = Location;
-    AdjustedLoc.Z += (-MinZ) * FinalScale.Z;
+    AdjustedLoc.Z += (-MinZ) * Scale.Z;
     
-    return SpawnMesh(Verts, Norms, nullptr, Tris, NV, NT, AdjustedLoc, Rotation, FinalScale, ETexturePattern::Fabric, Tint, Tint * 0.85f, 1.0f);
+    return SpawnMesh(FinalVerts, SrcNorms, nullptr, Tris, NV, NT, AdjustedLoc, Rotation, Scale, ETexturePattern::Fabric, Tint, Tint * 0.85f, 1.0f);
 }
 
 // v77: Helper to find AI mesh index by name
