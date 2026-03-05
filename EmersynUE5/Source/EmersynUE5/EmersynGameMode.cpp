@@ -1,4 +1,4 @@
-// v68: VIVID SIMS COLORS — v67 lighting fixed but furniture still beige because large pieces used WoodOak/WoodMaple. v68: bright saturated furniture colors (blue sofa, pink bed, green chairs like Sims), removed ALL rugs (thin flat = diagonal line artifacts), darker floors for contrast.
+// v69: BIGGER ROOMS + THICKER FURNITURE — v68 colors work (blue/pink visible!) but scene too small on screen, thin furniture parts (headboard, sheet, bed legs) appear as diagonal lines from overhead. v69: much larger rooms, closer camera, thicker furniture parts, dark UE background.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1233,17 +1233,17 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v67: SIMS DOLLHOUSE CAMERA — wider FOV + closer for screen fill
-// v66 colors were beige (fixed in lighting). v67: wider FOV to show full room, closer camera.
+// v69: SIMS DOLLHOUSE CAMERA — MUCH closer + wider FOV to fill screen
+// v68 colors work but scene fills only ~30% of screen. v69: 0.65x distance, FOV 75.
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 0.85f;  // v67: closer than v66 (was 0.90)
-    AutoDist = FMath::Clamp(AutoDist, 350.f, 1200.f);
+    float AutoDist = MaxDim * 0.65f;  // v69: MUCH closer (was 0.85)
+    AutoDist = FMath::Clamp(AutoDist, 300.f, 800.f);
 
-    // v67: 60deg pitch (slightly less overhead = see more furniture faces), 30deg yaw
-    float PitchDeg = 60.f;
-    float YawDeg = 30.f;
+    // v69: 55deg pitch (see more furniture top/front faces), 25deg yaw (more head-on)
+    float PitchDeg = 55.f;
+    float YawDeg = 25.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
@@ -1253,11 +1253,11 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v67: Look at furniture mid-height
-    FVector LookTarget(0.f, 0.f, 25.f);
+    // v69: Look at furniture mid-height
+    FVector LookTarget(0.f, 0.f, 20.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 65.f;  // v67: wider FOV so room fills screen
+    float FOV = 75.f;  // v69: WIDE FOV so room fills screen
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1300,15 +1300,14 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     // v44: NO sky dome — it was filling the screen as huge colored triangles
     // SpawnSky();
     SetupPostProcessing();
-    SpawnSkyLight(120.f);  // v63: MAXIMUM sky light for bright scene
+    SpawnSkyLight(120.f);
 
-    // v67: REMOVED background grass floor — it was creating pink edge artifacts at camera angle
-    // Instead: just the room floor, clean and simple like Sims dollhouse
+    // v69: Dark background floor (much larger than room) to eliminate beige UE skybox
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 8.f, RS.Y * 8.f, 0), ETexturePattern::Concrete, FLinearColor(0.08f, 0.08f, 0.10f), FLinearColor(0.06f, 0.06f, 0.08f), 1.f);
+    // Room floor on top
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v64: NO WALLS, NO BASEBOARD — clean Sims dollhouse cutaway (floor + furniture only)
-
-    // v63: Room lighting (bright, overhead)
+    // v64: NO WALLS, NO BASEBOARD
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 }
 
@@ -1316,51 +1315,44 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
 // v25: DETAILED FURNITURE BUILDERS (multi-part procedural)
 // ============================================================
 
-// BED: frame + mattress + pillow + headboard + sheet
+// BED: frame + mattress + pillow + headboard
+// v69: Made ALL parts thicker to avoid diagonal line artifacts from overhead camera
 void AEmersynGameMode::SpawnDetailedBed(FVector Loc, FLinearColor FrameColor, FLinearColor SheetColor, FLinearColor PillowColor, float S)
 {
-    // Bed frame
-    SpawnTexturedBox(Loc + FVector(0, 0, 15*S), FVector(55*S, 90*S, 15*S), ETexturePattern::WoodGrain, FrameColor, FrameColor * 0.85f);
-    // Headboard
-    SpawnTexturedBox(Loc + FVector(0, 80*S, 55*S), FVector(55*S, 5*S, 40*S), ETexturePattern::WoodGrain, FrameColor, FrameColor * 0.9f);
-    // Mattress
-    SpawnTexturedBox(Loc + FVector(0, -5*S, 33*S), FVector(50*S, 80*S, 12*S), ETexturePattern::Fabric, SheetColor, SheetColor * 0.95f);
-    // Sheet (thin layer on mattress)
-    SpawnTexturedBox(Loc + FVector(0, -20*S, 46*S), FVector(48*S, 55*S, 2*S), ETexturePattern::Fabric, SheetColor * 0.92f, SheetColor);
-    // Pillow left
-    SpawnTexturedBox(Loc + FVector(-20*S, 60*S, 48*S), FVector(18*S, 14*S, 6*S), ETexturePattern::Fabric, PillowColor, PillowColor * 1.05f);
+    // Bed frame (thick solid base)
+    SpawnTexturedBox(Loc + FVector(0, 0, 12*S), FVector(55*S, 90*S, 12*S), ETexturePattern::WoodGrain, FrameColor, FrameColor * 0.85f);
+    // Headboard (v69: THICKER 15u instead of 5u — was appearing as thin diagonal line)
+    SpawnTexturedBox(Loc + FVector(0, 80*S, 40*S), FVector(55*S, 15*S, 30*S), ETexturePattern::WoodGrain, FrameColor, FrameColor * 0.9f);
+    // Mattress (main visible part — thick and colorful)
+    SpawnTexturedBox(Loc + FVector(0, -5*S, 30*S), FVector(50*S, 80*S, 14*S), ETexturePattern::Fabric, SheetColor, SheetColor * 0.95f);
+    // v69: REMOVED thin sheet layer (2u thick = diagonal line artifact from overhead)
+    // Pillow left (v69: thicker 10u instead of 6u)
+    SpawnTexturedBox(Loc + FVector(-20*S, 60*S, 46*S), FVector(18*S, 14*S, 10*S), ETexturePattern::Fabric, PillowColor, PillowColor * 1.05f);
     // Pillow right
-    SpawnTexturedBox(Loc + FVector(20*S, 60*S, 48*S), FVector(18*S, 14*S, 6*S), ETexturePattern::Fabric, PillowColor, PillowColor * 1.05f);
-    // Bed legs (4 corners)
-    SpawnCylinder(Loc + FVector(-50*S, -85*S, 0), 4*S, 15*S, 8, FrameColor * 0.7f);
-    SpawnCylinder(Loc + FVector(50*S, -85*S, 0), 4*S, 15*S, 8, FrameColor * 0.7f);
-    SpawnCylinder(Loc + FVector(-50*S, 85*S, 0), 4*S, 15*S, 8, FrameColor * 0.7f);
-    SpawnCylinder(Loc + FVector(50*S, 85*S, 0), 4*S, 15*S, 8, FrameColor * 0.7f);
+    SpawnTexturedBox(Loc + FVector(20*S, 60*S, 46*S), FVector(18*S, 14*S, 10*S), ETexturePattern::Fabric, PillowColor, PillowColor * 1.05f);
+    // v69: REMOVED thin bed legs (4u cylinders = tiny diagonal lines from above)
 }
 
-// SOFA: base + cushions + arms + back + legs
+// SOFA: base + cushions + arms + back
+// v69: Thicker parts, removed thin legs
 void AEmersynGameMode::SpawnDetailedSofa(FVector Loc, FRotator Rot, FLinearColor FabricColor, FLinearColor CushionColor, FLinearColor LegColor, float S)
 {
-    // Sofa base
-    SpawnTexturedBox(Loc + FVector(0, 0, 18*S), FVector(80*S, 35*S, 18*S), ETexturePattern::Fabric, FabricColor, FabricColor * 0.9f);
-    // Back rest
-    SpawnTexturedBox(Loc + FVector(0, 30*S, 42*S), FVector(78*S, 6*S, 22*S), ETexturePattern::Fabric, FabricColor, FabricColor * 0.85f);
-    // Left arm
-    SpawnTexturedBox(Loc + FVector(-75*S, 0, 30*S), FVector(6*S, 30*S, 14*S), ETexturePattern::Fabric, FabricColor * 0.95f, FabricColor * 0.85f);
+    // Sofa base (solid block sitting on floor)
+    SpawnTexturedBox(Loc + FVector(0, 0, 15*S), FVector(80*S, 35*S, 15*S), ETexturePattern::Fabric, FabricColor, FabricColor * 0.9f);
+    // Back rest (v69: thicker 12u instead of 6u)
+    SpawnTexturedBox(Loc + FVector(0, 30*S, 38*S), FVector(78*S, 12*S, 20*S), ETexturePattern::Fabric, FabricColor, FabricColor * 0.85f);
+    // Left arm (v69: thicker 12u instead of 6u)
+    SpawnTexturedBox(Loc + FVector(-75*S, 0, 28*S), FVector(12*S, 30*S, 14*S), ETexturePattern::Fabric, FabricColor * 0.95f, FabricColor * 0.85f);
     // Right arm
-    SpawnTexturedBox(Loc + FVector(75*S, 0, 30*S), FVector(6*S, 30*S, 14*S), ETexturePattern::Fabric, FabricColor * 0.95f, FabricColor * 0.85f);
-    // Seat cushion left
-    SpawnTexturedBox(Loc + FVector(-30*S, -2*S, 37*S), FVector(32*S, 28*S, 5*S), ETexturePattern::Fabric, CushionColor, CushionColor * 1.05f);
+    SpawnTexturedBox(Loc + FVector(75*S, 0, 28*S), FVector(12*S, 30*S, 14*S), ETexturePattern::Fabric, FabricColor * 0.95f, FabricColor * 0.85f);
+    // Seat cushion left (v69: thicker 10u instead of 5u)
+    SpawnTexturedBox(Loc + FVector(-30*S, -2*S, 32*S), FVector(32*S, 28*S, 10*S), ETexturePattern::Fabric, CushionColor, CushionColor * 1.05f);
     // Seat cushion right
-    SpawnTexturedBox(Loc + FVector(30*S, -2*S, 37*S), FVector(32*S, 28*S, 5*S), ETexturePattern::Fabric, CushionColor, CushionColor * 1.05f);
-    // Back cushions
-    SpawnTexturedBox(Loc + FVector(-30*S, 22*S, 48*S), FVector(28*S, 8*S, 12*S), ETexturePattern::Fabric, CushionColor * 0.98f, CushionColor);
-    SpawnTexturedBox(Loc + FVector(30*S, 22*S, 48*S), FVector(28*S, 8*S, 12*S), ETexturePattern::Fabric, CushionColor * 0.98f, CushionColor);
-    // Legs
-    SpawnCylinder(Loc + FVector(-70*S, -28*S, 0), 3*S, 8*S, 6, LegColor);
-    SpawnCylinder(Loc + FVector(70*S, -28*S, 0), 3*S, 8*S, 6, LegColor);
-    SpawnCylinder(Loc + FVector(-70*S, 28*S, 0), 3*S, 8*S, 6, LegColor);
-    SpawnCylinder(Loc + FVector(70*S, 28*S, 0), 3*S, 8*S, 6, LegColor);
+    SpawnTexturedBox(Loc + FVector(30*S, -2*S, 32*S), FVector(32*S, 28*S, 10*S), ETexturePattern::Fabric, CushionColor, CushionColor * 1.05f);
+    // Back cushions (v69: thicker 14u instead of 8u)
+    SpawnTexturedBox(Loc + FVector(-30*S, 22*S, 46*S), FVector(28*S, 14*S, 12*S), ETexturePattern::Fabric, CushionColor * 0.98f, CushionColor);
+    SpawnTexturedBox(Loc + FVector(30*S, 22*S, 46*S), FVector(28*S, 14*S, 12*S), ETexturePattern::Fabric, CushionColor * 0.98f, CushionColor);
+    // v69: REMOVED thin legs (3u cylinders = tiny lines from overhead)
 }
 
 // TABLE: top + 4 legs
