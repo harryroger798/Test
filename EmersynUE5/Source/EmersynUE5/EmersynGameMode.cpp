@@ -1337,8 +1337,8 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
-    // v71: FLAT dark background — no texture, no lighting, pure solid color
-    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
+    // v72: MASSIVE dark background plane — must be larger than sky dome (10000 radius)
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     // Room floor on top
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
@@ -1746,11 +1746,11 @@ void AEmersynGameMode::SpawnDetailedTree(FVector Loc, FLinearColor TrunkColor, F
 void AEmersynGameMode::BuildSplashScreen()
 {
     SetLightingPreset(ELightingPreset::Morning);
-    SpawnSky();
+    // v72: REMOVED SpawnSky() — the warm sky dome was creating beige background
     SetupPostProcessing();
     SpawnSkyLight(35.f);
-    // v71: FLAT dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(8000, 6000, 0), FLinearColor(0.05f, 0.05f, 0.07f));
+    // v72: MASSIVE dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(800, 600, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
 
     // v60: REMOVED world text — TextRender can appear as a diagonal line when viewed edge-on
@@ -1885,8 +1885,8 @@ void AEmersynGameMode::BuildGarden()
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v71: FLAT dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
+    // v72: MASSIVE dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -1983,8 +1983,8 @@ void AEmersynGameMode::BuildPlayground()
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v71: FLAT dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
+    // v72: MASSIVE dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2018,8 +2018,8 @@ void AEmersynGameMode::BuildPark()
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v71: FLAT dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
+    // v72: MASSIVE dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2122,8 +2122,8 @@ void AEmersynGameMode::BuildAmusementPark()
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v71: FLAT dark background
-    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
+    // v72: MASSIVE dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -5.f), FVector(50000.f, 50000.f, 0), FLinearColor(0.04f, 0.04f, 0.06f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
