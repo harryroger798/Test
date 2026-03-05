@@ -1856,24 +1856,31 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v79: AI MESH + taller walls so furniture fits inside room
-    FVector RS(350.f, 300.f, 80.f);
-    float FS = 2.0f;
+    // v88: Larger room for high-poly AI meshes (pre-scaled to ~80u base)
+    FVector RS(500.f, 450.f, 120.f);
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
 
-    // v84: Furniture AGAINST WALLS like Sims FreePlay layout
-    // Room inner edges: X=±325, Y=±275. Meshes ~100u at 1x, ~200u at 2x
-    // Bed against back wall center, dresser on left wall, desk on right wall
-    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(0, 200, 0), FRotator::ZeroRotator, FVector(2.5f, 2.5f, 2.5f), SC::FabricHotPink);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-260, 100, 0), FRotator(0, 90, 0), FVector(1.8f, 1.8f, 1.8f), SC::FabricBlue);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-260, -80, 0), FRotator::ZeroRotator, FVector(1.0f, 1.0f, 1.0f), SC::FabricYellow);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-260, -200, 0), FRotator(0, 90, 0), FVector(1.8f, 1.8f, 1.8f), SC::FabricNavy);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(260, 100, 0), FRotator(0, -90, 0), FVector(1.8f, 1.8f, 1.8f), SC::FabricTeal);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(260, -50, 0), FRotator(0, -90, 0), FVector(1.4f, 1.4f, 1.4f), SC::FabricPurple);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(260, -200, 0), FRotator::ZeroRotator, FVector(1.0f, 1.0f, 1.0f), SC::PlantGreen);
-    SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -50, 0), FRotator(0, -90, 0), FS * 1.5f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPink);
+    // v88: Sims-style layout — furniture against walls, proper spacing
+    // Pre-scaled meshes are ~80u base, so user scale 0.4-0.8 = 32-64u pieces
+    // Room inner: X=±475, Y=±425. Furniture hugs walls with gaps between.
+    // Bed against back wall (center)
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(0, 350, 0), FRotator::ZeroRotator, FVector(0.8f, 0.8f, 0.8f), SC::FabricHotPink);
+    // Dresser on left wall
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-380, 200, 0), FRotator(0, 90, 0), FVector(0.5f, 0.5f, 0.5f), SC::FabricBlue);
+    // Lamp on left wall near front
+    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-380, -50, 0), FRotator::ZeroRotator, FVector(0.35f, 0.35f, 0.35f), SC::FabricYellow);
+    // Bookshelf on left wall far front
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-380, -280, 0), FRotator(0, 90, 0), FVector(0.5f, 0.5f, 0.5f), SC::FabricNavy);
+    // Desk on right wall
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(380, 200, 0), FRotator(0, -90, 0), FVector(0.5f, 0.5f, 0.5f), SC::FabricTeal);
+    // Chair at desk
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(380, 0, 0), FRotator(0, -90, 0), FVector(0.4f, 0.4f, 0.4f), SC::FabricPurple);
+    // Plant in corner
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(380, -300, 0), FRotator::ZeroRotator, FVector(0.35f, 0.35f, 0.35f), SC::PlantGreen);
+    // Character in center
+    SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -50, 0), FRotator(0, -90, 0), 3.0f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPink);
 
     SetupAutoCamera(RS);
 }
