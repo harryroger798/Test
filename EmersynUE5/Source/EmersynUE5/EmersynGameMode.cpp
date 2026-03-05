@@ -1,4 +1,4 @@
-// v63: WALLS REMOVED — v62 proved even 20u walls create beam artifacts + block view. v63: NO WALLS (Sims dollhouse cutaway), floor outline only (3u baseboard), SkyLight 120, exposure 10, camera 1.2x/55deg pitch, bright white-green background at Z=-20. Furniture S=2.0.
+// v64: ROOT CAUSE FIX — ApplySimsLighting was pre-baking dark vertex colors (floor 0.5x * gamma 1.8 = nearly black). v64: bright vertex shading (no floor darkening, high ambient), no walls, no baseboard, camera 55deg/1.2x, FS 2.0.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -325,7 +325,7 @@ FLinearColor AEmersynGameMode::ApplyDirectionalShading(FLinearColor BaseColor, F
     float KeyDot  = FMath::Max(0.f, FVector::DotProduct(Normal, -KeyLightDir));
     float FillDot = FMath::Max(0.f, FVector::DotProduct(Normal, -FillLightDir));
     float RimDot  = FMath::Max(0.f, FVector::DotProduct(Normal, -RimLightDir));
-    FLinearColor Ambient(0.35f, 0.35f, 0.40f);
+    FLinearColor Ambient(0.55f, 0.55f, 0.60f);  // v64: brighter ambient (was 0.35)
     FLinearColor Lit = Ambient;
     Lit.R += BaseColor.R * KeyDot  * 0.80f * LightKeyColor.R;
     Lit.G += BaseColor.G * KeyDot  * 0.80f * LightKeyColor.G;
@@ -359,27 +359,16 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
     FillDot = FMath::Pow(FillDot, 0.8f);
 
     bool bIsFloor = (Normal.Z > 0.8f);
-    float SkyMult = bIsFloor ? 0.02f : 0.12f;
-    float KeyMult = bIsFloor ? 0.3f : 1.0f;
-    float FillMult = bIsFloor ? 0.15f : 1.0f;
+    // v64: floors get SAME brightness as furniture (was 0.02/0.3/0.15 = nearly black)
+    float SkyMult = bIsFloor ? 0.10f : 0.12f;
+    float KeyMult = bIsFloor ? 0.8f : 1.0f;
+    float FillMult = bIsFloor ? 0.6f : 1.0f;
 
-    // v30: Enhanced vertical gradient AO (darker at floor level = depth)
+    // v64: MINIMAL AO — previous version had aggressive darkening (vertical 0.65, corner 0.7, edge 0.88)
+    // that made everything nearly black. Now just subtle AO for depth.
     float HeightFactor = FMath::Clamp(WorldPos.Z / 200.f, 0.f, 1.f);
-    float VerticalAO = FMath::Lerp(0.65f, 1.0f, HeightFactor);
-
-    // v30: Corner darkening (fake AO - objects near room edges are darker)
-    float DistFromCenter = FMath::Sqrt(WorldPos.X * WorldPos.X + WorldPos.Y * WorldPos.Y);
-    float CornerAO = FMath::Clamp(1.0f - (DistFromCenter / 500.f) * 0.3f, 0.7f, 1.0f);
-
-    // v30: Normal-based edge darkening (vertical edges slightly darker)
-    float EdgeDarken = FMath::Abs(Normal.Z) < 0.1f ? 0.88f : 1.0f;
-
-    float CombinedAO = AO * VerticalAO * CornerAO * EdgeDarken;
-
-    // Floor edge darkening
-    if (WorldPos.Z < 30.f && !bIsFloor) {
-        CombinedAO *= FMath::Lerp(0.6f, 1.0f, WorldPos.Z / 30.f);
-    }
+    float VerticalAO = FMath::Lerp(0.90f, 1.0f, HeightFactor);  // v64: was 0.65
+    float CombinedAO = AO * VerticalAO;  // v64: removed corner/edge darkening entirely
 
     FLinearColor AccLight =
         (LightKeyColor * LightKeyIntensity * KeyDot * KeyMult) +
@@ -387,11 +376,8 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
         (FLinearColor(0.35f, 0.40f, 0.48f) * SkyMult * SkyDot) +
         (FLinearColor(0.30f, 0.25f, 0.20f) * 0.06f * GroundDot);
 
-    if (bIsFloor) {
-        AccLight += LightAmbientColor * 0.4f;
-    } else {
-        AccLight += LightAmbientColor;
-    }
+    // v64: floors get full ambient (was 0.4x = too dark)
+    AccLight += LightAmbientColor;
 
     FLinearColor Lit;
     Lit.R = BaseColor.R * AccLight.R;
@@ -428,18 +414,15 @@ FLinearColor AEmersynGameMode::ApplySimsLighting(FLinearColor BaseColor, FVector
     Lit.B *= CombinedAO;
     Lit.A = 1.0f;
 
-    // v28: Aggressive gamma darken — floors get pow(1.8), furniture gets pow(1.15)
-    float GammaPow = bIsFloor ? 1.8f : 1.15f;
+    // v64: REMOVED aggressive gamma darken (was pow 1.8 for floors = nearly black)
+    // Just gentle gamma for visual contrast
+    float GammaPow = bIsFloor ? 1.05f : 1.05f;  // v64: nearly linear (was 1.8/1.15)
     Lit.R = FMath::Pow(FMath::Clamp(Lit.R, 0.f, 1.f), GammaPow);
     Lit.G = FMath::Pow(FMath::Clamp(Lit.G, 0.f, 1.f), GammaPow);
     Lit.B = FMath::Pow(FMath::Clamp(Lit.B, 0.f, 1.f), GammaPow);
 
-    // v28: Extra floor brightness cut
-    if (bIsFloor) {
-        Lit.R *= 0.5f;
-        Lit.G *= 0.5f;
-        Lit.B *= 0.5f;
-    }
+    // v64: REMOVED floor brightness cut (was 0.5x = halving brightness)
+    // Floors should be bright and visible like Sims
     return Lit;
 }
 
@@ -1371,13 +1354,8 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v63: NO WALLS — Sims dollhouse cutaway view. Just thin 3u baseboard outline.
-    float BaseH = 3.f;  // v63: 3u baseboard = thin colored line on floor edge
-    // Baseboard outline on all 4 edges (thin colored strips)
-    SpawnTexturedBox(FVector(0.f, RS.Y, BaseH * 0.5f), FVector(RS.X, 3.f, BaseH * 0.5f), WallPattern, WallBase, WallAccent);  // back
-    SpawnTexturedBox(FVector(0.f, -RS.Y, BaseH * 0.5f), FVector(RS.X, 3.f, BaseH * 0.5f), WallPattern, WallBase, WallAccent);  // front
-    SpawnTexturedBox(FVector(-RS.X, 0.f, BaseH * 0.5f), FVector(3.f, RS.Y, BaseH * 0.5f), WallPattern, WallBase, WallAccent);  // left
-    SpawnTexturedBox(FVector(RS.X, 0.f, BaseH * 0.5f), FVector(3.f, RS.Y, BaseH * 0.5f), WallPattern, WallBase, WallAccent);  // right
+    // v64: NO WALLS, NO BASEBOARD — clean Sims dollhouse cutaway (floor + furniture only)
+    // Baseboard strips were creating pink diagonal artifacts at camera angle
 
     // v63: Room lighting (bright, overhead)
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
