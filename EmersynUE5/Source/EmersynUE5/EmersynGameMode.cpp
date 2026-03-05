@@ -1302,8 +1302,10 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
-    // v69: Dark background floor (much larger than room) to eliminate beige UE skybox
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 8.f, RS.Y * 8.f, 0), ETexturePattern::Concrete, FLinearColor(0.08f, 0.08f, 0.10f), FLinearColor(0.06f, 0.06f, 0.08f), 1.f);
+    // v70: SOLID dark background floor — v69 used Concrete texture which created yellow streaks at 8x scale
+    // Fix: use SAME color for base and accent so FBM noise produces no visible pattern
+    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
     // Room floor on top
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
