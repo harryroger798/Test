@@ -613,6 +613,41 @@ UMaterialInstanceDynamic* AEmersynGameMode::CreateTexturedMaterial(UTexture2D* T
 }
 
 // ============================================================
+// v71: FLAT SOLID-COLOR PLANE — no noise, no lighting, no texture
+// Used for dark background floors to eliminate beige UE skybox
+// ============================================================
+void AEmersynGameMode::SpawnFlatPlane(FVector Center, FVector Size, FLinearColor Color)
+{
+    AActor* A = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform(Center));
+    if (!A) return;
+    A->SetRootComponent(NewObject<USceneComponent>(A));
+    A->GetRootComponent()->RegisterComponent();
+    UProceduralMeshComponent* PMC = NewObject<UProceduralMeshComponent>(A);
+    PMC->SetupAttachment(A->GetRootComponent());
+    PMC->RegisterComponent();
+    float HX = Size.X, HY = Size.Y;
+    // Simple 4-vertex quad — no grid subdivision needed
+    TArray<FVector> V; TArray<int32> T; TArray<FColor> C;
+    TArray<FVector> N; TArray<FVector2D> UV; TArray<FProcMeshTangent> Tan;
+    FColor FC = Color.ToFColor(true);
+    V.Add(FVector(-HX, -HY, 0)); V.Add(FVector(HX, -HY, 0));
+    V.Add(FVector(HX, HY, 0)); V.Add(FVector(-HX, HY, 0));
+    for (int32 I = 0; I < 4; I++) {
+        N.Add(FVector(0, 0, 1));
+        C.Add(FC);
+        Tan.Add(FProcMeshTangent(1, 0, 0));
+    }
+    UV.Add(FVector2D(0, 0)); UV.Add(FVector2D(1, 0));
+    UV.Add(FVector2D(1, 1)); UV.Add(FVector2D(0, 1));
+    T.Add(0); T.Add(2); T.Add(1);
+    T.Add(0); T.Add(3); T.Add(2);
+    PMC->CreateMeshSection(0, V, T, N, UV, C, Tan, false);
+    if (M_VertexColor) { PMC->SetMaterial(0, UMaterialInstanceDynamic::Create(M_VertexColor, this)); }
+    PMC->SetCastShadow(false); // Background doesn't need shadows
+    RoomActors.Add(A);
+}
+
+// ============================================================
 // TEXTURED FLOOR (with Sims lighting)
 // ============================================================
 AActor* AEmersynGameMode::SpawnTexturedFloor(FVector Center, FVector Size, ETexturePattern Pattern, FLinearColor Base, FLinearColor Accent, float UVScale)
@@ -1302,10 +1337,8 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     SetupPostProcessing();
     SpawnSkyLight(120.f);
 
-    // v70: SOLID dark background floor — v69 used Concrete texture which created yellow streaks at 8x scale
-    // Fix: use SAME color for base and accent so FBM noise produces no visible pattern
-    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
+    // v71: FLAT dark background — no texture, no lighting, pure solid color
+    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
     // Room floor on top
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
@@ -1716,9 +1749,8 @@ void AEmersynGameMode::BuildSplashScreen()
     SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(35.f);
-    // v70: Dark background for all rooms
-    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(8000, 6000, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
+    // v71: FLAT dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(8000, 6000, 0), FLinearColor(0.05f, 0.05f, 0.07f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(800, 600, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
 
     // v60: REMOVED world text — TextRender can appear as a diagonal line when viewed edge-on
@@ -1853,9 +1885,8 @@ void AEmersynGameMode::BuildGarden()
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v70: Dark background
-    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
+    // v71: FLAT dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -1952,9 +1983,8 @@ void AEmersynGameMode::BuildPlayground()
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v70: Dark background
-    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
+    // v71: FLAT dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -1988,9 +2018,8 @@ void AEmersynGameMode::BuildPark()
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v70: Dark background
-    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
+    // v71: FLAT dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2093,9 +2122,8 @@ void AEmersynGameMode::BuildAmusementPark()
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v70: Dark background
-    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
+    // v71: FLAT dark background
+    SpawnFlatPlane(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), FLinearColor(0.05f, 0.05f, 0.07f));
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 

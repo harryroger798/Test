@@ -101,6 +101,7 @@ public:
     void SetLightingPreset(ELightingPreset Preset);
 
     // Spawn geometry
+    void SpawnFlatPlane(FVector Center, FVector Size, FLinearColor Color); // v71: solid dark background
     AActor* SpawnTexturedFloor(FVector Center, FVector Size, ETexturePattern Pattern, FLinearColor Base, FLinearColor Accent, float UVScale = 1.f);
     AActor* SpawnTexturedWall(FVector Start, FVector End, float Height, ETexturePattern Pattern, FLinearColor Base, FLinearColor Accent);
     AActor* SpawnTexturedCeiling(FVector Center, FVector Size, FLinearColor Color);
