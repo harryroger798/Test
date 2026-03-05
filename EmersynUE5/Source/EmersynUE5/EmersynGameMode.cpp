@@ -1812,22 +1812,22 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v77: AI MESH INTEGRATION — TripoSR-generated 3D furniture replaces procedural boxes
-    FVector RS(350.f, 300.f, 20.f);
+    // v79: AI MESH + taller walls so furniture fits inside room
+    FVector RS(350.f, 300.f, 80.f);
     float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
 
-    // v78: AI-generated furniture meshes — scale 1.0 = ~100 unit span (rooms are 300-400u)
+    // v79: AI meshes scaled to fit inside 80u walls (mesh Z-span ~54u at scale 1.0)
     FVector MS(1.0f, 1.0f, 1.0f);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(80, 120, 0), FRotator::ZeroRotator, MS * 1.2f, SC::FabricHotPink);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-200, 200, 0), FRotator::ZeroRotator, MS * 0.8f, SC::FabricBlue);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-200, 200, 50.f), FRotator::ZeroRotator, MS * 0.4f, SC::FabricYellow);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-250, -50, 0), FRotator(0, 90, 0), MS * 0.8f, SC::FabricNavy);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(200, -120, 0), FRotator::ZeroRotator, MS * 0.8f, SC::FabricTeal);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(200, -200, 0), FRotator::ZeroRotator, MS * 0.6f, SC::FabricPurple);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(250, 200, 0), FRotator::ZeroRotator, MS * 0.5f, SC::PlantGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(80, 120, 0), FRotator::ZeroRotator, MS * 1.0f, SC::FabricHotPink);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-200, 200, 0), FRotator::ZeroRotator, MS * 0.7f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-200, 100, 0), FRotator::ZeroRotator, MS * 0.35f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-250, -50, 0), FRotator(0, 90, 0), MS * 0.7f, SC::FabricNavy);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(200, -120, 0), FRotator::ZeroRotator, MS * 0.7f, SC::FabricTeal);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(200, -200, 0), FRotator::ZeroRotator, MS * 0.5f, SC::FabricPurple);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(250, 200, 0), FRotator::ZeroRotator, MS * 0.4f, SC::PlantGreen);
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -50, 0), FRotator(0, -90, 0), FS * 1.5f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPink);
 
     SetupAutoCamera(RS);
@@ -1835,8 +1835,8 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v77: AI MESH INTEGRATION
-    FVector RS(380.f, 330.f, 20.f);
+    // v79: AI MESH + taller walls
+    FVector RS(380.f, 330.f, 80.f);
     float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorConcrete, SC::FloorTile,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
@@ -1863,8 +1863,8 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v77: AI MESH INTEGRATION
-    FVector RS(320.f, 280.f, 20.f);
+    // v79: AI MESH + taller walls
+    FVector RS(320.f, 280.f, 80.f);
     float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileBlue, SC::FloorTile,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
@@ -1885,8 +1885,8 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v77: AI MESH INTEGRATION
-    FVector RS(400.f, 350.f, 20.f);
+    // v79: AI MESH + taller walls
+    FVector RS(400.f, 350.f, 80.f);
     float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
@@ -1948,8 +1948,8 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v77: AI MESH INTEGRATION
-    FVector RS(380.f, 340.f, 20.f);
+    // v79: AI MESH + taller walls
+    FVector RS(380.f, 340.f, 80.f);
     float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
@@ -1986,8 +1986,8 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v77: AI MESH INTEGRATION
-    FVector RS(380.f, 340.f, 20.f);
+    // v79: AI MESH + taller walls
+    FVector RS(380.f, 340.f, 80.f);
     float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
