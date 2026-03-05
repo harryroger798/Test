@@ -1716,7 +1716,9 @@ void AEmersynGameMode::BuildSplashScreen()
     SpawnSky();
     SetupPostProcessing();
     SpawnSkyLight(35.f);
-    // v60: no directional light (avoids artifacts on mobile)
+    // v70: Dark background for all rooms
+    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(8000, 6000, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
     SpawnTexturedFloor(FVector::ZeroVector, FVector(800, 600, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
 
     // v60: REMOVED world text — TextRender can appear as a diagonal line when viewed edge-on
@@ -1851,7 +1853,9 @@ void AEmersynGameMode::BuildGarden()
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
     SpawnSkyLight(120.f);
-    // v67: REMOVED background grass floor (edge artifacts)
+    // v70: Dark background
+    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -1947,10 +1951,10 @@ void AEmersynGameMode::BuildPlayground()
     FVector RS(550.f, 480.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
-    SpawnSkyLight(120.f);  // v63: MAX bright
-    // v63: Background at Z=-20
-    // v67: REMOVED background grass floor (edge artifacts)
-
+    SpawnSkyLight(120.f);
+    // v70: Dark background
+    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -1983,10 +1987,10 @@ void AEmersynGameMode::BuildPark()
     FVector RS(650.f, 550.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
-    SpawnSkyLight(120.f);  // v63: MAX bright
-    // v63: Background at Z=-20
-    // v67: REMOVED background grass floor (edge artifacts)
-
+    SpawnSkyLight(120.f);
+    // v70: Dark background
+    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
@@ -2088,10 +2092,10 @@ void AEmersynGameMode::BuildAmusementPark()
     FVector RS(700.f, 600.f, 20.f);  // v63: outdoor
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
-    SpawnSkyLight(120.f);  // v63: MAX bright
-    // v63: Background at Z=-20
-    // v67: REMOVED background grass floor (edge artifacts)
-
+    SpawnSkyLight(120.f);
+    // v70: Dark background
+    FLinearColor BgDark(0.07f, 0.07f, 0.09f);
+    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 10.f, RS.Y * 10.f, 0), ETexturePattern::Fabric, BgDark, BgDark, 0.5f);
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, 120.f), RS);
 
