@@ -1308,12 +1308,12 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 1.2f;  // v81: pull camera back to see full room with walls
-    AutoDist = FMath::Clamp(AutoDist, 350.f, 800.f);
+    float AutoDist = MaxDim * 1.4f;  // v82: further back, see full room + walls
+    AutoDist = FMath::Clamp(AutoDist, 400.f, 900.f);
 
-    // v81: 55deg pitch (more 3/4 view like Sims), 25deg yaw
-    float PitchDeg = 55.f;
-    float YawDeg = 25.f;
+    // v82: 40deg pitch (see wall FACES not just top edges), 30deg yaw
+    float PitchDeg = 40.f;
+    float YawDeg = 30.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
@@ -1323,11 +1323,11 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v81: Look at room center height (walls are 80u, look at 30u)
-    FVector LookTarget(0.f, 0.f, 30.f);
+    // v82: Look at room center height
+    FVector LookTarget(0.f, 0.f, 25.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 50.f;  // v81: narrower FOV for less distortion, more Sims-like
+    float FOV = 55.f;  // v82: moderate FOV
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1834,15 +1834,15 @@ void AEmersynGameMode::BuildBedroom()
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
 
-    // v79: AI meshes scaled to fit inside 80u walls (mesh Z-span ~54u at scale 1.0)
-    FVector MS(1.0f, 1.0f, 1.0f);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(80, 120, 0), FRotator::ZeroRotator, MS * 1.0f, SC::FabricHotPink);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-200, 200, 0), FRotator::ZeroRotator, MS * 0.7f, SC::FabricBlue);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-200, 100, 0), FRotator::ZeroRotator, MS * 0.35f, SC::FabricYellow);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-250, -50, 0), FRotator(0, 90, 0), MS * 0.7f, SC::FabricNavy);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(200, -120, 0), FRotator::ZeroRotator, MS * 0.7f, SC::FabricTeal);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(200, -200, 0), FRotator::ZeroRotator, MS * 0.5f, SC::FabricPurple);
-    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(250, 200, 0), FRotator::ZeroRotator, MS * 0.4f, SC::PlantGreen);
+    // v82: AI meshes scaled 1.5x for visual impact, spread to fill room
+    FVector MS(1.5f, 1.5f, 1.5f);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(100, 150, 0), FRotator::ZeroRotator, MS * 1.0f, SC::FabricHotPink);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-220, 200, 0), FRotator::ZeroRotator, MS * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-220, 50, 0), FRotator::ZeroRotator, MS * 0.3f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-270, -100, 0), FRotator(0, 90, 0), MS * 0.6f, SC::FabricNavy);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(220, -150, 0), FRotator::ZeroRotator, MS * 0.6f, SC::FabricTeal);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(220, -250, 0), FRotator::ZeroRotator, MS * 0.45f, SC::FabricPurple);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(270, 230, 0), FRotator::ZeroRotator, MS * 0.35f, SC::PlantGreen);
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -50, 0), FRotator(0, -90, 0), FS * 1.5f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPink);
 
     SetupAutoCamera(RS);
