@@ -1270,12 +1270,12 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 0.65f;  // v69: MUCH closer (was 0.85)
-    AutoDist = FMath::Clamp(AutoDist, 300.f, 800.f);
+    float AutoDist = MaxDim * 0.40f;  // v76: VERY close (was 0.65) — furniture must fill 80%+ of screen
+    AutoDist = FMath::Clamp(AutoDist, 200.f, 500.f);
 
-    // v69: 55deg pitch (see more furniture top/front faces), 25deg yaw (more head-on)
-    float PitchDeg = 55.f;
-    float YawDeg = 25.f;
+    // v76: 60deg pitch (more top-down dollhouse), 30deg yaw
+    float PitchDeg = 60.f;
+    float YawDeg = 30.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
@@ -1289,7 +1289,7 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     FVector LookTarget(0.f, 0.f, 20.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 75.f;  // v69: WIDE FOV so room fills screen
+    float FOV = 65.f;  // v76: slightly narrower FOV for less distortion
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1774,9 +1774,9 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v68: VIVID COLORS — bright pink bed, blue dresser, dark wood floor
-    FVector RS(500.f, 450.f, 20.f);  // v68: slightly larger room
-    float FS = 1.5f;
+    // v76: SMALLER ROOM + BIGGER FURNITURE — camera fills screen with furniture
+    FVector RS(350.f, 300.f, 20.f);  // v76: smaller room so camera is closer to furniture
+    float FS = 2.0f;  // v76: bigger furniture (was 1.5)
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
@@ -1797,9 +1797,9 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v68: VIVID COLORS — bright green chairs, white counters on dark floor
-    FVector RS(520.f, 460.f, 20.f);  // v68: slightly larger
-    float FS = 1.5f;
+    // v76: SMALLER ROOM + BIGGER FURNITURE
+    FVector RS(380.f, 330.f, 20.f);  // v76: smaller room
+    float FS = 2.0f;  // v76: bigger furniture
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorConcrete, SC::FloorTile,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
@@ -1825,9 +1825,9 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v68: VIVID COLORS — blue tub, white fixtures on teal tile floor
-    FVector RS(420.f, 380.f, 20.f);  // v68: slightly larger
-    float FS = 1.5f;
+    // v76: SMALLER ROOM + BIGGER FURNITURE
+    FVector RS(320.f, 280.f, 20.f);  // v76: smaller room
+    float FS = 2.0f;  // v76: bigger furniture
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileBlue, SC::FloorTile,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
@@ -1847,9 +1847,9 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v68: VIVID COLORS — blue sofa, red accents, dark wood floor
-    FVector RS(560.f, 480.f, 20.f);  // v68: slightly larger
-    float FS = 1.5f;
+    // v76: SMALLER ROOM + BIGGER FURNITURE
+    FVector RS(400.f, 350.f, 20.f);  // v76: smaller room
+    float FS = 2.0f;  // v76: bigger furniture
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Living Room"));
@@ -1911,9 +1911,9 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v68: VIVID COLORS — yellow desks, blue chairs, dark floor
-    FVector RS(520.f, 460.f, 20.f);  // v68: slightly larger
-    float FS = 1.5f;
+    // v76: SMALLER ROOM + BIGGER FURNITURE
+    FVector RS(380.f, 340.f, 20.f);  // v76: smaller room
+    float FS = 2.0f;  // v76: bigger furniture
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
@@ -1946,9 +1946,9 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v68: VIVID COLORS — colorful shelves, bright counter
-    FVector RS(540.f, 470.f, 20.f);  // v68: slightly larger
-    float FS = 1.5f;
+    // v76: SMALLER ROOM + BIGGER FURNITURE
+    FVector RS(380.f, 340.f, 20.f);  // v76: smaller room
+    float FS = 2.0f;  // v76: bigger furniture
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
