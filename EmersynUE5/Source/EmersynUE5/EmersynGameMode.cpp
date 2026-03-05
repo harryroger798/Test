@@ -1,4 +1,4 @@
-// v61: DIAGONAL BEAM FIX — v60 "diagonal line" was actually the 80u WALL FACE projected as a wide bright strip from 65deg pitch. v61: walls 20u (thin Sims border), camera 1.8x/50deg/50FOV (closer+less steep), background bright green lawn (distinct from room), FS 1.5, char 0.5x, exposure 5.0. Bright saturated Sims colors.
+// v62: VISUAL OVERHAUL — v61 fixed beam but scene too dark/small. v62: camera 1.0x (fills screen), background Z=-10 white (fix Z-fight lines), exposure 8.0 (bright), saturation 1.8, walls 20u, FS 1.5. Room dominates screen like Sims.
 #include "EmersynGameMode.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DirectionalLight.h"
@@ -1201,35 +1201,35 @@ void AEmersynGameMode::SetupPostProcessing()
     PPV->Settings.bOverride_AmbientOcclusionRadius = true; PPV->Settings.AmbientOcclusionRadius = 250.f;
     PPV->Settings.bOverride_AmbientOcclusionQuality = true; PPV->Settings.AmbientOcclusionQuality = 100.f;
     PPV->Settings.bOverride_VignetteIntensity = true; PPV->Settings.VignetteIntensity = 0.06f;
-    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 5.0f;  // v61: very bright
-    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 4.0f;  // v61: lock bright
-    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 6.0f;  // v61: lock bright
+    PPV->Settings.bOverride_AutoExposureBias = true; PPV->Settings.AutoExposureBias = 8.0f;  // v62: VERY bright
+    PPV->Settings.bOverride_AutoExposureMinBrightness = true; PPV->Settings.AutoExposureMinBrightness = 7.0f;  // v62: lock bright
+    PPV->Settings.bOverride_AutoExposureMaxBrightness = true; PPV->Settings.AutoExposureMaxBrightness = 10.0f;  // v62: lock bright
     // Preset-specific color grading
     switch (CurrentLightPreset) {
     case ELightingPreset::Day:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.45f, 1.45f, 1.45f, 1.0f);
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.20f, 1.20f, 1.20f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.90f, 0.90f, 0.90f, 1.0f);
+        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.80f, 1.80f, 1.80f, 1.0f);  // v62: boost
+        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.10f, 1.10f, 1.10f, 1.0f);
+        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.85f, 0.85f, 0.85f, 1.0f);
         break;
     case ELightingPreset::Sunset:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.60f, 1.35f, 1.15f, 1.0f);
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.25f, 1.15f, 1.10f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.88f, 0.92f, 0.98f, 1.0f);
+        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.80f, 1.60f, 1.40f, 1.0f);  // v62: boost
+        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.15f, 1.10f, 1.05f, 1.0f);
+        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.85f, 0.88f, 0.92f, 1.0f);
         break;
     case ELightingPreset::Night:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(0.85f, 0.90f, 1.20f, 1.0f);
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.30f, 1.30f, 1.35f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(1.05f, 1.02f, 0.92f, 1.0f);
+        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.20f, 1.25f, 1.50f, 1.0f);  // v62: boost
+        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.20f, 1.20f, 1.25f, 1.0f);
+        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(1.0f, 0.98f, 0.90f, 1.0f);
         break;
     case ELightingPreset::Morning:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.30f, 1.35f, 1.25f, 1.0f);
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.12f, 1.15f, 1.18f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.92f, 0.90f, 0.88f, 1.0f);
+        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.65f, 1.70f, 1.60f, 1.0f);  // v62: boost
+        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.08f, 1.10f, 1.12f, 1.0f);
+        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.88f, 0.86f, 0.84f, 1.0f);
         break;
     case ELightingPreset::Party:
-        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(1.80f, 1.80f, 1.80f, 1.0f);
-        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.35f, 1.35f, 1.35f, 1.0f);
-        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.85f, 0.85f, 0.85f, 1.0f);
+        PPV->Settings.bOverride_ColorSaturation = true; PPV->Settings.ColorSaturation = FVector4(2.00f, 2.00f, 2.00f, 1.0f);  // v62: max
+        PPV->Settings.bOverride_ColorContrast = true; PPV->Settings.ColorContrast = FVector4(1.25f, 1.25f, 1.25f, 1.0f);
+        PPV->Settings.bOverride_ColorGamma = true; PPV->Settings.ColorGamma = FVector4(0.82f, 0.82f, 0.82f, 1.0f);
         PPV->Settings.BloomIntensity = 0.85f;
         break;
     }
@@ -1303,12 +1303,12 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 1.8f;  // v61: closer — room fills screen
-    AutoDist = FMath::Clamp(AutoDist, 600.f, 2000.f);
+    float AutoDist = MaxDim * 1.0f;  // v62: very close — room fills entire screen
+    AutoDist = FMath::Clamp(AutoDist, 400.f, 1200.f);
 
-    // v61: 50deg pitch = classic Sims dollhouse (floor+walls+furniture visible)
+    // v62: 45deg pitch = true Sims isometric (see floor AND walls equally)
     // 30deg yaw = Sims corner angle
-    float PitchDeg = 50.f;
+    float PitchDeg = 45.f;
     float YawDeg = 30.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
@@ -1319,11 +1319,11 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v61: Look at floor center — room fills view
-    FVector LookTarget(0.f, 0.f, 10.f);
+    // v62: Look at room center height
+    FVector LookTarget(0.f, 0.f, 15.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 50.f;  // v61: tight FOV = room fills screen
+    float FOV = 60.f;  // v62: wider FOV = see whole room
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1366,14 +1366,14 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
     // v44: NO sky dome — it was filling the screen as huge colored triangles
     // SpawnSky();
     SetupPostProcessing();
-    SpawnSkyLight(40.f);  // v61: bright sky light
-    // v61: Background = bright green lawn (distinct from room floor)
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Grass, FLinearColor(0.45f, 0.65f, 0.30f), FLinearColor(0.40f, 0.60f, 0.25f), 2.f);
+    SpawnSkyLight(50.f);  // v62: very bright sky light
+    // v62: Background = bright light green at Z=-10 (fix Z-fighting diagonal lines)
+    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 15.f, RS.Y * 15.f, 0), ETexturePattern::Grass, FLinearColor(0.55f, 0.75f, 0.40f), FLinearColor(0.50f, 0.70f, 0.35f), 3.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), FloorPattern, FloorBase, FloorAccent, 2.f);
 
-    // v61: L-SHAPED CUTAWAY — walls 20u (thin Sims border, NOT 80u beam)
-    float WallH = 20.f;  // v61: 20u thin border (was 80u — caused diagonal beam artifact)
+    // v62: L-SHAPED CUTAWAY — walls 20u (thin Sims border)
+    float WallH = 20.f;  // v62: 20u thin border
     // BACK WALL (along +Y edge)
     SpawnTexturedWall(FVector(-RS.X, RS.Y, 0), FVector(RS.X, RS.Y, 0), WallH, WallPattern, WallBase, WallAccent);
     // LEFT WALL (along -X edge)
@@ -1927,12 +1927,12 @@ void AEmersynGameMode::BuildLivingRoom()
 
 void AEmersynGameMode::BuildGarden()
 {
-    FVector RS(600.f, 500.f, 20.f);  // v61: 20u fence height (outdoor)
+    FVector RS(600.f, 500.f, 20.f);  // v62: 20u fence (outdoor)
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
-    SpawnSkyLight(40.f);  // v61: bright sky light
-    // v61: Background = bright green lawn
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Grass, FLinearColor(0.45f, 0.65f, 0.30f), FLinearColor(0.40f, 0.60f, 0.25f), 2.f);
+    SpawnSkyLight(50.f);  // v62: very bright
+    // v62: Background at Z=-10 (fix Z-fighting)
+    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 15.f, RS.Y * 15.f, 0), ETexturePattern::Grass, FLinearColor(0.55f, 0.75f, 0.40f), FLinearColor(0.50f, 0.70f, 0.35f), 3.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 80.f), RS);
@@ -2031,12 +2031,12 @@ void AEmersynGameMode::BuildShop()
 
 void AEmersynGameMode::BuildPlayground()
 {
-    FVector RS(550.f, 480.f, 20.f);  // v61: 20u fence height (outdoor)
+    FVector RS(550.f, 480.f, 20.f);  // v62: 20u fence (outdoor)
     SetLightingPreset(ELightingPreset::Day);
     SetupPostProcessing();
-    SpawnSkyLight(40.f);  // v61: bright sky light
-    // v61: Background = bright green lawn
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Grass, FLinearColor(0.45f, 0.65f, 0.30f), FLinearColor(0.40f, 0.60f, 0.25f), 2.f);
+    SpawnSkyLight(50.f);  // v62: very bright
+    // v62: Background at Z=-10
+    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 15.f, RS.Y * 15.f, 0), ETexturePattern::Grass, FLinearColor(0.55f, 0.75f, 0.40f), FLinearColor(0.50f, 0.70f, 0.35f), 3.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Sand, SC::FloorSand, SC::FabricYellow, 2.f);
     SpawnRoomLighting(FVector(0, 0, 80.f), RS);
@@ -2069,12 +2069,12 @@ void AEmersynGameMode::BuildPlayground()
 
 void AEmersynGameMode::BuildPark()
 {
-    FVector RS(650.f, 550.f, 20.f);  // v61: 20u thin border (outdoor)
+    FVector RS(650.f, 550.f, 20.f);  // v62: 20u border (outdoor)
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
-    SpawnSkyLight(40.f);  // v61: bright sky light
-    // v61: Background = bright green lawn
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Grass, FLinearColor(0.45f, 0.65f, 0.30f), FLinearColor(0.40f, 0.60f, 0.25f), 2.f);
+    SpawnSkyLight(50.f);  // v62: very bright
+    // v62: Background at Z=-10
+    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 15.f, RS.Y * 15.f, 0), ETexturePattern::Grass, FLinearColor(0.55f, 0.75f, 0.40f), FLinearColor(0.50f, 0.70f, 0.35f), 3.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Grass, SC::FloorGrass, SC::FloorGrassDark, 3.f);
     SpawnRoomLighting(FVector(0, 0, 80.f), RS);
@@ -2174,12 +2174,12 @@ void AEmersynGameMode::BuildArcade()
 
 void AEmersynGameMode::BuildAmusementPark()
 {
-    FVector RS(700.f, 600.f, 20.f);  // v61: 20u thin border (outdoor)
+    FVector RS(700.f, 600.f, 20.f);  // v62: 20u border (outdoor)
     SetLightingPreset(ELightingPreset::Sunset);
     SetupPostProcessing();
-    SpawnSkyLight(40.f);  // v61: bright sky light
-    // v61: Background = bright green lawn
-    SpawnTexturedFloor(FVector(0.f, 0.f, -2.f), FVector(RS.X * 20.f, RS.Y * 20.f, 0), ETexturePattern::Grass, FLinearColor(0.45f, 0.65f, 0.30f), FLinearColor(0.40f, 0.60f, 0.25f), 2.f);
+    SpawnSkyLight(50.f);  // v62: very bright
+    // v62: Background at Z=-10
+    SpawnTexturedFloor(FVector(0.f, 0.f, -10.f), FVector(RS.X * 15.f, RS.Y * 15.f, 0), ETexturePattern::Grass, FLinearColor(0.55f, 0.75f, 0.40f), FLinearColor(0.50f, 0.70f, 0.35f), 3.f);
 
     SpawnTexturedFloor(FVector::ZeroVector, FVector(RS.X, RS.Y, 0), ETexturePattern::Concrete, SC::FloorConcrete, SC::FloorSand, 2.f);
     SpawnRoomLighting(FVector(0, 0, 80.f), RS);
