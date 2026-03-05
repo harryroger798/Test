@@ -1280,18 +1280,17 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
     return FMath::Clamp(Dist, 800.f, 2500.f);  // v45: allow very far for large rooms
 }
 
-// v60: SIMS DOLLHOUSE CAMERA — balanced overhead view
-// v59 was 3.5x/72pitch — too far, everything tiny. v60: closer, balanced angle.
-// v60: 2.5x distance, 65deg pitch, 50deg FOV
+// v66: SIMS DOLLHOUSE CAMERA — closer + more overhead
+// v65 still framed content too small / off-center. v66: closer distance + higher pitch to reduce wall-like planes.
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 1.2f;  // v63: slightly further to see full room with no walls
-    AutoDist = FMath::Clamp(AutoDist, 500.f, 1400.f);
+    float AutoDist = MaxDim * 0.90f;  // v66: closer so room fills screen
+    AutoDist = FMath::Clamp(AutoDist, 350.f, 1150.f);
 
-    // v63: 55deg pitch = more overhead (no walls to block), 30deg yaw
-    float PitchDeg = 55.f;
-    float YawDeg = 30.f;
+    // v66: more overhead to reduce foreshortened vertical planes
+    float PitchDeg = 65.f;
+    float YawDeg = 35.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
@@ -1301,11 +1300,11 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v63: Look at floor level (no walls, furniture sits on floor)
-    FVector LookTarget(0.f, 0.f, 5.f);
+    // v66: Look slightly above floor so furniture reads better
+    FVector LookTarget(0.f, 0.f, 30.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 55.f;  // v63: moderate FOV, room fills screen
+    float FOV = 60.f;  // v66: slightly wider for mobile framing
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
