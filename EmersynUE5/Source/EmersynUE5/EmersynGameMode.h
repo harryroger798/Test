@@ -158,6 +158,10 @@ public:
     AActor* SpawnCharacterMesh(const FString& Name, FVector Location, FRotator Rotation,
         float InScale, const FLinearColor& SkinTint, const FLinearColor& OutfitTint);
 
+    // v77: AI-generated mesh spawning (TripoSR decimated meshes)
+    AActor* SpawnAIMesh(int32 MeshIndex, FVector Location, FRotator Rotation, FVector Scale, FLinearColor Tint);
+    int32 FindAIMeshIndex(const FString& Name) const;
+
     // Lighting
     void SpawnLight(FVector Loc, float Intensity, FLinearColor Color, float Radius);
     void SpawnDirectionalLight(FRotator Rot, float Intensity, FLinearColor Color);

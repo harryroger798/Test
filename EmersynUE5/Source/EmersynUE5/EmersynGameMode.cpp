@@ -27,8 +27,9 @@
 #include "Components/ExponentialHeightFogComponent.h"
 #include "EngineUtils.h"
 
-// v25b: MeshData headers removed to fix mobile init crash (29MB binary too large)
-// Using lightweight procedural geometry (SpawnDetailed* builders) instead
+// v77: AI-generated mesh data (TripoSR) — decimated to 800 tris each for mobile
+// 15 furniture pieces: bed, dresser, sofa, dining_table, chair, bathtub, fridge, stove, bookshelf, tv, desk, lamp, toilet, sink, plant
+#include "MeshData.h"
 
 // ============================================================
 // v25 SIMS-QUALITY COLOR PALETTE (60+ colors)
@@ -1055,6 +1056,34 @@ AActor* AEmersynGameMode::SpawnMeshVC(const float* Verts, const float* Norms, co
     return SpawnMesh(Verts, Norms, UVData, Tris, NumVerts, NumTris, Location, Rotation, Scale, ETexturePattern::Fabric, Tint, Tint * 0.8f, Brightness);
 }
 
+// ============================================================
+// v77: SPAWN AI-GENERATED MESH FROM MeshData.h
+// Uses TripoSR-generated decimated meshes (800 tris each)
+// ============================================================
+AActor* AEmersynGameMode::SpawnAIMesh(int32 MeshIndex, FVector Location, FRotator Rotation, FVector Scale, FLinearColor Tint)
+{
+    if (MeshIndex < 0 || MeshIndex >= MeshData::NumMeshTypes) {
+        UE_LOG(LogTemp, Warning, TEXT("SpawnAIMesh: Invalid mesh index %d (max %d)"), MeshIndex, MeshData::NumMeshTypes);
+        return nullptr;
+    }
+    int32 NV = *MeshData::MeshVertCounts[MeshIndex];
+    int32 NT = *MeshData::MeshTriCounts[MeshIndex];
+    const float* Verts = MeshData::MeshVertData[MeshIndex];
+    const float* Norms = MeshData::MeshNormalData[MeshIndex];
+    const int32* Tris = MeshData::MeshTriData[MeshIndex];
+    
+    return SpawnMesh(Verts, Norms, nullptr, Tris, NV, NT, Location, Rotation, Scale, ETexturePattern::Fabric, Tint, Tint * 0.85f, 1.0f);
+}
+
+// v77: Helper to find AI mesh index by name
+int32 AEmersynGameMode::FindAIMeshIndex(const FString& Name) const
+{
+    for (int32 I = 0; I < MeshData::NumMeshTypes; I++) {
+        if (Name.Equals(MeshData::MeshNames[I], ESearchCase::IgnoreCase)) return I;
+    }
+    return -1;
+}
+
 AActor* AEmersynGameMode::SpawnCharacterMesh(const FString& Name, FVector Location, FRotator Rotation,
     float InScale, const FLinearColor& SkinTint, const FLinearColor& OutfitTint)
 {
@@ -1774,22 +1803,22 @@ void AEmersynGameMode::BuildMainMenu()
 
 void AEmersynGameMode::BuildBedroom()
 {
-    // v76: SMALLER ROOM + BIGGER FURNITURE — camera fills screen with furniture
-    FVector RS(350.f, 300.f, 20.f);  // v76: smaller room so camera is closer to furniture
-    float FS = 2.0f;  // v76: bigger furniture (was 1.5)
+    // v77: AI MESH INTEGRATION — TripoSR-generated 3D furniture replaces procedural boxes
+    FVector RS(350.f, 300.f, 20.f);
+    float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WallPink,
         SC::CeilingWhite, ELightingPreset::Morning, TEXT("Bedroom"));
 
-    // v68: VIVID furniture colors like Sims FreePlay
-    SpawnDetailedBed(FVector(100, 150, 0), SC::FabricHotPink, SC::FabricPink, FLinearColor::White, FS);
-    SpawnDetailedDresser(FVector(-300, 300, 0), SC::FabricBlue, SC::MetalGold, FS);
-    SpawnDetailedLamp(FVector(-300, 300, 50*FS), SC::MetalGold, SC::FabricYellow, FS);
-    SpawnDetailedBookshelf(FVector(-350, -50, 0), FRotator(0, 90, 0), SC::FabricNavy, FS);
-    SpawnDetailedDesk(FVector(300, -200, 0), FRotator::ZeroRotator, SC::FabricTeal, SC::WoodDark, FS);
-    SpawnDetailedChair(FVector(300, -300, 0), FRotator::ZeroRotator, SC::FabricPurple, SC::MetalBlack, FS);
-    // v68: REMOVED rug (thin flat plane = diagonal line artifact from overhead camera)
-    SpawnDetailedPlant(FVector(350, 300, 0), SC::FabricCoral, SC::PlantGreen, FS);
+    // v77: AI-generated furniture meshes (800 tris each, Sims-quality shapes)
+    FVector MeshScale(FS * 1.8f, FS * 1.8f, FS * 1.8f);  // Scale AI meshes to room
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bed")), FVector(100, 150, 0), FRotator::ZeroRotator, MeshScale, SC::FabricHotPink);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dresser")), FVector(-250, 250, 0), FRotator::ZeroRotator, MeshScale * 0.8f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-250, 250, 50*FS), FRotator::ZeroRotator, MeshScale * 0.5f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-300, -50, 0), FRotator(0, 90, 0), MeshScale * 0.9f, SC::FabricNavy);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(250, -150, 0), FRotator::ZeroRotator, MeshScale * 0.8f, SC::FabricTeal);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(250, -250, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricPurple);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(300, 250, 0), FRotator::ZeroRotator, MeshScale * 0.6f, SC::PlantGreen);
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -50, 0), FRotator(0, -90, 0), FS * 1.5f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPink);
 
     SetupAutoCamera(RS);
@@ -1797,27 +1826,27 @@ void AEmersynGameMode::BuildBedroom()
 
 void AEmersynGameMode::BuildKitchen()
 {
-    // v76: SMALLER ROOM + BIGGER FURNITURE
-    FVector RS(380.f, 330.f, 20.f);  // v76: smaller room
-    float FS = 2.0f;  // v76: bigger furniture
+    // v77: AI MESH INTEGRATION
+    FVector RS(380.f, 330.f, 20.f);
+    float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorConcrete, SC::FloorTile,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("Kitchen"));
 
-    // v68: VIVID kitchen colors
-    SpawnDetailedFridge(FVector(-150, -100, 0), SC::MetalChrome, SC::MetalSilver, FS);
-    SpawnDetailedStove(FVector(-150, 100, 0), SC::MetalChrome, FS);
+    // v77: AI-generated kitchen furniture
+    FVector MeshScale(FS * 1.8f, FS * 1.8f, FS * 1.8f);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("fridge")), FVector(-150, -100, 0), FRotator::ZeroRotator, MeshScale, SC::MetalChrome);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("stove")), FVector(-150, 100, 0), FRotator::ZeroRotator, MeshScale, SC::MetalChrome);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("sink")), FVector(-100, 250, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::MetalChrome);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dining_table")), FVector(80, -30, 0), FRotator::ZeroRotator, MeshScale * 0.9f, SC::FabricOrange);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(-20, -30, 0), FRotator(0, 90, 0), MeshScale * 0.7f, SC::FabricGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(180, -30, 0), FRotator(0, -90, 0), MeshScale * 0.7f, SC::FabricGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(80, -130, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(80, 70, 0), FRotator(0, 180, 0), MeshScale * 0.7f, SC::FabricGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(250, 200, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantGreen);
+    // Keep counters as procedural (no AI mesh for counter)
     SpawnDetailedCounter(FVector(0, 250, 0), SC::MarbleWhite, SC::FabricTeal, FS);
     SpawnDetailedCounter(FVector(180, 250, 0), SC::MarbleWhite, SC::FabricTeal, FS);
-    SpawnDetailedSink(FVector(-100, 250, 0), SC::MetalChrome, SC::MetalSilver, FS);
-    SpawnDetailedTable(FVector(80, -30, 0), SC::FabricOrange, SC::WoodDark, FS);
-    SpawnDetailedChair(FVector(-20, -30, 0), FRotator(0, 90, 0), SC::FabricGreen, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(180, -30, 0), FRotator(0, -90, 0), SC::FabricGreen, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(80, -130, 0), FRotator::ZeroRotator, SC::FabricGreen, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(80, 70, 0), FRotator(0, 180, 0), SC::FabricGreen, SC::MetalBlack, FS);
-    SpawnDetailedShelf(FVector(-200, 200, 55.f), FRotator::ZeroRotator, SC::FabricRed, FS);
-    SpawnDetailedPlant(FVector(250, 200, 0), SC::FabricYellow, SC::PlantGreen, FS);
-    // v68: REMOVED rug (diagonal line artifact)
 
     SpawnCharacterMesh(TEXT("Mia"), FVector(50, -80, 0), FRotator(0, -90, 0), FS * 1.5f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricGreen);
     SetupAutoCamera(RS);
@@ -1825,21 +1854,21 @@ void AEmersynGameMode::BuildKitchen()
 
 void AEmersynGameMode::BuildBathroom()
 {
-    // v76: SMALLER ROOM + BIGGER FURNITURE
-    FVector RS(320.f, 280.f, 20.f);  // v76: smaller room
-    float FS = 2.0f;  // v76: bigger furniture
+    // v77: AI MESH INTEGRATION
+    FVector RS(320.f, 280.f, 20.f);
+    float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::TileBlue, SC::FloorTile,
         ETexturePattern::TileGrid, SC::TileWhite, SC::TileMint, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Bathroom"));
 
-    // v68: VIVID bathroom colors
-    SpawnDetailedBathtub(FVector(50, 50, 0), SC::FabricBlue, SC::MetalGold, FS);
-    SpawnDetailedToilet(FVector(-100, -80, 0), FRotator::ZeroRotator, SC::MarbleWhite, FS);
-    SpawnDetailedSink(FVector(-100, 150, 0), SC::MetalChrome, SC::MetalSilver, FS);
+    // v77: AI-generated bathroom furniture
+    FVector MeshScale(FS * 1.8f, FS * 1.8f, FS * 1.8f);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bathtub")), FVector(50, 50, 0), FRotator::ZeroRotator, MeshScale, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("toilet")), FVector(-100, -80, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::MarbleWhite);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("sink")), FVector(-100, 150, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::MetalChrome);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(150, 150, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantGreen);
+    // Keep mirror as procedural (no AI mesh for mirror)
     SpawnDetailedMirror(FVector(-100, 280, 30*FS), FRotator::ZeroRotator, SC::MetalChrome, FS);
-    // v68: REMOVED rug (diagonal line artifact)
-    SpawnDetailedShelf(FVector(-150, 200, 55.f), FRotator::ZeroRotator, SC::FabricMint, FS);
-    SpawnDetailedPlant(FVector(150, 150, 0), SC::FabricCoral, SC::PlantGreen, FS);
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -100, 0), FRotator(0, 0, 0), FS * 1.5f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricBlue);
     SetupAutoCamera(RS);
@@ -1847,26 +1876,25 @@ void AEmersynGameMode::BuildBathroom()
 
 void AEmersynGameMode::BuildLivingRoom()
 {
-    // v76: SMALLER ROOM + BIGGER FURNITURE
-    FVector RS(400.f, 350.f, 20.f);  // v76: smaller room
-    float FS = 2.0f;  // v76: bigger furniture
+    // v77: AI MESH INTEGRATION
+    FVector RS(400.f, 350.f, 20.f);
+    float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallCream, SC::WPStripe1, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Living Room"));
 
-    // v68: VIVID living room colors like Sims
-    SpawnDetailedSofa(FVector(100, -50, 0), FRotator::ZeroRotator, SC::FabricBlue, SC::FabricCream, SC::MetalBlack, FS);
-    SpawnDetailedTable(FVector(100, -200, 0), SC::FabricOrange, SC::MetalBlack, FS);
-    SpawnDetailedTV(FVector(-50, 350, 0), FRotator::ZeroRotator, SC::MetalBlack, FS);
-    SpawnDetailedBookshelf(FVector(-420, 150, 0), FRotator::ZeroRotator, SC::FabricRed, FS * 0.7f);
-    SpawnDetailedLamp(FVector(350, -20, 0), SC::MetalGold, SC::FabricYellow, FS);
-    // v68: REMOVED rug (diagonal line artifact)
-    SpawnDetailedPlant(FVector(420, 350, 0), SC::FabricCoral, SC::PlantGreen, FS);
-    SpawnDetailedPlant(FVector(-420, -100, 0), SC::FabricPurple, SC::PlantDark, FS);
-    SpawnPictureFrame(FVector(250, 420, 50*FS), FRotator::ZeroRotator, FVector(50*FS, 3, 35*FS), SC::MetalGold, SC::FabricCoral);
-    SpawnPictureFrame(FVector(-250, 420, 55*FS), FRotator::ZeroRotator, FVector(40*FS, 3, 48*FS), SC::FabricRed, SC::FabricBlue);
-    SpawnDetailedTable(FVector(-300, -50, 0), SC::FabricTeal, SC::MetalBlack, FS);
-    SpawnDetailedLamp(FVector(-300, -50, 35*FS), SC::MetalGold, SC::FabricLavender, FS * 0.7f);
+    // v77: AI-generated living room furniture
+    FVector MeshScale(FS * 1.8f, FS * 1.8f, FS * 1.8f);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("sofa")), FVector(100, -50, 0), FRotator::ZeroRotator, MeshScale, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dining_table")), FVector(100, -200, 0), FRotator::ZeroRotator, MeshScale * 0.6f, SC::FabricOrange);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("tv")), FVector(-50, 300, 0), FRotator::ZeroRotator, MeshScale * 0.8f, SC::MetalBlack);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-350, 150, 0), FRotator::ZeroRotator, MeshScale * 0.8f, SC::FabricRed);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(300, -20, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(350, 300, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(-350, -100, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantDark);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(-250, -50, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricTeal);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("lamp")), FVector(-250, -50, 35*FS), FRotator::ZeroRotator, MeshScale * 0.4f, SC::FabricLavender);
+    SpawnPictureFrame(FVector(250, 380, 50*FS), FRotator::ZeroRotator, FVector(50*FS, 3, 35*FS), SC::MetalGold, SC::FabricCoral);
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(-100, -100, 0), FRotator(0, 45, 0), FS * 1.5f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricCoral);
     SpawnCharacterMesh(TEXT("Ava"), FVector(200, -250, 0), FRotator(0, 120, 0), FS * 1.5f, FLinearColor(0.88f, 0.70f, 0.52f), SC::FabricPurple);
@@ -1911,33 +1939,36 @@ void AEmersynGameMode::BuildGarden()
 
 void AEmersynGameMode::BuildSchool()
 {
-    // v76: SMALLER ROOM + BIGGER FURNITURE
-    FVector RS(380.f, 340.f, 20.f);  // v76: smaller room
-    float FS = 2.0f;  // v76: bigger furniture
+    // v77: AI MESH INTEGRATION
+    FVector RS(380.f, 340.f, 20.f);
+    float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::WoodGrain, SC::FloorWood, SC::WoodDark,
         ETexturePattern::Wallpaper, SC::WallYellow, SC::WallCream, SC::CeilingWhite,
         ELightingPreset::Morning, TEXT("School"));
 
-    SpawnDetailedDesk(FVector(0, 300, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnTexturedBox(FVector(0, 380, 55.f), FVector(120*FS, 3, 60*FS), ETexturePattern::Concrete, FLinearColor(0.15f, 0.32f, 0.18f), FLinearColor(0.10f, 0.25f, 0.12f));  // v61: fixed height
+    // v77: AI-generated school furniture
+    FVector MeshScale(FS * 1.8f, FS * 1.8f, FS * 1.8f);
+    // Teacher desk
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(0, 300, 0), FRotator::ZeroRotator, MeshScale, SC::FabricYellow);
+    // Blackboard (keep procedural)
+    SpawnTexturedBox(FVector(0, 380, 55.f), FVector(120*FS, 3, 60*FS), ETexturePattern::Concrete, FLinearColor(0.15f, 0.32f, 0.18f), FLinearColor(0.10f, 0.25f, 0.12f));
     SpawnTexturedBox(FVector(0, 378, 55.f), FVector(125*FS, 2, 65*FS), ETexturePattern::WoodGrain, SC::WoodDark, SC::WoodEbony);
-    // v68: VIVID student desks + chairs
-    SpawnDetailedDesk(FVector(-200, -50, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnDetailedDesk(FVector(0, -50, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnDetailedDesk(FVector(200, -50, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnDetailedDesk(FVector(-200, -200, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnDetailedDesk(FVector(0, -200, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnDetailedDesk(FVector(200, -200, 0), FRotator::ZeroRotator, SC::FabricYellow, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(-200, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(0, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(200, -110, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(-200, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(0, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
-    SpawnDetailedChair(FVector(200, -260, 0), FRotator(0, 180, 0), SC::FabricBlue, SC::MetalBlack, FS);
-    SpawnDetailedBookshelf(FVector(-400, 100, 0), FRotator::ZeroRotator, SC::FabricRed, FS * 0.65f);
-    SpawnTexturedBox(FVector(350, -200, 12*FS), FVector(10*FS, 6*FS, 14*FS), ETexturePattern::Fabric, SC::FabricRed, SC::FabricBlue);
-    SpawnDetailedPlant(FVector(380, 350, 0), SC::FabricCream, SC::PlantGreen, FS);
-    // v56: REMOVED window frame
+    // Student desks (AI meshes)
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(-200, -50, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(0, -50, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(200, -50, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(-200, -200, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(0, -200, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricYellow);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("desk")), FVector(200, -200, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricYellow);
+    // Student chairs
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(-200, -110, 0), FRotator(0, 180, 0), MeshScale * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(0, -110, 0), FRotator(0, 180, 0), MeshScale * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(200, -110, 0), FRotator(0, 180, 0), MeshScale * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(-200, -260, 0), FRotator(0, 180, 0), MeshScale * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(0, -260, 0), FRotator(0, 180, 0), MeshScale * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("chair")), FVector(200, -260, 0), FRotator(0, 180, 0), MeshScale * 0.6f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-350, 100, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricRed);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(350, 300, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantGreen);
 
     SpawnCharacterMesh(TEXT("Leo"), FVector(-100, 200, 0), FRotator(0, 180, 0), FS * 1.5f, FLinearColor(0.65f, 0.45f, 0.30f), SC::FabricBlue);
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(100, -100, 0), FRotator(0, 0, 0), FS * 1.5f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPink);
@@ -1946,24 +1977,24 @@ void AEmersynGameMode::BuildSchool()
 
 void AEmersynGameMode::BuildShop()
 {
-    // v76: SMALLER ROOM + BIGGER FURNITURE
-    FVector RS(380.f, 340.f, 20.f);  // v76: smaller room
-    float FS = 2.0f;  // v76: bigger furniture
+    // v77: AI MESH INTEGRATION
+    FVector RS(380.f, 340.f, 20.f);
+    float FS = 2.0f;
     BuildRoomShell(RS, ETexturePattern::TileGrid, SC::FloorTile, SC::FloorConcrete,
         ETexturePattern::Wallpaper, SC::WallPeach, SC::FabricCream, SC::CeilingWhite,
         ELightingPreset::Day, TEXT("Shop"));
 
-    SpawnDetailedCounter(FVector(0, -200, 0), SC::FabricCoral, SC::MetalBlack, FS);
+    // v77: AI-generated shop furniture
+    FVector MeshScale(FS * 1.8f, FS * 1.8f, FS * 1.8f);
+    SpawnDetailedCounter(FVector(0, -200, 0), SC::FabricCoral, SC::MetalBlack, FS);  // Keep counter procedural
     SpawnTexturedBox(FVector(0, -170, 40*FS), FVector(15*FS, 12*FS, 10*FS), ETexturePattern::Metal, SC::MetalBlack, SC::MetalSilver);
-    SpawnDetailedBookshelf(FVector(-300, 350, 0), FRotator::ZeroRotator, SC::FabricBlue, FS * 0.65f);
-    SpawnDetailedBookshelf(FVector(-100, 350, 0), FRotator::ZeroRotator, SC::FabricGreen, FS * 0.65f);
-    SpawnDetailedBookshelf(FVector(100, 350, 0), FRotator::ZeroRotator, SC::FabricPurple, FS * 0.65f);
-    SpawnDetailedBookshelf(FVector(300, 350, 0), FRotator::ZeroRotator, SC::FabricOrange, FS * 0.65f);
-    SpawnDetailedTable(FVector(0, 50, 0), SC::FabricTeal, SC::MetalBlack, FS);
-    SpawnDetailedPlant(FVector(400, 350, 0), SC::FabricYellow, SC::PlantGreen, FS);
-    SpawnDetailedPlant(FVector(-420, -100, 0), SC::FabricRed, SC::PlantDark, FS);
-    SpawnDetailedShelf(FVector(-430, 50, 55.f), FRotator::ZeroRotator, SC::FabricHotPink, FS);
-    // v68: REMOVED rug (diagonal line artifact)
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-300, 300, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricBlue);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(-100, 300, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(100, 300, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricPurple);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("bookshelf")), FVector(300, 300, 0), FRotator::ZeroRotator, MeshScale * 0.7f, SC::FabricOrange);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("dining_table")), FVector(0, 50, 0), FRotator::ZeroRotator, MeshScale * 0.6f, SC::FabricTeal);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(350, 300, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantGreen);
+    SpawnAIMesh(FindAIMeshIndex(TEXT("plant")), FVector(-350, -100, 0), FRotator::ZeroRotator, MeshScale * 0.5f, SC::PlantDark);
 
     SpawnCharacterMesh(TEXT("Emersyn"), FVector(0, -100, 0), FRotator(0, 180, 0), FS * 1.5f, FLinearColor(0.92f, 0.75f, 0.60f), SC::FabricPurple);
     SetupAutoCamera(RS);
