@@ -1308,12 +1308,12 @@ float AEmersynGameMode::CalcAutoCameraDistance(FVector RoomSize) const
 void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
 {
     float MaxDim = FMath::Max(RoomSize.X, RoomSize.Y);
-    float AutoDist = MaxDim * 0.40f;  // v76: VERY close (was 0.65) — furniture must fill 80%+ of screen
-    AutoDist = FMath::Clamp(AutoDist, 200.f, 500.f);
+    float AutoDist = MaxDim * 1.2f;  // v81: pull camera back to see full room with walls
+    AutoDist = FMath::Clamp(AutoDist, 350.f, 800.f);
 
-    // v76: 60deg pitch (more top-down dollhouse), 30deg yaw
-    float PitchDeg = 60.f;
-    float YawDeg = 30.f;
+    // v81: 55deg pitch (more 3/4 view like Sims), 25deg yaw
+    float PitchDeg = 55.f;
+    float YawDeg = 25.f;
     float PitchRad = FMath::DegreesToRadians(PitchDeg);
     float YawRad = FMath::DegreesToRadians(YawDeg);
 
@@ -1323,11 +1323,11 @@ void AEmersynGameMode::SetupAutoCamera(FVector RoomSize)
     float CamY = -CamHoriz * FMath::Cos(YawRad);
     FVector CamPos(CamX, CamY, CamZ);
 
-    // v69: Look at furniture mid-height
-    FVector LookTarget(0.f, 0.f, 20.f);
+    // v81: Look at room center height (walls are 80u, look at 30u)
+    FVector LookTarget(0.f, 0.f, 30.f);
     FVector LookDir = (LookTarget - CamPos).GetSafeNormal();
     FRotator CamRot = LookDir.Rotation();
-    float FOV = 65.f;  // v76: slightly narrower FOV for less distortion
+    float FOV = 50.f;  // v81: narrower FOV for less distortion, more Sims-like
 
     // v47: Store locked values for every-frame enforcement in Tick()
     LockedCamPos = CamPos;
@@ -1378,7 +1378,7 @@ void AEmersynGameMode::BuildRoomShell(FVector RS, ETexturePattern FloorPattern, 
 
     // v80: RE-ADD 3 WALLS for Sims dollhouse look (back wall + 2 side walls, front open)
     float WH = RS.Z;  // Wall height (80u)
-    float WT = 8.f;   // Wall thickness
+    float WT = 25.f;  // v81: thick walls visible from overhead camera
     // Back wall (along +Y edge)
     SpawnTexturedBox(FVector(0, RS.Y, WH * 0.5f), FVector(RS.X, WT, WH * 0.5f), WallPattern, WallBase, WallAccent);
     // Left wall (along -X edge)
