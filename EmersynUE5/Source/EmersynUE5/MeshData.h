@@ -28969,6 +28969,24 @@ static const int32_t sink_Tris[] = {
 
 static const int32_t NumMeshTypes = 15;
 
+static const char* MeshNames[] = {
+  "bed",
+  "dresser",
+  "sofa",
+  "dining_table",
+  "chair",
+  "bathtub",
+  "fridge",
+  "stove",
+  "bookshelf",
+  "tv",
+  "desk",
+  "lamp",
+  "toilet",
+  "sink",
+  "plant",
+};
+
 static const int32_t* MeshVertCounts[] = {
   &bed_NumVerts,
   &dresser_NumVerts,
