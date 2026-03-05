@@ -1057,8 +1057,9 @@ AActor* AEmersynGameMode::SpawnMeshVC(const float* Verts, const float* Norms, co
 }
 
 // ============================================================
-// v77: SPAWN AI-GENERATED MESH FROM MeshData.h
-// Uses TripoSR-generated decimated meshes (800 tris each)
+// v85: SPAWN AI-GENERATED MESH FROM MeshData.h
+// High-poly bedroom meshes (4000 tris) + standard meshes (800 tris)
+// Auto-detects normalized meshes and scales them to room coordinate system
 // ============================================================
 AActor* AEmersynGameMode::SpawnAIMesh(int32 MeshIndex, FVector Location, FRotator Rotation, FVector Scale, FLinearColor Tint)
 {
@@ -1072,16 +1073,36 @@ AActor* AEmersynGameMode::SpawnAIMesh(int32 MeshIndex, FVector Location, FRotato
     const float* Norms = MeshData::MeshNormalData[MeshIndex];
     const int32* Tris = MeshData::MeshTriData[MeshIndex];
     
-    // v78: Auto-compute Z offset so mesh sits ON the floor (meshes are centered at origin)
-    float MinZ = 99999.f;
+    // v85: Auto-detect mesh coordinate range and normalize to room scale
+    // High-poly TripoSR meshes are normalized to ~1 unit extent
+    // Old meshes are ~100 units extent. We want all meshes to fill ~100 units before user scale.
+    float MinX = 99999.f, MaxX = -99999.f;
+    float MinY = 99999.f, MaxY = -99999.f;
+    float MinZ = 99999.f, MaxZ = -99999.f;
     for (int32 i = 0; i < NV; i++) {
+        float X = Verts[i * 3 + 0];
+        float Y = Verts[i * 3 + 1];
         float Z = Verts[i * 3 + 2];
-        if (Z < MinZ) MinZ = Z;
+        if (X < MinX) MinX = X; if (X > MaxX) MaxX = X;
+        if (Y < MinY) MinY = Y; if (Y > MaxY) MaxY = Y;
+        if (Z < MinZ) MinZ = Z; if (Z > MaxZ) MaxZ = Z;
     }
-    FVector AdjustedLoc = Location;
-    AdjustedLoc.Z += (-MinZ) * Scale.Z;  // Raise mesh so bottom touches floor
+    float Extent = FMath::Max3(MaxX - MinX, MaxY - MinY, MaxZ - MinZ);
     
-    return SpawnMesh(Verts, Norms, nullptr, Tris, NV, NT, AdjustedLoc, Rotation, Scale, ETexturePattern::Fabric, Tint, Tint * 0.85f, 1.0f);
+    // If mesh extent is very small (< 5 units), it's a normalized TripoSR mesh
+    // Scale it up so its base extent is ~80 units (roughly furniture-sized in room coords)
+    float AutoScale = 1.0f;
+    if (Extent > 0.01f && Extent < 5.0f) {
+        AutoScale = 80.0f / Extent;
+    }
+    
+    FVector FinalScale = Scale * AutoScale;
+    
+    // Auto-compute Z offset so mesh sits ON the floor
+    FVector AdjustedLoc = Location;
+    AdjustedLoc.Z += (-MinZ) * FinalScale.Z;
+    
+    return SpawnMesh(Verts, Norms, nullptr, Tris, NV, NT, AdjustedLoc, Rotation, FinalScale, ETexturePattern::Fabric, Tint, Tint * 0.85f, 1.0f);
 }
 
 // v77: Helper to find AI mesh index by name
