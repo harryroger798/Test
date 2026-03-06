@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, useInView, useScroll, useTransform } from 'framer-motion'
-import { ArrowRight, Zap, Shield, Globe, Clock, Check, ChevronDown, Menu, X, Star, Download, Users, MapPin, MessageCircle, Search, Send, Linkedin, Instagram, Facebook, Twitter } from 'lucide-react'
+import { ArrowRight, Zap, Shield, Globe, Clock, Check, ChevronDown, Menu, X, Star, Download, Users, MapPin, MessageCircle, Search, Send, Linkedin, Instagram, Facebook, Twitter, TrendingUp, AlertTriangle } from 'lucide-react'
 
 /* ─── COUNTER HOOK ─── */
 function useCountUp(end: number, duration = 2000, startOnView = true) {
@@ -87,7 +87,14 @@ function Hero() {
   const y2 = useTransform(scrollY, [0, 500], [0, -30])
   
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center pt-24 pb-16 px-4 overflow-hidden noise-bg">
+    <section className="relative min-h-screen flex flex-col items-center justify-center pt-24 pb-16 px-4 overflow-hidden">
+      {/* Background gradient glow */}
+      <div className="absolute inset-0 bg-dark" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full blur-3xl" style={{ background: 'radial-gradient(ellipse at center, rgba(255,69,0,0.15) 0%, rgba(255,69,0,0.05) 40%, transparent 70%)' }} />
+      <div className="absolute top-[10%] left-[20%] w-[400px] h-[400px] rounded-full blur-3xl" style={{ background: 'radial-gradient(ellipse at center, rgba(255,107,53,0.1) 0%, transparent 60%)' }} />
+      <div className="absolute top-[5%] right-[15%] w-[350px] h-[350px] rounded-full blur-3xl" style={{ background: 'radial-gradient(ellipse at center, rgba(220,50,0,0.08) 0%, transparent 60%)' }} />
+      <div className="absolute bottom-[30%] left-[10%] w-[300px] h-[300px] rounded-full blur-3xl" style={{ background: 'radial-gradient(ellipse at center, rgba(168,85,247,0.05) 0%, transparent 60%)' }} />
+      
       {/* Floating platform icons */}
       <motion.div style={{ y: y1 }} className="absolute top-32 left-[10%] animate-float">
         <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/30"><Linkedin size={28} className="text-white" /></div>
@@ -187,7 +194,7 @@ function Stats() {
           <motion.div variants={fadeIn} className="border-l-2 border-white/30 pl-6">
             <h6 className="font-mono text-xs uppercase tracking-widest text-white/80 mb-4">Zero Cost Infrastructure</h6>
             <div className="text-5xl font-black text-white mb-2"><span ref={s3.ref}>{s3.count}</span>%</div>
-            <p className="text-white/70 text-sm">Free and self-hosted. No monthly API costs, no proxy fees. Everything runs on your machine.</p>
+            <p className="text-white/70 text-sm">Runs entirely on your machine. No monthly API costs, no proxy fees, no hidden charges.</p>
           </motion.div>
         </div>
       </motion.div>
@@ -222,9 +229,9 @@ function WhoWeAre() {
 function Features() {
   const features = [
     { icon: <Search size={24} />, title: 'EXTRACT', subtitle: 'Pull leads from any platform', desc: 'Extract emails, phones, names, and business data from LinkedIn, Instagram, Reddit, Google Maps, and 8 more platforms.', img: '/images/hero-team.png' },
-    { icon: <Shield size={24} />, title: 'PROTECT', subtitle: 'Built-in anti-ban safety', desc: 'Smart rate limiting, random delays, User-Agent rotation, and Patchright stealth browser keeps your accounts safe.', img: '/images/strategy.png' },
+    { icon: <Shield size={24} />, title: 'PROTECT', subtitle: 'Built-in account safety', desc: 'Advanced anti-detection technology with smart rate limiting, randomized behavior patterns, and built-in safety controls to keep your accounts protected.', img: '/images/strategy.png' },
     { icon: <Zap size={24} />, title: 'AUTOMATE', subtitle: 'Schedule & scale extractions', desc: 'Set up recurring extraction schedules. Run campaigns on autopilot while you focus on closing deals.', img: '/images/team-celebrate.png' },
-    { icon: <Clock size={24} />, title: 'ENRICH', subtitle: 'Verify & export instantly', desc: 'Built-in MX email verification, CSV/Excel export, HubSpot CRM integration, and email outreach — all in one app.', img: '/images/strategy.png' },
+    { icon: <Clock size={24} />, title: 'ENRICH', subtitle: 'Verify & export instantly', desc: 'Built-in email verification, CSV/Excel export, HubSpot CRM integration, and email outreach — all in one app.', img: '/images/strategy.png' },
   ]
   
   return (
@@ -284,10 +291,10 @@ function FeatureCard({ icon, title, subtitle, desc, img }: { icon: React.ReactNo
 /* ─── PLATFORM SHOWCASE ─── */
 function Platforms() {
   const platforms = [
-    { num: '01', name: 'Google Maps Extractor', stats: [{ val: '50K+', label: 'businesses/day' }, { val: '100%', label: 'data accuracy' }, { val: '6+', label: 'data fields' }], color: 'from-red-600 to-orange-500' },
-    { num: '02', name: 'LinkedIn Scraper', stats: [{ val: '10K+', label: 'profiles/session' }, { val: '95%', label: 'email match' }, { val: '0%', label: 'ban rate' }], color: 'from-blue-600 to-cyan-500' },
-    { num: '03', name: 'Reddit Lead Finder', stats: [{ val: '200+', label: 'subreddits' }, { val: '5K+', label: 'leads/query' }, { val: '3x', label: 'faster than manual' }], color: 'from-orange-500 to-red-500' },
-    { num: '04', name: 'Telegram Group Scraper', stats: [{ val: '500+', label: 'members/group' }, { val: '100%', label: 'MTProto safe' }, { val: '5+', label: 'groups/day' }], color: 'from-sky-500 to-blue-600' },
+    { num: '01', name: 'Google Maps Lead Finder', stats: [{ val: '50K+', label: 'businesses/day' }, { val: '100%', label: 'data accuracy' }, { val: '6+', label: 'data fields' }], color: 'from-red-600 to-orange-500' },
+    { num: '02', name: 'LinkedIn Lead Extractor', stats: [{ val: '10K+', label: 'profiles/session' }, { val: '95%', label: 'email match' }, { val: '0%', label: 'ban rate' }], color: 'from-blue-600 to-cyan-500' },
+    { num: '03', name: 'Reddit Lead Finder', stats: [{ val: '200+', label: 'subreddits' }, { val: '5K+', label: 'leads/query' }, { val: '3x', label: 'faster' }], color: 'from-orange-500 to-red-500' },
+    { num: '04', name: 'Telegram Group Extractor', stats: [{ val: '500+', label: 'members/group' }, { val: '100%', label: 'safe extraction' }, { val: '5+', label: 'groups/day' }], color: 'from-sky-500 to-blue-600' },
     { num: '05', name: 'Instagram + Facebook', stats: [{ val: '1K+', label: 'profiles/run' }, { val: '90%', label: 'data capture' }, { val: '4+', label: 'data points' }], color: 'from-purple-500 to-pink-500' },
   ]
 
@@ -300,7 +307,7 @@ function Platforms() {
             <h2 className="text-4xl md:text-6xl font-black uppercase mt-6 tracking-tight">
               Our <span className="italic text-gray-400">Supported</span> Platforms
             </h2>
-            <p className="text-gray-500 mt-4 max-w-2xl mx-auto">Extract leads from the biggest platforms on the internet. Each scraper is purpose-built with anti-detection and rate limiting.</p>
+            <p className="text-gray-500 mt-4 max-w-2xl mx-auto">Extract leads from the biggest platforms on the internet. Each extractor is purpose-built with safety controls and smart rate limiting.</p>
           </motion.div>
           
           <div className="space-y-4">
@@ -343,6 +350,14 @@ function Pricing() {
             <p className="text-gray-400 mt-4 max-w-xl mx-auto">Choose the plan that fits your needs. Upgrade anytime, cancel anytime.</p>
           </motion.div>
           
+          {/* Urgency Banner */}
+          <motion.div variants={fadeIn} className="flex items-center justify-center gap-3 mb-8">
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-xs uppercase tracking-wider px-5 py-2.5 rounded-full">
+              <AlertTriangle size={14} />
+              <span>Launch Pricing — Prices Go Up Soon</span>
+            </div>
+          </motion.div>
+          
           {/* Toggle */}
           <motion.div variants={fadeIn} className="flex items-center justify-center gap-4 mb-12">
             <span className={`font-mono text-sm uppercase tracking-wider ${!annual ? 'text-white' : 'text-gray-500'}`}>Monthly</span>
@@ -350,19 +365,23 @@ function Pricing() {
               <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform duration-300 ${annual ? 'left-8' : 'left-1'}`} />
             </button>
             <span className={`font-mono text-sm uppercase tracking-wider ${annual ? 'text-white' : 'text-gray-500'}`}>Annually</span>
-            {annual && <span className="bg-accent/20 text-accent font-mono text-xs px-3 py-1 rounded-full">Save 20%</span>}
+            {annual && <span className="bg-accent/20 text-accent font-mono text-xs px-3 py-1 rounded-full">Save 30%+</span>}
           </motion.div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Starter */}
             <motion.div variants={fadeIn} className="bg-dark-card border border-dark-border rounded-2xl overflow-hidden group hover:border-gray-700 transition-all duration-500">
-              <div className="h-32 bg-gradient-to-br from-gray-800 to-gray-900 p-8 flex flex-col justify-end">
+              <div className="h-36 bg-gradient-to-br from-gray-800 to-gray-900 p-8 flex flex-col justify-end">
                 <div className="flex items-center gap-2 mb-1"><Zap size={16} className="text-accent" /><span className="font-mono text-xs uppercase tracking-widest text-gray-400">Starter</span></div>
-                <div className="text-4xl font-black text-white">${annual ? '39' : '49'}<span className="text-lg text-gray-400 font-normal">/{annual ? 'yr' : 'mo'}</span></div>
+                <div className="flex items-baseline gap-3">
+                  <div className="text-4xl font-black text-white">${annual ? '79' : '9'}<span className="text-lg text-gray-400 font-normal">/{annual ? 'yr' : 'mo'}</span></div>
+                  <span className="text-gray-500 line-through text-lg">${annual ? '149' : '29'}</span>
+                  <span className="bg-green-500/20 text-green-400 font-mono text-xs px-2 py-0.5 rounded-full">{annual ? '47% OFF' : '69% OFF'}</span>
+                </div>
               </div>
               <div className="p-8">
                 <h6 className="font-mono text-xs uppercase tracking-widest text-gray-400 mb-4">What's Included</h6>
-                {['5 social platforms (LinkedIn, FB, IG, Reddit, Twitter)', 'Google Dorking extraction', 'CSV & Excel export', 'MX email verification', '500 leads per extraction', 'Desktop app (Win/Mac/Linux)'].map((item, i) => (
+                {['5 social platforms (LinkedIn, FB, IG, Reddit, Twitter)', 'Google Maps lead extraction', 'CSV & Excel export', 'Email verification', '500 leads per extraction', 'Desktop app (Win/Mac/Linux)'].map((item, i) => (
                   <div key={i} className="flex items-start gap-3 mb-3">
                     <Check size={16} className="text-accent mt-0.5 flex-shrink-0" />
                     <span className="text-gray-300 text-sm">{item}</span>
@@ -377,13 +396,17 @@ function Pricing() {
             {/* Pro */}
             <motion.div variants={fadeIn} className="bg-dark-card border border-accent/30 rounded-2xl overflow-hidden group hover:border-accent/60 transition-all duration-500 relative">
               <div className="absolute top-4 right-4 bg-accent text-white font-mono text-xs px-3 py-1 rounded-full">Most Popular</div>
-              <div className="h-32 bg-gradient-to-br from-accent/30 to-orange-900/40 p-8 flex flex-col justify-end">
+              <div className="h-36 bg-gradient-to-br from-accent/30 to-orange-900/40 p-8 flex flex-col justify-end">
                 <div className="flex items-center gap-2 mb-1"><Zap size={16} className="text-accent fill-accent" /><span className="font-mono text-xs uppercase tracking-widest text-accent">Pro</span></div>
-                <div className="text-4xl font-black text-white">${annual ? '79' : '99'}<span className="text-lg text-gray-400 font-normal">/{annual ? 'yr' : 'mo'}</span></div>
+                <div className="flex items-baseline gap-3">
+                  <div className="text-4xl font-black text-white">${annual ? '249' : '29'}<span className="text-lg text-gray-400 font-normal">/{annual ? 'yr' : 'mo'}</span></div>
+                  <span className="text-gray-500 line-through text-lg">${annual ? '499' : '79'}</span>
+                  <span className="bg-green-500/20 text-green-400 font-mono text-xs px-2 py-0.5 rounded-full">{annual ? '50% OFF' : '63% OFF'}</span>
+                </div>
               </div>
               <div className="p-8">
                 <h6 className="font-mono text-xs uppercase tracking-widest text-gray-400 mb-4">Everything in Starter, plus</h6>
-                {['All 12+ platforms + Google Maps', 'Scheduled automated extractions', 'Email outreach campaigns', 'HubSpot & Salesforce CRM export', 'Telegram + WhatsApp scrapers', 'Website email finder (Firecrawl)', 'Unlimited leads per extraction', 'Priority support & updates'].map((item, i) => (
+                {['All 12+ platforms + Google Maps', 'Scheduled automated extractions', 'Email outreach campaigns', 'HubSpot & Salesforce CRM export', 'Telegram + WhatsApp extractors', 'Website email finder', 'Unlimited leads per extraction', 'Priority support & updates'].map((item, i) => (
                   <div key={i} className="flex items-start gap-3 mb-3">
                     <Check size={16} className="text-accent mt-0.5 flex-shrink-0" />
                     <span className="text-gray-300 text-sm">{item}</span>
@@ -396,15 +419,38 @@ function Pricing() {
             </motion.div>
           </div>
           
-          {/* Lifetime */}
-          <motion.div variants={fadeIn} className="mt-6 bg-dark-card border border-dark-border rounded-2xl p-8 text-center">
-            <h3 className="font-mono text-xs uppercase tracking-widest text-gray-400 mb-2">Lifetime Deal Available</h3>
-            <p className="text-gray-500 text-sm mb-4">Pay once, use forever. No subscriptions. Includes all future updates.</p>
-            <div className="flex items-center justify-center gap-4">
-              <span className="text-3xl font-black text-white">$199</span>
-              <span className="text-gray-500 line-through">$499</span>
-              <span className="bg-accent/20 text-accent font-mono text-xs px-3 py-1 rounded-full">60% OFF — Limited Time</span>
+          {/* Lifetime Deal */}
+          <motion.div variants={fadeIn} className="mt-6 bg-dark-card border border-accent/20 rounded-2xl p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-accent text-white font-mono text-xs px-4 py-1.5 rounded-bl-xl">LIMITED TIME</div>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div>
+                <h3 className="font-mono text-xs uppercase tracking-widest text-accent mb-2">Lifetime Deal — Pay Once, Use Forever</h3>
+                <p className="text-gray-500 text-sm">No subscriptions. Includes all future updates and new features forever.</p>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="text-center">
+                  <div className="text-gray-500 line-through text-lg">$499</div>
+                  <div className="text-4xl font-black text-white">$149</div>
+                  <span className="bg-red-500/20 text-red-400 font-mono text-[10px] px-2 py-0.5 rounded-full">70% OFF</span>
+                  <div className="text-gray-600 font-mono text-[10px] uppercase mt-1">Starter Lifetime</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-gray-500 line-through text-lg">$999</div>
+                  <div className="text-4xl font-black text-white">$399</div>
+                  <span className="bg-red-500/20 text-red-400 font-mono text-[10px] px-2 py-0.5 rounded-full">60% OFF</span>
+                  <div className="text-gray-600 font-mono text-[10px] uppercase mt-1">Pro Lifetime</div>
+                </div>
+              </div>
             </div>
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <TrendingUp size={14} className="text-accent" />
+              <span className="text-gray-400 font-mono text-xs uppercase tracking-wider">Only <span className="text-accent font-bold">47 lifetime keys</span> remaining — then this offer is gone forever</span>
+            </div>
+          </motion.div>
+
+          {/* Money-back guarantee */}
+          <motion.div variants={fadeIn} className="mt-4 text-center">
+            <p className="text-gray-500 font-mono text-xs uppercase tracking-wider">14-Day Money-Back Guarantee — No Questions Asked</p>
           </motion.div>
         </motion.div>
       </div>
@@ -416,7 +462,7 @@ function Pricing() {
 function Testimonial() {
   const testimonials = [
     { quote: "SnapLeads replaced 3 separate tools for us. The Google Maps extractor alone saved us 20 hours per week of manual prospecting.", name: "Marcus Rodriguez", title: "CEO at LeadFlow Agency", img: "/images/testimonial-person.png" },
-    { quote: "The anti-detection is incredible. We've been running extractions for 6 months with zero bans. This is the real deal.", name: "James Chen", title: "Growth Lead at TechScale", img: "/images/testimonial-person.png" },
+    { quote: "The account safety features are incredible. We have been running extractions for 6 months with zero issues. This is the real deal.", name: "James Chen", title: "Growth Lead at TechScale", img: "/images/testimonial-person.png" },
     { quote: "From extraction to outreach in one tool — we closed $50K in new business in the first month using SnapLeads Pro.", name: "David Park", title: "Founder at CloudReach", img: "/images/testimonial-person.png" },
   ]
   const [active, setActive] = useState(0)
@@ -486,12 +532,12 @@ function HowItWorks() {
 /* ─── FAQ ─── */
 function FAQ() {
   const faqs = [
-    { q: 'Is SnapLeads really free to use with no hidden costs?', a: 'SnapLeads runs 100% on your desktop — no cloud servers, no proxy fees, no API costs. Your license gives you full access to the app. The only cost is the license itself.' },
-    { q: 'Will my accounts get banned using SnapLeads?', a: 'We\'ve built enterprise-grade anti-detection: Patchright stealth browser, smart rate limiting, random delays, User-Agent rotation, and per-platform safety limits. In 6+ months of testing, zero bans reported.' },
-    { q: 'What platforms can I extract leads from?', a: 'LinkedIn, Facebook, Instagram, Reddit, Twitter/X, TikTok, YouTube, Google Maps, Telegram, WhatsApp, Google Dorking, and Website Email Finder. Pro plan includes all platforms; Starter includes 5 core platforms.' },
-    { q: 'Does it work on Windows, Mac, and Linux?', a: 'Yes! SnapLeads is built with Electron and works on all three platforms. Download the installer for your OS and you\'re ready in under 2 minutes.' },
-    { q: 'Can I export leads to my CRM?', a: 'Pro plan includes direct HubSpot and Salesforce CRM integration. All plans support CSV and Excel export. We\'re adding more CRM integrations based on user demand.' },
-    { q: 'What if I don\'t like it? Is there a refund?', a: 'We offer a 14-day money-back guarantee on all plans. If SnapLeads doesn\'t meet your needs, we\'ll refund you — no questions asked.' },
+    { q: 'Is SnapLeads really that affordable?', a: 'Yes! Our Starter plan is just $9/month. We believe powerful lead extraction should not cost hundreds. Your license gives you full access to the desktop app with no hidden costs, no API fees, and no proxy charges.' },
+    { q: 'Will my accounts get banned using SnapLeads?', a: 'We have built enterprise-grade account safety: smart rate limiting, randomized behavior patterns, and built-in safety controls. In 6+ months of testing, zero bans reported.' },
+    { q: 'What platforms can I extract leads from?', a: 'LinkedIn, Facebook, Instagram, Reddit, Twitter/X, TikTok, YouTube, Google Maps, Telegram, WhatsApp, and more. Pro plan includes all platforms; Starter includes 5 core platforms.' },
+    { q: 'Does it work on Windows, Mac, and Linux?', a: 'Yes! SnapLeads works on all three platforms. Download the installer for your OS and you are ready in under 2 minutes.' },
+    { q: 'Can I export leads to my CRM?', a: 'Pro plan includes direct HubSpot and Salesforce CRM integration. All plans support CSV and Excel export. We are adding more CRM integrations based on user demand.' },
+    { q: 'What if I do not like it? Is there a refund?', a: 'We offer a 14-day money-back guarantee on all plans. If SnapLeads does not meet your needs, we will refund you — no questions asked.' },
   ]
   
   const [open, setOpen] = useState<number | null>(null)
@@ -550,7 +596,7 @@ function FinalCTA() {
 
 /* ─── KEYWORD MARQUEE ─── */
 function KeywordMarquee() {
-  const keywords = ['Lead Extraction', 'Email Finder', 'Google Maps', 'Anti-Detection', 'CRM Export', 'Proxy-Free', 'Desktop App', 'Scheduled Runs']
+  const keywords = ['Lead Extraction', 'Email Finder', 'Google Maps', 'Account Safety', 'CRM Export', 'No Proxies', 'Desktop App', 'Scheduled Runs']
   return (
     <div className="py-6 bg-dark border-t border-b border-dark-border overflow-hidden">
       <div className="flex animate-marquee whitespace-nowrap">
@@ -591,24 +637,39 @@ function Footer() {
           {/* Product */}
           <div>
             <h6 className="font-mono text-xs uppercase tracking-widest text-gray-400 mb-4">Product</h6>
-            {['Features', 'Platforms', 'Pricing', 'Download'].map((item, i) => (
-              <a key={i} href={`#${item.toLowerCase()}`} className="block text-gray-500 hover:text-white transition-colors text-sm mb-2 font-mono text-xs uppercase tracking-wider">{item}</a>
+            {[
+              { label: 'Features', href: '#features' },
+              { label: 'Platforms', href: '#platforms' },
+              { label: 'Pricing', href: '#pricing' },
+              { label: 'Download', href: '#pricing' },
+            ].map((item, i) => (
+              <a key={i} href={item.href} className="block text-gray-500 hover:text-white transition-colors mb-2 font-mono text-xs uppercase tracking-wider">{item.label}</a>
             ))}
           </div>
           
           {/* Support */}
           <div>
             <h6 className="font-mono text-xs uppercase tracking-widest text-gray-400 mb-4">Support</h6>
-            {['FAQ', 'Contact', 'Documentation', 'Changelog'].map((item, i) => (
-              <a key={i} href="#" className="block text-gray-500 hover:text-white transition-colors text-sm mb-2 font-mono text-xs uppercase tracking-wider">{item}</a>
+            {[
+              { label: 'FAQ', href: '#faq' },
+              { label: 'Contact', href: 'mailto:support@getsnapleads.store' },
+              { label: 'Documentation', href: '#faq' },
+              { label: 'Changelog', href: '#features' },
+            ].map((item, i) => (
+              <a key={i} href={item.href} className="block text-gray-500 hover:text-white transition-colors mb-2 font-mono text-xs uppercase tracking-wider">{item.label}</a>
             ))}
           </div>
           
           {/* Legal */}
           <div>
             <h6 className="font-mono text-xs uppercase tracking-widest text-gray-400 mb-4">Legal</h6>
-            {['Privacy Policy', 'Terms of Service', 'Refund Policy', 'License Agreement'].map((item, i) => (
-              <a key={i} href="#" className="block text-gray-500 hover:text-white transition-colors text-sm mb-2 font-mono text-xs uppercase tracking-wider">{item}</a>
+            {[
+              { label: 'Privacy Policy', href: '#' },
+              { label: 'Terms of Service', href: '#' },
+              { label: 'Refund Policy', href: '#faq' },
+              { label: 'License Agreement', href: '#' },
+            ].map((item, i) => (
+              <a key={i} href={item.href} className="block text-gray-500 hover:text-white transition-colors mb-2 font-mono text-xs uppercase tracking-wider">{item.label}</a>
             ))}
           </div>
         </div>
