@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Home, Video, Music, Settings, HelpCircle, type LucideIcon } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 import { cn } from '../lib/utils';
 import { useDownloadStore } from '../store/downloadStore';
+import { api } from '../lib/ipc';
 
 interface NavItem {
   id: 'home' | 'video' | 'audio' | 'settings' | 'help';
@@ -13,6 +14,11 @@ interface NavItem {
 
 export const Sidebar: React.FC = () => {
   const { currentPage, setCurrentPage, downloads } = useDownloadStore();
+  const [appVersion, setAppVersion] = useState('...');
+
+  useEffect(() => {
+    api.getAppVersion().then((res) => setAppVersion(res.version)).catch(() => setAppVersion('1.0.5'));
+  }, []);
 
   const activeDownloads = downloads.filter(
     (d) => d.status === 'downloading' || d.status === 'queued' || d.status === 'processing'
@@ -79,7 +85,7 @@ export const Sidebar: React.FC = () => {
       {/* Footer */}
       <div className="p-4 border-t border-border hidden lg:block">
         <p className="text-xs text-muted-foreground text-center">
-          GrabTube v1.0.0
+          GrabTube v{appVersion}
         </p>
       </div>
     </div>

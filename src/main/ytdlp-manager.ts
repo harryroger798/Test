@@ -752,7 +752,11 @@ export class YtdlpManager {
 
     args.push(url);
 
+    console.log(`[GrabTube] Starting download: ${url}`);
+    console.log(`[GrabTube] Download args: ${args.join(' ')}`);
+
     const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
+    let stderrBuffer = '';
 
     proc.stdout.on('data', (data) => {
       const line = data.toString().trim();
@@ -764,7 +768,10 @@ export class YtdlpManager {
 
     proc.stderr.on('data', (data) => {
       const line = data.toString().trim();
+      stderrBuffer += line + '\n';
+      console.log(`[GrabTube] stderr: ${line}`);
       if (line && !line.startsWith('WARNING')) {
+        // Send error info but don't mark as terminal error yet — wait for process close
         onProgress({
           downloadId,
           status: 'error',

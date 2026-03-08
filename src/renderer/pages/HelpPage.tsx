@@ -1,7 +1,14 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { HelpCircle, MessageSquare, ExternalLink, BookOpen, Shield, Zap } from 'lucide-react';
+import { api } from '../lib/ipc';
 
 export const HelpPage: React.FC = () => {
+  const [appVersion, setAppVersion] = useState('...');
+
+  useEffect(() => {
+    api.getAppVersion().then((res) => setAppVersion(res.version)).catch(() => setAppVersion('1.0.5'));
+  }, []);
+
   const helpItems = [
     {
       icon: BookOpen,
@@ -82,7 +89,7 @@ export const HelpPage: React.FC = () => {
 
         {/* Version info */}
         <div className="mt-6 text-center text-xs text-muted-foreground animate-fade-in">
-          <p>GrabTube v1.0.0</p>
+          <p>GrabTube v{appVersion}</p>
           <p className="mt-1">Built with yt-dlp, Electron, and React</p>
         </div>
       </div>
