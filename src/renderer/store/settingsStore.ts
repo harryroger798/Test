@@ -1,0 +1,93 @@
+import { create } from 'zustand';
+import { api } from '../lib/ipc';
+
+interface ProxySettings {
+  enabled: boolean;
+  url: string;
+  type: 'http' | 'https' | 'socks5';
+}
+
+interface Settings {
+  downloadPath: string;
+  theme: 'dark' | 'light' | 'system';
+  proxy: ProxySettings;
+  maxConcurrentDownloads: number;
+  embedThumbnail: boolean;
+  embedSubtitles: boolean;
+  defaultVideoFormat: string;
+  defaultAudioFormat: string;
+  clipboardMonitoring: boolean;
+  notifications: boolean;
+}
+
+interface SettingsStore extends Settings {
+  isLoaded: boolean;
+  loadSettings: () => Promise<void>;
+  updateSettings: (updates: Partial<Settings>) => Promise<void>;
+  setDownloadPath: (path: string) => void;
+  setTheme: (theme: 'dark' | 'light' | 'system') => void;
+  setProxy: (proxy: ProxySettings) => void;
+}
+
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
+  downloadPath: '',
+  theme: 'dark',
+  proxy: { enabled: false, url: '', type: 'http' },
+  maxConcurrentDownloads: 2,
+  embedThumbnail: false,
+  embedSubtitles: false,
+  defaultVideoFormat: 'best',
+  defaultAudioFormat: 'mp3',
+  clipboardMonitoring: false,
+  notifications: true,
+  isLoaded: false,
+
+  loadSettings: async () => {
+    try {
+      const settings = await api.getSettings();
+      const downloadPath = settings.downloadPath || (await api.getDefaultPath());
+      set({ ...settings, downloadPath, isLoaded: true });
+    } catch {
+      const downloadPath = await api.getDefaultPath();
+      set({ downloadPath, isLoaded: true });
+    }
+  },
+
+  updateSettings: async (updates) => {
+    set(updates);
+    const state = get();
+    await api.saveSettings({
+      downloadPath: state.downloadPath,
+      theme: state.theme,
+      proxy: state.proxy,
+      maxConcurrentDownloads: state.maxConcurrentDownloads,
+      embedThumbnail: state.embedThumbnail,
+      embedSubtitles: state.embedSubtitles,
+      defaultVideoFormat: state.defaultVideoFormat,
+      defaultAudioFormat: state.defaultAudioFormat,
+      clipboardMonitoring: state.clipboardMonitoring,
+      notifications: state.notifications,
+    });
+  },
+
+  setDownloadPath: (path) => {
+    set({ downloadPath: path });
+    get().updateSettings({ downloadPath: path });
+  },
+
+  setTheme: (theme) => {
+    set({ theme });
+    get().updateSettings({ theme });
+    // Apply theme to DOM
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  },
+
+  setProxy: (proxy) => {
+    set({ proxy });
+    get().updateSettings({ proxy });
+  },
+}));
