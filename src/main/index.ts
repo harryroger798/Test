@@ -27,7 +27,7 @@ function createWindow(): void {
     title: 'GrabTube',
     icon: path.join(__dirname, '../../resources/icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
