@@ -51,6 +51,14 @@ const POT_PROVIDER_URLS = {
 // POT provider yt-dlp plugin (Python files from Rust fork's GitHub releases)
 const POT_PLUGIN_URL = `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-ytdlp-pot-provider-rs.zip`;
 
+// Deno runtime (required by yt-dlp 2026+ for YouTube JS extraction)
+const DENO_VERSION = '2.7.4';
+const DENO_URLS = {
+  win:   `https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-pc-windows-msvc.zip`,
+  mac:   `https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-apple-darwin.zip`,
+  linux: `https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip`,
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const binDir = path.join(__dirname, '..', 'resources', 'bin', targetPlatform);
@@ -113,7 +121,7 @@ function makeExecutable(filePath) {
 // ── Download Functions ───────────────────────────────────────────────
 
 async function downloadYtdlp() {
-  console.log('\n[1/4] Downloading yt-dlp...');
+  console.log('\n[1/5] Downloading yt-dlp...');
   const url = YTDLP_URLS[targetPlatform];
   if (!url) { console.log('  Skipped: unsupported platform'); return; }
   const ext = targetPlatform === 'win' ? '.exe' : '';
@@ -124,7 +132,7 @@ async function downloadYtdlp() {
 }
 
 async function downloadFfmpeg() {
-  console.log('\n[2/4] Downloading FFmpeg...');
+  console.log('\n[2/5] Downloading FFmpeg...');
   console.log('  Note: FFmpeg is large (~80MB). For faster setup, install via package manager:');
   console.log('    Linux:   sudo apt install ffmpeg');
   console.log('    macOS:   brew install ffmpeg');
@@ -182,7 +190,7 @@ async function downloadFfmpeg() {
 }
 
 async function downloadPotProvider() {
-  console.log('\n[3/4] Downloading POT Provider (YouTube bypass)...');
+  console.log('\n[3/5] Downloading POT Provider (YouTube bypass)...');
   const url = POT_PROVIDER_URLS[targetPlatform];
   if (!url) { console.log('  Skipped: unsupported platform'); return; }
 
@@ -200,7 +208,7 @@ async function downloadPotProvider() {
 }
 
 async function downloadPotPlugin() {
-  console.log('\n[4/4] Downloading POT Provider Plugin (yt-dlp integration)...');
+  console.log('\n[4/5] Downloading POT Provider Plugin (yt-dlp integration)...');
   const pluginDir = path.join(binDir, 'plugins');
   fs.mkdirSync(pluginDir, { recursive: true });
 
@@ -225,6 +233,30 @@ async function downloadPotPlugin() {
   }
 }
 
+async function downloadDeno() {
+  console.log('\n[5/5] Downloading Deno runtime (for YouTube JS extraction)...');
+  const url = DENO_URLS[targetPlatform];
+  if (!url) { console.log('  Skipped: unsupported platform'); return; }
+
+  const zipDest = path.join(binDir, 'deno.zip');
+  try {
+    await downloadFile(url, zipDest);
+    console.log('  Extracting deno from archive...');
+    if (process.platform === 'win32') {
+      execSync('powershell -command "Expand-Archive -Path \'' + zipDest + '\' -DestinationPath \'' + binDir + '\' -Force"', { stdio: 'pipe' });
+    } else {
+      execSync('cd "' + binDir + '" && unzip -o deno.zip', { stdio: 'pipe' });
+    }
+    const ext = targetPlatform === 'win' ? '.exe' : '';
+    makeExecutable(path.join(binDir, 'deno' + ext));
+    try { fs.unlinkSync(zipDest); } catch (e) { /* ignore */ }
+    console.log('  Deno runtime extracted successfully.');
+  } catch (err) {
+    console.log('  Deno download/extract failed: ' + err.message);
+    console.log('  Install via: curl -fsSL https://deno.land/install.sh | sh');
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────────────
 
 async function main() {
@@ -238,6 +270,7 @@ async function main() {
   await downloadFfmpeg();
   await downloadPotProvider();
   await downloadPotPlugin();
+  await downloadDeno();
 
   console.log('\n=== Summary ===');
   const ext = targetPlatform === 'win' ? '.exe' : '';
@@ -246,6 +279,7 @@ async function main() {
     targetPlatform === 'win' ? 'ffmpeg.exe' : 'ffmpeg',
     'bgutil-pot' + ext,
     'plugins',
+    targetPlatform === 'win' ? 'deno.exe' : 'deno',
   ];
 
   for (const file of files) {
@@ -254,7 +288,8 @@ async function main() {
     console.log('  ' + (exists ? 'OK' : 'MISSING') + ': ' + file);
   }
 
-  console.log('\nAll binaries are ready! Run "npm run dev" to start GrabTube.');
+  console.log('');
+  console.log('All binaries are ready! Run "npm run dev" to start GrabTube.');
   console.log('The app will automatically use bundled binaries when available.');
   console.log('If any binary is missing, the app falls back to system-installed versions.');
 }

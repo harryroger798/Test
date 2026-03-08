@@ -89,6 +89,26 @@ export class BinaryManager {
   }
 
   /**
+   * Get the path to the bundled Deno runtime.
+   * Required by yt-dlp 2026+ for YouTube JS extraction.
+   */
+  getDenoPath(): string {
+    const binName = process.platform === 'win32' ? 'deno.exe' : 'deno';
+
+    const bundledPath = path.join(this.resourcesPath, 'bin', binName);
+    if (fs.existsSync(bundledPath)) {
+      return bundledPath;
+    }
+
+    const devBundledPath = path.join(this.resourcesPath, 'bin', this.platformDir, binName);
+    if (fs.existsSync(devBundledPath)) {
+      return devBundledPath;
+    }
+
+    return '';
+  }
+
+  /**
    * Get the directory where yt-dlp plugins should be stored.
    * The POT provider plugin (Python files) goes here.
    */
@@ -118,11 +138,14 @@ export class BinaryManager {
     ffmpeg: { path: string; bundled: boolean; available: boolean };
     potProvider: { path: string; bundled: boolean; available: boolean };
     pluginDir: { path: string; exists: boolean };
+    deno: { path: string; bundled: boolean; available: boolean };
   } {
     const ytdlpPath = this.getYtdlpPath();
     const ffmpegPath = this.getFfmpegPath();
     const potPath = this.getPotProviderPath();
     const pluginDir = this.getPluginDir();
+
+    const denoPath = this.getDenoPath();
 
     return {
       ytdlp: {
@@ -143,6 +166,11 @@ export class BinaryManager {
       pluginDir: {
         path: pluginDir,
         exists: fs.existsSync(pluginDir),
+      },
+      deno: {
+        path: denoPath,
+        bundled: denoPath !== '',
+        available: denoPath !== '' && fs.existsSync(denoPath),
       },
     };
   }

@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { BinaryManager } from './binary-manager';
 import { PotProviderManager } from './pot-provider';
 
@@ -117,6 +118,66 @@ export class YtdlpManager {
     this.ytdlpPath = this.binaryManager.getYtdlpPath();
     this.ffmpegPath = this.binaryManager.getFfmpegPath();
     this.pluginDir = this.binaryManager.getPluginDir();
+
+    // Install POT plugin to yt-dlp user config directory.
+    // The standalone yt-dlp binary ignores --plugin-dirs, so we must
+    // copy plugins into ~/.config/yt-dlp/plugins/ for them to load.
+    this.installPluginsToConfigDir();
+  }
+
+  /**
+   * Copy bundled POT provider plugins to the yt-dlp user config plugin directory.
+   * Standalone yt-dlp binaries only load plugins from the default config path,
+   * not from --plugin-dirs, so we replicate the plugin files there.
+   */
+  private installPluginsToConfigDir(): void {
+    try {
+      const srcPluginDir = this.pluginDir;
+      const srcExtractorDir = path.join(srcPluginDir, 'yt_dlp_plugins', 'extractor');
+      if (!fs.existsSync(srcExtractorDir)) return;
+
+      const configBase = process.platform === 'win32'
+        ? path.join(os.homedir(), 'AppData', 'Roaming', 'yt-dlp', 'plugins')
+        : path.join(os.homedir(), '.config', 'yt-dlp', 'plugins');
+
+      const destDir = path.join(configBase, 'grabtube-pot', 'yt_dlp_plugins', 'extractor');
+      fs.mkdirSync(destDir, { recursive: true });
+
+      // Copy all .py files from the bundled plugin directory
+      const files = fs.readdirSync(srcExtractorDir).filter((f) => f.endsWith('.py'));
+      for (const file of files) {
+        const src = path.join(srcExtractorDir, file);
+        const dest = path.join(destDir, file);
+        fs.copyFileSync(src, dest);
+      }
+
+      // Ensure __init__.py files exist for namespace packages
+      const nsDir = path.join(configBase, 'grabtube-pot', 'yt_dlp_plugins');
+      for (const dir of [nsDir, destDir]) {
+        const initFile = path.join(dir, '__init__.py');
+        if (!fs.existsSync(initFile)) {
+          fs.writeFileSync(initFile, '');
+        }
+      }
+
+      console.log('[GrabTube] POT plugins installed to yt-dlp config dir:', destDir);
+    } catch (err) {
+      console.warn('[GrabTube] Failed to install plugins to config dir:', err);
+    }
+  }
+
+  /**
+   * Build environment variables for yt-dlp child processes.
+   * Adds the bundled binary directory to PATH so that bgutil-pot CLI is found.
+   */
+  private getSpawnEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    const potPath = this.binaryManager.getPotProviderPath();
+    if (potPath) {
+      const binDir = path.dirname(potPath);
+      env.PATH = binDir + (process.platform === 'win32' ? ';' : ':') + (env.PATH || '');
+    }
+    return env;
   }
 
   /**
@@ -210,8 +271,15 @@ export class YtdlpManager {
     const platform = this.detectPlatformFromUrl(url);
     const config = PLATFORM_BYPASS_CONFIG[platform];
 
-    // POT provider args for YouTube (auto-generated tokens, no proxy needed)
+    // YouTube-specific: bundled Deno JS runtime + POT provider args
     if (platform === 'youtube') {
+      // Deno is required by yt-dlp 2026+ for YouTube JS extraction
+      const denoPath = this.binaryManager.getDenoPath();
+      if (denoPath) {
+        args.push('--js-runtimes', 'deno:' + denoPath);
+      }
+
+      // POT provider args (auto-generated tokens, no proxy needed)
       const potArgs = this.potProvider.getYtdlpArgs();
       if (potArgs.length > 0) {
         args.push(...potArgs);
@@ -235,10 +303,8 @@ export class YtdlpManager {
       args.push('--ffmpeg-location', this.ffmpegPath);
     }
 
-    // Use bundled plugin directory if it exists
-    if (fs.existsSync(this.pluginDir)) {
-      args.push('--plugin-dirs', this.pluginDir);
-    }
+    // Note: --plugin-dirs does NOT work with standalone yt-dlp binaries.
+    // Plugins are installed to ~/.config/yt-dlp/plugins/ at startup instead.
 
     return args;
   }
@@ -267,7 +333,7 @@ export class YtdlpManager {
       args.push('--geo-bypass');
       args.push(url);
 
-      const proc = spawn(this.ytdlpPath, args);
+      const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
       let stdout = '';
       let stderr = '';
 
@@ -487,7 +553,7 @@ export class YtdlpManager {
 
     args.push(url);
 
-    const proc = spawn(this.ytdlpPath, args);
+    const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
 
     proc.stdout.on('data', (data) => {
       const line = data.toString().trim();
