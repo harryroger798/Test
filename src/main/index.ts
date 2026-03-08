@@ -230,6 +230,32 @@ function setupIPC(): void {
     return { success: true };
   });
 
+  // OAuth2 login for YouTube
+  ipcMain.handle('initiate-oauth2-login', async () => {
+    return ytdlp.initiateOAuth2Login();
+  });
+
+  // Check OAuth2 status
+  ipcMain.handle('get-oauth2-status', async () => {
+    return { authenticated: ytdlp.hasOAuth2Token() };
+  });
+
+  // Remove OAuth2 token
+  ipcMain.handle('remove-oauth2-token', async () => {
+    ytdlp.removeOAuth2Token();
+    return { success: true };
+  });
+
+  // Cobalt fallback settings
+  ipcMain.handle('get-cobalt-status', async () => {
+    return { enabled: downloadManager.getCobaltFallback().isEnabled() };
+  });
+
+  ipcMain.handle('set-cobalt-enabled', async (_event, enabled: boolean) => {
+    downloadManager.getCobaltFallback().setEnabled(enabled);
+    return { success: true };
+  });
+
   // Get platform bypass info
   ipcMain.handle('get-platform-info', async (_event, url: string) => {
     const platform = ytdlp.detectPlatformFromUrl(url);

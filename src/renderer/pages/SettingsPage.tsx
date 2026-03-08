@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, LogOut, ExternalLink, Loader2 } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -29,6 +29,45 @@ export const SettingsPage: React.FC = () => {
     available: false,
     version: null,
   });
+
+  const [oauth2Status, setOauth2Status] = useState<{ authenticated: boolean; loading: boolean }>({
+    authenticated: false,
+    loading: false,
+  });
+
+  const [cobaltEnabled, setCobaltEnabled] = useState(true);
+
+  // Load OAuth2 and Cobalt status on mount
+  useEffect(() => {
+    const loadStatus = async () => {
+      const oauth2 = await api.getOAuth2Status();
+      setOauth2Status({ authenticated: oauth2.authenticated, loading: false });
+      const cobalt = await api.getCobaltStatus();
+      setCobaltEnabled(cobalt.enabled);
+    };
+    loadStatus();
+  }, []);
+
+  const handleOAuth2Login = async () => {
+    setOauth2Status((prev) => ({ ...prev, loading: true }));
+    const result = await api.initiateOAuth2Login();
+    if (result.success) {
+      setOauth2Status({ authenticated: true, loading: false });
+    } else {
+      setOauth2Status({ authenticated: false, loading: false });
+      alert(`OAuth2 login failed: ${result.error || 'Unknown error'}`);
+    }
+  };
+
+  const handleOAuth2Logout = async () => {
+    await api.removeOAuth2Token();
+    setOauth2Status({ authenticated: false, loading: false });
+  };
+
+  const handleCobaltToggle = async (enabled: boolean) => {
+    await api.setCobaltEnabled(enabled);
+    setCobaltEnabled(enabled);
+  };
 
   const handleSelectFolder = async () => {
     const result = await api.selectFolder();
@@ -179,6 +218,25 @@ export const SettingsPage: React.FC = () => {
               You can import a cookies.txt file or extract cookies from your browser.
             </p>
 
+            {/* Guided Cookie Export Flow */}
+            <div className="mb-4 p-3 bg-primary/5 border border-primary/20 rounded-xl">
+              <h4 className="text-xs font-semibold text-primary mb-2 flex items-center gap-1.5">
+                <ExternalLink size={12} />
+                Recommended: Export Cookies (Most Reliable)
+              </h4>
+              <ol className="text-xs text-muted-foreground space-y-1.5 ml-4 list-decimal">
+                <li>Install the <strong>&quot;Get cookies.txt LOCALLY&quot;</strong> browser extension
+                  <span className="text-primary/70"> (Chrome Web Store / Firefox Add-ons)</span></li>
+                <li>Go to <strong>youtube.com</strong> and make sure you are <strong>logged in</strong></li>
+                <li>Click the extension icon and click <strong>&quot;Export&quot;</strong> to save <code className="bg-secondary/50 px-1 rounded">cookies.txt</code></li>
+                <li>Click <strong>&quot;Import&quot;</strong> below and select the exported file</li>
+              </ol>
+              <p className="text-xs text-muted-foreground mt-2 italic">
+                This method works 100% reliably even when Chrome/Edge lock their cookie database.
+                The exported file works forever until you log out of YouTube.
+              </p>
+            </div>
+
             {/* Import cookies.txt file */}
             <div className="mb-4">
               <label className="block text-xs text-muted-foreground mb-1.5">
@@ -210,7 +268,7 @@ export const SettingsPage: React.FC = () => {
             {/* Browser cookies extraction */}
             <div>
               <label className="block text-xs text-muted-foreground mb-1.5">
-                Extract Cookies from Browser
+                Extract Cookies from Browser (Auto-detect)
               </label>
               <div className="flex gap-2 flex-wrap">
                 {[{ value: '', label: 'None' }, { value: 'firefox', label: 'Firefox' }, { value: 'chrome', label: 'Chrome' }, { value: 'edge', label: 'Edge' }, { value: 'safari', label: 'Safari' }].map((browser) => (
@@ -229,10 +287,78 @@ export const SettingsPage: React.FC = () => {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Firefox is recommended (Chrome encrypts cookies since July 2024).
-                The browser must be installed on this computer.
+                Firefox is recommended. Chrome/Edge may fail with &quot;Could not copy cookie database&quot; while the browser is open.
+                Use the cookies.txt export method above for 100% reliability.
               </p>
             </div>
+          </section>
+
+          {/* YouTube OAuth2 Authentication */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <Key size={16} className="text-primary" />
+              YouTube OAuth2 Login
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Sign in with your Google account once. GrabTube stores a refresh token so you never need to sign in again.
+              This bypasses all &quot;Sign in to confirm you&apos;re not a bot&quot; errors permanently.
+            </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {oauth2Status.authenticated ? (
+                  <span className="flex items-center gap-1.5 text-sm text-green-500">
+                    <CheckCircle size={14} />
+                    Authenticated
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Not signed in</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {oauth2Status.authenticated ? (
+                  <button
+                    onClick={handleOAuth2Logout}
+                    className="px-3 py-1.5 bg-destructive/10 text-destructive rounded-lg text-xs font-medium hover:bg-destructive/20 transition-all flex items-center gap-1.5"
+                  >
+                    <LogOut size={12} />
+                    Sign Out
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleOAuth2Login}
+                    disabled={oauth2Status.loading}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {oauth2Status.loading ? (
+                      <><Loader2 size={12} className="animate-spin" /> Signing in...</>
+                    ) : (
+                      <><Key size={12} /> Sign in with Google</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Cobalt API Fallback */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <Cloud size={16} className="text-primary" />
+              Cobalt API Fallback
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              When all local download methods fail, GrabTube can try downloading via cobalt.tools as a last resort.
+              Cobalt is an open-source media downloader that routes through clean server IPs.
+            </p>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm text-foreground">Enable Cobalt fallback</span>
+              <input
+                type="checkbox"
+                checked={cobaltEnabled}
+                onChange={(e) => handleCobaltToggle(e.target.checked)}
+                className="w-4 h-4 rounded accent-primary"
+              />
+            </label>
           </section>
 
           {/* Download Preferences */}
