@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":automergeMinor",
+    ":automergeDigest",
+    "group:allNonMajor"
+  ],
+  "baseBranches": ["grabtube/base"],
+  "labels": ["dependencies", "automated"],
+  "packageRules": [
+    {
+      "description": "Auto-merge minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Major updates need manual review",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major-update"]
+    },
+    {
+      "description": "Group Electron updates",
+      "matchPackageNames": ["electron", "electron-builder", "electron-updater"],
+      "groupName": "electron"
+    },
+    {
+      "description": "Group React updates",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "react"
+    },
+    {
+      "description": "Group Tailwind updates",
+      "matchPackageNames": ["tailwindcss", "tailwindcss-animate", "postcss", "autoprefixer"],
+      "groupName": "tailwind"
+    }
+  ],
+  "schedule": ["before 6am on Monday"]
+}

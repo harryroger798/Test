@@ -46,6 +46,19 @@ export interface ElectronAPI {
     potProvider: { path: string; bundled: boolean; available: boolean; running: boolean };
     pluginDir: { path: string; exists: boolean };
   }>;
+  // Auto-update
+  checkForUpdates: () => Promise<{ available: boolean; version?: string } | null>;
+  installUpdate: () => Promise<void>;
+  onUpdateStatus: (callback: (status: unknown) => void) => () => void;
+  // Binary updates
+  checkBinaryUpdates: () => Promise<{ success: boolean }>;
+  onBinaryUpdateStatus: (callback: (status: unknown) => void) => () => void;
+  // Health monitor
+  getHealthStatus: () => Promise<Array<{ component: string; status: string; lastCheck: number; message: string }>>;
+  runHealthCheck: () => Promise<Array<{ component: string; status: string; lastCheck: number; message: string }>>;
+  getFailureLog: () => Promise<Array<{ binary: string; platform: string; error: string; timestamp: number; healed: boolean }>>;
+  onHealthReport: (callback: (report: unknown) => void) => () => void;
+  onHealthHeal: (callback: (data: unknown) => void) => () => void;
 }
 
 // Type-safe access to electron API
@@ -90,6 +103,19 @@ const mockAPI: ElectronAPI = {
     potProvider: { path: '', bundled: false, available: false, running: false },
     pluginDir: { path: '', exists: false },
   }),
+  // Auto-update mocks
+  checkForUpdates: async () => ({ available: false }),
+  installUpdate: async () => {},
+  onUpdateStatus: () => () => {},
+  // Binary updates mocks
+  checkBinaryUpdates: async () => ({ success: true }),
+  onBinaryUpdateStatus: () => () => {},
+  // Health monitor mocks
+  getHealthStatus: async () => [],
+  runHealthCheck: async () => [],
+  getFailureLog: async () => [],
+  onHealthReport: () => () => {},
+  onHealthHeal: () => () => {},
 };
 
 export const api: ElectronAPI = isElectron ? window.electronAPI : mockAPI;

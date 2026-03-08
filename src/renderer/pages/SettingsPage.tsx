@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X } from 'lucide-react';
+import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -339,6 +339,79 @@ export const SettingsPage: React.FC = () => {
                 <span className="text-sm text-foreground">App Version</span>
                 <span className="text-sm text-muted-foreground">1.0.0</span>
               </div>
+            </div>
+          </section>
+
+          {/* Auto Updates */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <Download size={16} className="text-primary" />
+              Auto Updates
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              GrabTube automatically checks for app and binary updates. App updates install on restart.
+              yt-dlp is checked daily, FFmpeg and POT provider weekly.
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-foreground">App Update</span>
+                <button
+                  onClick={async () => {
+                    const result = await api.checkForUpdates();
+                    if (result?.available) {
+                      alert(`Update available: v${result.version}. It will download automatically.`);
+                    } else {
+                      alert('App is up to date!');
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-secondary/50 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+                >
+                  <RefreshCw size={12} />
+                  Check Now
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-foreground">Binary Updates (yt-dlp, FFmpeg, POT)</span>
+                <button
+                  onClick={async () => {
+                    await api.checkBinaryUpdates();
+                    alert('Binary update check started. Updates download in background.');
+                  }}
+                  className="px-3 py-1.5 bg-secondary/50 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+                >
+                  <RefreshCw size={12} />
+                  Update All
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Health Monitor */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <Activity size={16} className="text-primary" />
+              Health Monitor
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Self-healing system monitors for failures and auto-fixes common issues.
+              Corrupted binaries are re-downloaded, failed extractors trigger yt-dlp updates,
+              and POT token failures restart the provider.
+            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-foreground">Run Health Check</span>
+              <button
+                onClick={async () => {
+                  const statuses = await api.runHealthCheck();
+                  const summary = statuses.map((s: { component: string; status: string; message: string }) =>
+                    `${s.component}: ${s.status} - ${s.message}`
+                  ).join('\n');
+                  alert(summary || 'Health check complete. All systems healthy.');
+                }}
+                className="px-3 py-1.5 bg-secondary/50 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+              >
+                <Wrench size={12} />
+                Check Now
+              </button>
             </div>
           </section>
 

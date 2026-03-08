@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [grabtube/base, 'devin/**']
+  pull_request:
+    branches: [grabtube/base]
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: TypeScript check (renderer)
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: TypeScript check (main process)
+        run: npx tsc --noEmit -p tsconfig.main.json

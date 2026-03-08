@@ -53,6 +53,38 @@ const electronAPI = {
 
   // Binary status (bundled binaries, POT provider)
   getBinaryStatus: () => ipcRenderer.invoke('get-binary-status'),
+
+  // Auto-update
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (callback: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+    ipcRenderer.on('update-status', handler);
+    return () => ipcRenderer.removeListener('update-status', handler);
+  },
+
+  // Binary updates
+  checkBinaryUpdates: () => ipcRenderer.invoke('check-binary-updates'),
+  onBinaryUpdateStatus: (callback: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+    ipcRenderer.on('binary-update-status', handler);
+    return () => ipcRenderer.removeListener('binary-update-status', handler);
+  },
+
+  // Health monitor
+  getHealthStatus: () => ipcRenderer.invoke('get-health-status'),
+  runHealthCheck: () => ipcRenderer.invoke('run-health-check'),
+  getFailureLog: () => ipcRenderer.invoke('get-failure-log'),
+  onHealthReport: (callback: (report: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, report: unknown) => callback(report);
+    ipcRenderer.on('health-report', handler);
+    return () => ipcRenderer.removeListener('health-report', handler);
+  },
+  onHealthHeal: (callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('health-heal-complete', handler);
+    return () => ipcRenderer.removeListener('health-heal-complete', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

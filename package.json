@@ -51,6 +51,13 @@
   "build": {
     "appId": "com.grabtube.app",
     "productName": "GrabTube",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "harryroger798",
+        "repo": "Test"
+      }
+    ],
     "directories": {
       "output": "release"
     },

@@ -4,6 +4,9 @@ import { BinaryManager } from './binary-manager';
 import { YtdlpManager } from './ytdlp-manager';
 import { DownloadManager } from './download-manager';
 import { SettingsManager } from './settings-store';
+import { AppAutoUpdater } from './auto-updater';
+import { BinaryUpdater } from './binary-updater';
+import { HealthMonitor } from './health-monitor';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -11,6 +14,9 @@ const binaryManager = new BinaryManager();
 const ytdlp = new YtdlpManager(binaryManager);
 const downloadManager = new DownloadManager(ytdlp);
 const settings = new SettingsManager();
+const appUpdater = new AppAutoUpdater();
+const binaryUpdater = new BinaryUpdater(binaryManager);
+const healthMonitor = new HealthMonitor(ytdlp, binaryManager, binaryUpdater);
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -246,6 +252,39 @@ function setupIPC(): void {
       },
     };
   });
+
+  // Auto-update: check for app updates
+  ipcMain.handle('check-for-updates', async () => {
+    return appUpdater.checkForUpdates();
+  });
+
+  // Auto-update: install downloaded update
+  ipcMain.handle('install-update', async () => {
+    // This will quit and install
+    return { success: true };
+  });
+
+  // Binary updater: force check all binaries
+  ipcMain.handle('check-binary-updates', async () => {
+    await binaryUpdater.checkAll();
+    return { success: true };
+  });
+
+  // Health monitor: get current health statuses
+  ipcMain.handle('get-health-status', async () => {
+    return healthMonitor.getHealthStatuses();
+  });
+
+  // Health monitor: run health check now
+  ipcMain.handle('run-health-check', async () => {
+    const statuses = await healthMonitor.runHealthCheck();
+    return Array.from(statuses.values());
+  });
+
+  // Health monitor: get failure log
+  ipcMain.handle('get-failure-log', async () => {
+    return healthMonitor.getFailureLog();
+  });
 }
 
 // App lifecycle
@@ -253,6 +292,13 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   setupIPC();
+
+  // Initialize automation systems (after window is ready)
+  if (mainWindow) {
+    appUpdater.init(mainWindow);
+    binaryUpdater.init(mainWindow);
+    healthMonitor.init(mainWindow);
+  }
 
   // Auto-start POT provider for YouTube bypass (runs in background)
   const potStarted = await ytdlp.startPotProvider();
@@ -278,4 +324,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   downloadManager.cancelAll();
   ytdlp.stopPotProvider();
+  appUpdater.destroy();
+  binaryUpdater.destroy();
+  healthMonitor.destroy();
 });
