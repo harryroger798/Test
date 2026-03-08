@@ -123,7 +123,7 @@ export class YtdlpManager {
    * yt-dlp supports these via --cookies-from-browser.
    */
   private static readonly AUTO_BROWSERS = [
-    'chrome', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'chromium',
+    'edge', 'firefox', 'chrome', 'brave', 'opera', 'vivaldi', 'chromium',
   ];
 
   constructor(binaryManager?: BinaryManager) {
@@ -284,7 +284,11 @@ export class YtdlpManager {
     return lower.includes('sign in to confirm') ||
            lower.includes('not a bot') ||
            lower.includes('confirm your age') ||
-           lower.includes('use --cookies');
+           lower.includes('use --cookies') ||
+           lower.includes('could not copy') ||
+           lower.includes('cookie database') ||
+           lower.includes('403') ||
+           lower.includes('forbidden');
   }
 
   /**

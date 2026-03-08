@@ -133,7 +133,7 @@ export class DownloadManager {
 
         // YouTube auto-browser cookie retry: cycle through browsers on 403/bot errors
         if (platform === 'youtube' && this.isYouTubeDownloadError(item.error)) {
-          const browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'chromium'];
+          const browsers = ['edge', 'firefox', 'chrome', 'brave', 'opera', 'vivaldi', 'chromium'];
           const currentIndex = browserCookies ? browsers.indexOf(browserCookies) : -1;
           const nextIndex = currentIndex + 1;
 
@@ -202,7 +202,9 @@ export class DownloadManager {
            lower.includes('sign in to confirm') ||
            lower.includes('not a bot') ||
            lower.includes('confirm your age') ||
-           lower.includes('use --cookies');
+           lower.includes('use --cookies') ||
+           lower.includes('could not copy') ||
+           lower.includes('cookie database');
   }
 
   private processQueue(): void {
