@@ -80,6 +80,9 @@ const electronAPI = {
     return () => ipcRenderer.removeListener('binary-update-status', handler);
   },
 
+  // App version
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
   // Health monitor
   getHealthStatus: () => ipcRenderer.invoke('get-health-status'),
   runHealthCheck: () => ipcRenderer.invoke('run-health-check'),

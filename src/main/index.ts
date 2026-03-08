@@ -313,6 +313,11 @@ function setupIPC(): void {
   ipcMain.handle('get-failure-log', async () => {
     return healthMonitor.getFailureLog();
   });
+
+  // App version (dynamic from package.json)
+  ipcMain.handle('get-app-version', async () => {
+    return { version: app.getVersion() };
+  });
 }
 
 // App lifecycle

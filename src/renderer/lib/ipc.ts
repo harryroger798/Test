@@ -46,6 +46,8 @@ export interface ElectronAPI {
     cookiesHint: string;
     hasImpersonation: boolean;
   }>;
+  // App version
+  getAppVersion: () => Promise<{ version: string }>;
   // Binary status
   getBinaryStatus: () => Promise<{
     ytdlp: { path: string; bundled: boolean; available: boolean };
@@ -124,6 +126,8 @@ const mockAPI: ElectronAPI = {
   // Binary updates mocks
   checkBinaryUpdates: async () => ({ success: true }),
   onBinaryUpdateStatus: () => () => {},
+  // App version mock
+  getAppVersion: async () => ({ version: '1.0.5' }),
   // Health monitor mocks
   getHealthStatus: async () => [],
   runHealthCheck: async () => [],
