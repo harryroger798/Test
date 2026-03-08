@@ -41,15 +41,15 @@ const FFMPEG_URLS = {
 };
 
 // Rust POT provider from jim60105/bgutil-ytdlp-pot-provider-rs
-const POT_PROVIDER_VERSION = '0.6.1';
+const POT_PROVIDER_VERSION = '0.7.2';
 const POT_PROVIDER_URLS = {
-  win:   `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-pot-x86_64-pc-windows-msvc.exe`,
-  mac:   `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-pot-x86_64-apple-darwin`,
-  linux: `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-pot-x86_64-unknown-linux-gnu`,
+  win:   `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-pot-windows-x86_64.exe`,
+  mac:   `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-pot-macos-x86_64`,
+  linux: `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-pot-linux-x86_64`,
 };
 
-// POT provider yt-dlp plugin (Python files from GitHub releases)
-const POT_PLUGIN_URL = 'https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip';
+// POT provider yt-dlp plugin (Python files from Rust fork's GitHub releases)
+const POT_PLUGIN_URL = `https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs/releases/download/v${POT_PROVIDER_VERSION}/bgutil-ytdlp-pot-provider-rs.zip`;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
