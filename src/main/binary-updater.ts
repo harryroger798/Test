@@ -75,7 +75,7 @@ export class BinaryUpdater {
     return [
       {
         name: 'yt-dlp',
-        repo: 'yt-dlp/yt-dlp',
+        repo: 'yt-dlp/yt-dlp-nightly-builds',
         getCurrentVersion: async () => this.getLocalVersion('yt-dlp'),
         getAssetName: () => {
           if (process.platform === 'win32') return 'yt-dlp.exe';
@@ -83,7 +83,7 @@ export class BinaryUpdater {
           return 'yt-dlp_linux';
         },
         getBinaryPath: () => this.binaryManager.getYtdlpPath(),
-        checkInterval: 24 * 60 * 60 * 1000, // Daily
+        checkInterval: 6 * 60 * 60 * 1000, // Every 6 hours (nightly builds update frequently)
       },
       {
         name: 'ffmpeg',

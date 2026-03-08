@@ -32,6 +32,13 @@ export interface ElectronAPI {
   selectCookiesFile: () => Promise<{ success: boolean; path?: string }>;
   clearCookiesPath: () => Promise<{ success: boolean }>;
   setBrowserCookies: (browser: string) => Promise<{ success: boolean }>;
+  // OAuth2 authentication
+  initiateOAuth2Login: () => Promise<{ success: boolean; error?: string }>;
+  getOAuth2Status: () => Promise<{ authenticated: boolean }>;
+  removeOAuth2Token: () => Promise<{ success: boolean }>;
+  // Cobalt fallback
+  getCobaltStatus: () => Promise<{ enabled: boolean }>;
+  setCobaltEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   // Platform info
   getPlatformInfo: (url: string) => Promise<{
     platform: string;
@@ -96,6 +103,13 @@ const mockAPI: ElectronAPI = {
   selectCookiesFile: async () => ({ success: false }),
   clearCookiesPath: async () => ({ success: true }),
   setBrowserCookies: async () => ({ success: true }),
+  // OAuth2 mocks
+  initiateOAuth2Login: async () => ({ success: false, error: 'Not running in Electron' }),
+  getOAuth2Status: async () => ({ authenticated: false }),
+  removeOAuth2Token: async () => ({ success: true }),
+  // Cobalt mocks
+  getCobaltStatus: async () => ({ enabled: true }),
+  setCobaltEnabled: async () => ({ success: true }),
   getPlatformInfo: async () => ({ platform: 'unknown', requiresCookies: false, cookiesHint: '', hasImpersonation: false }),
   getBinaryStatus: async () => ({
     ytdlp: { path: '', bundled: false, available: false },

@@ -119,6 +119,12 @@ export class YtdlpManager {
   private autoBrowser: string | null = null;
 
   /**
+   * OAuth2 refresh token path for YouTube authentication.
+   * Stored in the app config directory for persistence across sessions.
+   */
+  private oauth2TokenPath: string | null = null;
+
+  /**
    * Browsers to try for automatic cookie extraction, ordered by popularity.
    * yt-dlp supports these via --cookies-from-browser.
    */
@@ -132,6 +138,12 @@ export class YtdlpManager {
     this.ytdlpPath = this.binaryManager.getYtdlpPath();
     this.ffmpegPath = this.binaryManager.getFfmpegPath();
     this.pluginDir = this.binaryManager.getPluginDir();
+
+    // OAuth2 token cache path
+    const configDir = process.platform === 'win32'
+      ? path.join(os.homedir(), 'AppData', 'Roaming', 'GrabTube')
+      : path.join(os.homedir(), '.config', 'GrabTube');
+    this.oauth2TokenPath = path.join(configDir, 'oauth2-token.json');
 
     // Install POT plugin to yt-dlp user config directory.
     // The standalone yt-dlp binary ignores --plugin-dirs, so we must
@@ -309,6 +321,96 @@ export class YtdlpManager {
   }
 
   /**
+   * Check if OAuth2 token exists for YouTube.
+   */
+  hasOAuth2Token(): boolean {
+    return !!this.oauth2TokenPath && fs.existsSync(this.oauth2TokenPath);
+  }
+
+  /**
+   * Get OAuth2 token cache path.
+   */
+  getOAuth2TokenPath(): string | null {
+    return this.oauth2TokenPath;
+  }
+
+  /**
+   * Initiate OAuth2 login flow for YouTube.
+   * Uses yt-dlp's built-in OAuth2 support which opens a browser window.
+   * Returns a promise that resolves when auth completes.
+   */
+  async initiateOAuth2Login(): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      const args = [
+        '--username', 'oauth2',
+        '--password', '',
+        '--cache-dir', path.dirname(this.oauth2TokenPath || ''),
+        '--dump-json',
+        '--no-download',
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Test video for auth
+      ];
+
+      // Add Deno runtime for YouTube
+      const denoPath = this.binaryManager.getDenoPath();
+      if (denoPath) {
+        args.unshift('--js-runtimes', 'deno:' + denoPath);
+      }
+
+      console.log('[GrabTube] Starting OAuth2 login flow...');
+      const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
+      let stderr = '';
+
+      proc.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          // Mark token as available
+          if (this.oauth2TokenPath) {
+            const dir = path.dirname(this.oauth2TokenPath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(this.oauth2TokenPath, JSON.stringify({ authenticated: true, timestamp: Date.now() }));
+          }
+          console.log('[GrabTube] OAuth2 login successful');
+          resolve({ success: true });
+        } else {
+          console.warn('[GrabTube] OAuth2 login failed:', stderr);
+          resolve({ success: false, error: stderr || 'OAuth2 login failed' });
+        }
+      });
+
+      proc.on('error', (err) => {
+        resolve({ success: false, error: err.message });
+      });
+
+      // Timeout after 5 minutes (user needs to complete browser auth)
+      setTimeout(() => {
+        proc.kill();
+        resolve({ success: false, error: 'OAuth2 login timed out. Please try again.' });
+      }, 300000);
+    });
+  }
+
+  /**
+   * Remove OAuth2 token (logout).
+   */
+  removeOAuth2Token(): void {
+    if (this.oauth2TokenPath && fs.existsSync(this.oauth2TokenPath)) {
+      fs.unlinkSync(this.oauth2TokenPath);
+    }
+    // Also clear yt-dlp's OAuth2 cache
+    const cacheDir = process.platform === 'win32'
+      ? path.join(os.homedir(), 'AppData', 'Roaming', 'GrabTube')
+      : path.join(os.homedir(), '.config', 'GrabTube');
+    const ytdlpCache = path.join(cacheDir, 'youtube-oauth2');
+    if (fs.existsSync(ytdlpCache)) {
+      fs.rmSync(ytdlpCache, { recursive: true, force: true });
+    }
+    console.log('[GrabTube] OAuth2 token removed');
+  }
+
+  /**
    * Build platform-specific yt-dlp args for bypass.
    * Includes POT provider args for YouTube if the server is running.
    * Automatically uses cached browser cookies for YouTube if no explicit cookies are set.
@@ -346,9 +448,18 @@ export class YtdlpManager {
       args.push('--cookies', cookiesPath);
     }
 
+    // OAuth2 token for YouTube (takes priority over browser cookies)
+    if (platform === 'youtube' && this.hasOAuth2Token() && !cookiesPath) {
+      args.push('--username', 'oauth2');
+      args.push('--password', '');
+      if (this.oauth2TokenPath) {
+        args.push('--cache-dir', path.dirname(this.oauth2TokenPath));
+      }
+    }
+
     // Browser cookies: explicit setting > auto-detected > none
     const effectiveBrowser = browserCookies ||
-      (platform === 'youtube' && !cookiesPath && this.autoBrowser ? this.autoBrowser : undefined);
+      (platform === 'youtube' && !cookiesPath && !this.hasOAuth2Token() && this.autoBrowser ? this.autoBrowser : undefined);
     if (effectiveBrowser) {
       args.push('--cookies-from-browser', effectiveBrowser);
     }

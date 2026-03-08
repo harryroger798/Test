@@ -48,6 +48,15 @@ const electronAPI = {
   clearCookiesPath: () => ipcRenderer.invoke('clear-cookies-path'),
   setBrowserCookies: (browser: string) => ipcRenderer.invoke('set-browser-cookies', browser),
 
+  // OAuth2 authentication
+  initiateOAuth2Login: () => ipcRenderer.invoke('initiate-oauth2-login'),
+  getOAuth2Status: () => ipcRenderer.invoke('get-oauth2-status'),
+  removeOAuth2Token: () => ipcRenderer.invoke('remove-oauth2-token'),
+
+  // Cobalt fallback
+  getCobaltStatus: () => ipcRenderer.invoke('get-cobalt-status'),
+  setCobaltEnabled: (enabled: boolean) => ipcRenderer.invoke('set-cobalt-enabled', enabled),
+
   // Platform info
   getPlatformInfo: (url: string) => ipcRenderer.invoke('get-platform-info', url),
 

@@ -1,5 +1,6 @@
 import { ChildProcess } from 'child_process';
 import { YtdlpManager, DownloadProgress } from './ytdlp-manager';
+import { CobaltFallback } from './cobalt-fallback';
 import { v4Style } from './utils';
 
 export interface DownloadItem {
@@ -31,12 +32,21 @@ export interface DownloadOptions {
 
 export class DownloadManager {
   private ytdlp: YtdlpManager;
+  private cobalt: CobaltFallback;
   private activeDownloads: Map<string, { process: ChildProcess; item: DownloadItem }> = new Map();
   private queue: Array<{ id: string; options: DownloadOptions; proxy?: string; cookiesPath?: string; browserCookies?: string; onProgress: (p: DownloadProgress) => void; onComplete: (r: DownloadItem) => void }> = [];
   private maxConcurrent = 2;
 
   constructor(ytdlp: YtdlpManager) {
     this.ytdlp = ytdlp;
+    this.cobalt = new CobaltFallback();
+  }
+
+  /**
+   * Get the cobalt fallback instance for configuration.
+   */
+  getCobaltFallback(): CobaltFallback {
+    return this.cobalt;
   }
 
   startDownload(
@@ -157,6 +167,11 @@ export class DownloadManager {
           item.progress = 0;
           this.activeDownloads.delete(downloadId);
           this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, browserCookies, retryCount + 1);
+        } else if (platform === 'youtube' && this.cobalt.isEnabled() && this.isYouTubeDownloadError(item.error)) {
+          // Cobalt API fallback: last resort for YouTube
+          console.log('[GrabTube] All local methods failed. Trying Cobalt API fallback...');
+          this.activeDownloads.delete(downloadId);
+          this.tryCobaltFallback(downloadId, options, onProgress, onComplete, item);
         } else {
           item.status = 'error';
           item.error = item.error || 'Download failed with exit code ' + code;
@@ -205,6 +220,74 @@ export class DownloadManager {
            lower.includes('use --cookies') ||
            lower.includes('could not copy') ||
            lower.includes('cookie database');
+  }
+
+  /**
+   * Try downloading via Cobalt API as a last-resort fallback.
+   */
+  private async tryCobaltFallback(
+    downloadId: string,
+    options: DownloadOptions,
+    onProgress: (progress: DownloadProgress) => void,
+    onComplete: (result: DownloadItem) => void,
+    item: DownloadItem
+  ): Promise<void> {
+    try {
+      item.status = 'downloading';
+      item.error = undefined;
+      item.progress = 0;
+      onProgress({
+        downloadId,
+        status: 'downloading',
+        percent: 0,
+        speed: '',
+        eta: '',
+        filesize: '',
+        filename: '',
+      });
+
+      const result = await this.cobalt.getDownloadUrl(options.url, options.audioOnly);
+      if (!result) {
+        item.status = 'error';
+        item.error = 'Cobalt API fallback also failed. Please try again later or check your cookies settings.';
+        onComplete(item);
+        this.processQueue();
+        return;
+      }
+
+      const filename = options.filename || result.filename;
+      await this.cobalt.downloadFile(
+        result.url,
+        options.outputPath,
+        filename,
+        (percent, speed) => {
+          item.progress = percent;
+          item.speed = speed;
+          onProgress({
+            downloadId,
+            status: 'downloading',
+            percent,
+            speed,
+            eta: '',
+            filesize: '',
+            filename,
+          });
+        }
+      );
+
+      item.status = 'completed';
+      item.progress = 100;
+      item.filename = filename;
+      console.log(`[GrabTube] Download completed via Cobalt fallback: ${filename}`);
+      onComplete(item);
+      this.processQueue();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Cobalt fallback failed';
+      item.status = 'error';
+      item.error = `All download methods failed. Last error: ${message}`;
+      onComplete(item);
+      this.processQueue();
+    }
   }
 
   private processQueue(): void {
