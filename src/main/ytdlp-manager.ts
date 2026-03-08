@@ -1,0 +1,646 @@
+import { spawn, ChildProcess } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
+import { BinaryManager } from './binary-manager';
+import { PotProviderManager } from './pot-provider';
+
+export interface VideoFormat {
+  formatId: string;
+  ext: string;
+  resolution: string;
+  filesize: number | null;
+  vcodec: string;
+  acodec: string;
+  fps: number | null;
+  tbr: number | null;
+  quality: string;
+  hasVideo: boolean;
+  hasAudio: boolean;
+  note: string;
+}
+
+export interface VideoInfo {
+  id: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  duration: number;
+  durationString: string;
+  uploader: string;
+  uploaderUrl: string;
+  viewCount: number;
+  likeCount: number;
+  uploadDate: string;
+  webpage_url: string;
+  extractor: string;
+  platform: string;
+  formats: VideoFormat[];
+  subtitles: Record<string, Array<{ ext: string; url: string }>>;
+  requestedSubtitles: Record<string, unknown> | null;
+}
+
+export interface DownloadProgress {
+  downloadId: string;
+  status: 'downloading' | 'processing' | 'finished' | 'error';
+  percent: number;
+  speed: string;
+  eta: string;
+  filesize: string;
+  filename: string;
+  error?: string;
+}
+
+/**
+ * Platform-specific bypass configuration.
+ * Each platform may need different flags to avoid bans/blocks.
+ */
+interface PlatformBypassConfig {
+  impersonate?: string;
+  formatOverride?: string;
+  extraArgs?: string[];
+  requiresCookies?: boolean;
+  cookiesHint?: string;
+}
+
+const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
+  youtube: {
+    extraArgs: ['--extractor-args', 'youtube:player_client=mweb'],
+    requiresCookies: false,
+    cookiesHint: 'YouTube works best with POT provider plugin or browser cookies for age-restricted content.',
+  },
+  tiktok: {
+    impersonate: 'chrome-131',
+    formatOverride: 'b',
+    extraArgs: [],
+    requiresCookies: false,
+    cookiesHint: 'TikTok works from home IPs with browser impersonation. May be blocked on datacenter IPs.',
+  },
+  instagram: {
+    impersonate: 'chrome-131',
+    requiresCookies: true,
+    cookiesHint: 'Instagram requires login cookies. Import cookies.txt via Settings.',
+  },
+  facebook: {
+    impersonate: 'chrome-131',
+    requiresCookies: false,
+    cookiesHint: 'Public Facebook videos work with impersonation. Private videos need cookies.',
+  },
+  reddit: {
+    requiresCookies: false,
+    cookiesHint: 'Reddit works from home IPs. May need cookies on datacenter/cloud IPs.',
+  },
+  twitter: {
+    requiresCookies: false,
+    cookiesHint: 'Public video tweets work without auth. NSFW/sensitive content needs cookies.',
+  },
+  linkedin: {
+    requiresCookies: true,
+    cookiesHint: 'LinkedIn always requires login cookies.',
+  },
+  bilibili: {
+    extraArgs: ['--geo-bypass-country', 'CN'],
+    requiresCookies: false,
+    cookiesHint: 'Bilibili may need a Chinese proxy for geo-restricted content.',
+  },
+};
+
+export class YtdlpManager {
+  private ytdlpPath: string;
+  private ffmpegPath: string;
+  private pluginDir: string;
+  private binaryManager: BinaryManager;
+  private potProvider: PotProviderManager;
+
+  constructor(binaryManager?: BinaryManager) {
+    this.binaryManager = binaryManager || new BinaryManager();
+    this.potProvider = new PotProviderManager(this.binaryManager);
+    this.ytdlpPath = this.binaryManager.getYtdlpPath();
+    this.ffmpegPath = this.binaryManager.getFfmpegPath();
+    this.pluginDir = this.binaryManager.getPluginDir();
+
+    // Install POT plugin to yt-dlp user config directory.
+    // The standalone yt-dlp binary ignores --plugin-dirs, so we must
+    // copy plugins into ~/.config/yt-dlp/plugins/ for them to load.
+    this.installPluginsToConfigDir();
+  }
+
+  /**
+   * Copy bundled POT provider plugins to the yt-dlp user config plugin directory.
+   * Standalone yt-dlp binaries only load plugins from the default config path,
+   * not from --plugin-dirs, so we replicate the plugin files there.
+   */
+  private installPluginsToConfigDir(): void {
+    try {
+      const srcPluginDir = this.pluginDir;
+      const srcExtractorDir = path.join(srcPluginDir, 'yt_dlp_plugins', 'extractor');
+      if (!fs.existsSync(srcExtractorDir)) return;
+
+      const configBase = process.platform === 'win32'
+        ? path.join(os.homedir(), 'AppData', 'Roaming', 'yt-dlp', 'plugins')
+        : path.join(os.homedir(), '.config', 'yt-dlp', 'plugins');
+
+      const destDir = path.join(configBase, 'grabtube-pot', 'yt_dlp_plugins', 'extractor');
+      fs.mkdirSync(destDir, { recursive: true });
+
+      // Copy all .py files from the bundled plugin directory
+      const files = fs.readdirSync(srcExtractorDir).filter((f) => f.endsWith('.py'));
+      for (const file of files) {
+        const src = path.join(srcExtractorDir, file);
+        const dest = path.join(destDir, file);
+        fs.copyFileSync(src, dest);
+      }
+
+      // Ensure __init__.py files exist for namespace packages
+      const nsDir = path.join(configBase, 'grabtube-pot', 'yt_dlp_plugins');
+      for (const dir of [nsDir, destDir]) {
+        const initFile = path.join(dir, '__init__.py');
+        if (!fs.existsSync(initFile)) {
+          fs.writeFileSync(initFile, '');
+        }
+      }
+
+      console.log('[GrabTube] POT plugins installed to yt-dlp config dir:', destDir);
+    } catch (err) {
+      console.warn('[GrabTube] Failed to install plugins to config dir:', err);
+    }
+  }
+
+  /**
+   * Build environment variables for yt-dlp child processes.
+   * Adds the bundled binary directory to PATH so that bgutil-pot CLI is found.
+   */
+  private getSpawnEnv(): NodeJS.ProcessEnv {
+    const env = { ...process.env };
+    const potPath = this.binaryManager.getPotProviderPath();
+    if (potPath) {
+      const binDir = path.dirname(potPath);
+      env.PATH = binDir + (process.platform === 'win32' ? ';' : ':') + (env.PATH || '');
+    }
+    return env;
+  }
+
+  /**
+   * Start the POT provider server for YouTube bypass.
+   * Should be called once on app startup.
+   */
+  async startPotProvider(): Promise<boolean> {
+    return this.potProvider.start();
+  }
+
+  /**
+   * Stop the POT provider server.
+   * Should be called on app shutdown.
+   */
+  stopPotProvider(): void {
+    this.potProvider.stop();
+  }
+
+  /**
+   * Get the POT provider manager instance.
+   */
+  getPotProvider(): PotProviderManager {
+    return this.potProvider;
+  }
+
+  /**
+   * Get the binary manager instance.
+   */
+  getBinaryManager(): BinaryManager {
+    return this.binaryManager;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const proc = spawn(this.ytdlpPath, ['--version']);
+      proc.on('close', (code) => resolve(code === 0));
+      proc.on('error', () => resolve(false));
+    });
+  }
+
+  async getVersion(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const proc = spawn(this.ytdlpPath, ['--version']);
+      let output = '';
+      proc.stdout.on('data', (data) => { output += data.toString(); });
+      proc.on('close', (code) => {
+        if (code === 0) resolve(output.trim());
+        else reject(new Error('Failed to get yt-dlp version'));
+      });
+      proc.on('error', (err) => reject(err));
+    });
+  }
+
+  /**
+   * Detect platform from URL string.
+   */
+  detectPlatformFromUrl(url: string): string {
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+    if (url.includes('tiktok.com')) return 'tiktok';
+    if (url.includes('instagram.com')) return 'instagram';
+    if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
+    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'facebook';
+    if (url.includes('reddit.com')) return 'reddit';
+    if (url.includes('vimeo.com')) return 'vimeo';
+    if (url.includes('twitch.tv')) return 'twitch';
+    if (url.includes('dailymotion.com')) return 'dailymotion';
+    if (url.includes('soundcloud.com')) return 'soundcloud';
+    if (url.includes('bilibili.com')) return 'bilibili';
+    if (url.includes('pinterest.com')) return 'pinterest';
+    if (url.includes('linkedin.com')) return 'linkedin';
+    if (url.includes('rumble.com')) return 'rumble';
+    if (url.includes('bandcamp.com')) return 'bandcamp';
+    if (url.includes('bitchute.com')) return 'bitchute';
+    if (url.includes('archive.org')) return 'archive';
+    return 'unknown';
+  }
+
+  /**
+   * Get bypass config for a given platform.
+   */
+  getBypassConfig(platform: string): PlatformBypassConfig | undefined {
+    return PLATFORM_BYPASS_CONFIG[platform];
+  }
+
+  /**
+   * Build platform-specific yt-dlp args for bypass.
+   * Includes POT provider args for YouTube if the server is running.
+   */
+  private buildPlatformArgs(url: string, cookiesPath?: string): string[] {
+    const args: string[] = [];
+    const platform = this.detectPlatformFromUrl(url);
+    const config = PLATFORM_BYPASS_CONFIG[platform];
+
+    // YouTube-specific: bundled Deno JS runtime + POT provider args
+    if (platform === 'youtube') {
+      // Deno is required by yt-dlp 2026+ for YouTube JS extraction
+      const denoPath = this.binaryManager.getDenoPath();
+      if (denoPath) {
+        args.push('--js-runtimes', 'deno:' + denoPath);
+      }
+
+      // POT provider args (auto-generated tokens, no proxy needed)
+      const potArgs = this.potProvider.getYtdlpArgs();
+      if (potArgs.length > 0) {
+        args.push(...potArgs);
+      }
+    }
+
+    if (config?.impersonate) {
+      args.push('--impersonate', config.impersonate);
+    }
+
+    if (config?.extraArgs) {
+      args.push(...config.extraArgs);
+    }
+
+    if (cookiesPath && fs.existsSync(cookiesPath)) {
+      args.push('--cookies', cookiesPath);
+    }
+
+    // Use bundled FFmpeg if available
+    if (this.ffmpegPath !== 'ffmpeg') {
+      args.push('--ffmpeg-location', this.ffmpegPath);
+    }
+
+    // Note: --plugin-dirs does NOT work with standalone yt-dlp binaries.
+    // Plugins are installed to ~/.config/yt-dlp/plugins/ at startup instead.
+
+    return args;
+  }
+
+  async getVideoInfo(url: string, proxy?: string, cookiesPath?: string, browserCookies?: string): Promise<VideoInfo> {
+    return new Promise((resolve, reject) => {
+      const args = [
+        '--dump-json',
+        '--no-download',
+        '--no-warnings',
+        '--no-playlist',
+      ];
+
+      // Platform-specific bypass args
+      args.push(...this.buildPlatformArgs(url, cookiesPath));
+
+      // Browser cookies (--cookies-from-browser)
+      if (browserCookies) {
+        args.push('--cookies-from-browser', browserCookies);
+      }
+
+      if (proxy) {
+        args.push('--proxy', proxy);
+      }
+
+      args.push('--geo-bypass');
+      args.push(url);
+
+      const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (data) => { stdout += data.toString(); });
+      proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+      proc.on('close', (code) => {
+        if (code === 0 && stdout) {
+          try {
+            const raw = JSON.parse(stdout);
+            const info = this.parseVideoInfo(raw);
+            resolve(info);
+          } catch {
+            reject(new Error('Failed to parse video info'));
+          }
+        } else {
+          reject(new Error(stderr || 'Failed to fetch video information'));
+        }
+      });
+
+      proc.on('error', (err) => reject(err));
+
+      // Timeout after 60 seconds (increased for platforms needing impersonation)
+      setTimeout(() => {
+        proc.kill();
+        reject(new Error('Timed out fetching video info'));
+      }, 60000);
+    });
+  }
+
+  /**
+   * Fetch video info with automatic retry and fallback strategies.
+   * Tries with platform bypass first, then retries with cookies if needed.
+   */
+  async getVideoInfoWithRetry(
+    url: string,
+    proxy?: string,
+    cookiesPath?: string,
+    browserCookies?: string
+  ): Promise<VideoInfo> {
+    const platform = this.detectPlatformFromUrl(url);
+    const config = PLATFORM_BYPASS_CONFIG[platform];
+
+    // First attempt: with platform-specific bypass
+    try {
+      return await this.getVideoInfo(url, proxy, cookiesPath, browserCookies);
+    } catch (firstError: unknown) {
+      const firstMsg = firstError instanceof Error ? firstError.message : String(firstError);
+
+      // If platform needs cookies and none provided, throw helpful error
+      if (config?.requiresCookies && !cookiesPath && !browserCookies) {
+        throw new Error(
+          `${platform.charAt(0).toUpperCase() + platform.slice(1)} requires authentication. ` +
+          (config.cookiesHint || 'Please provide cookies in Settings.')
+        );
+      }
+
+      // Second attempt: retry without proxy if we had one
+      if (proxy) {
+        try {
+          return await this.getVideoInfo(url, undefined, cookiesPath, browserCookies);
+        } catch {
+          // Fall through to error
+        }
+      }
+
+      const hint = config?.cookiesHint ? ` Tip: ${config.cookiesHint}` : '';
+      throw new Error(firstMsg + hint);
+    }
+  }
+
+  private parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
+    const formats = (raw.formats as Array<Record<string, unknown>> || [])
+      .filter((f) => f.url)
+      .map((f) => ({
+        formatId: String(f.format_id || ''),
+        ext: String(f.ext || ''),
+        resolution: f.height ? `${f.width || '?'}x${f.height}` : (String(f.resolution || 'audio only')),
+        filesize: (f.filesize as number | null) || (f.filesize_approx as number | null) || null,
+        vcodec: String(f.vcodec || 'none'),
+        acodec: String(f.acodec || 'none'),
+        fps: (f.fps as number | null) || null,
+        tbr: (f.tbr as number | null) || null,
+        quality: f.height ? `${f.height}p` : 'audio',
+        hasVideo: f.vcodec !== 'none' && f.vcodec !== undefined,
+        hasAudio: f.acodec !== 'none' && f.acodec !== undefined,
+        note: String(f.format_note || ''),
+      }));
+
+    const duration = (raw.duration as number) || 0;
+    const hours = Math.floor(duration / 3600);
+    const minutes = Math.floor((duration % 3600) / 60);
+    const seconds = Math.floor(duration % 60);
+    const durationString = hours > 0
+      ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      : `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+    // Determine platform
+    const extractor = String(raw.extractor || raw.extractor_key || 'unknown');
+    const platform = this.detectPlatform(extractor, String(raw.webpage_url || ''));
+
+    return {
+      id: String(raw.id || ''),
+      title: String(raw.title || 'Unknown'),
+      description: String(raw.description || ''),
+      thumbnail: String(raw.thumbnail || ''),
+      duration,
+      durationString,
+      uploader: String(raw.uploader || raw.channel || 'Unknown'),
+      uploaderUrl: String(raw.uploader_url || raw.channel_url || ''),
+      viewCount: (raw.view_count as number) || 0,
+      likeCount: (raw.like_count as number) || 0,
+      uploadDate: String(raw.upload_date || ''),
+      webpage_url: String(raw.webpage_url || ''),
+      extractor,
+      platform,
+      formats,
+      subtitles: (raw.subtitles as Record<string, Array<{ ext: string; url: string }>>) || {},
+      requestedSubtitles: (raw.requested_subtitles as Record<string, unknown>) || null,
+    };
+  }
+
+  private detectPlatform(extractor: string, url: string): string {
+    const ext = extractor.toLowerCase();
+    if (ext.includes('youtube')) return 'youtube';
+    if (ext.includes('tiktok')) return 'tiktok';
+    if (ext.includes('instagram')) return 'instagram';
+    if (ext.includes('twitter') || ext.includes('x')) return 'twitter';
+    if (ext.includes('facebook') || ext.includes('fb')) return 'facebook';
+    if (ext.includes('reddit')) return 'reddit';
+    if (ext.includes('vimeo')) return 'vimeo';
+    if (ext.includes('twitch')) return 'twitch';
+    if (ext.includes('dailymotion')) return 'dailymotion';
+    if (ext.includes('soundcloud')) return 'soundcloud';
+    if (ext.includes('bilibili')) return 'bilibili';
+    if (ext.includes('pinterest')) return 'pinterest';
+    if (ext.includes('linkedin')) return 'linkedin';
+    if (ext.includes('rumble')) return 'rumble';
+
+    // URL-based fallback
+    return this.detectPlatformFromUrl(url);
+  }
+
+  startDownload(
+    url: string,
+    outputPath: string,
+    filename: string,
+    formatId: string,
+    audioOnly: boolean,
+    audioFormat: string | undefined,
+    embedSubs: boolean,
+    embedThumbnail: boolean,
+    proxy: string | undefined,
+    onProgress: (progress: DownloadProgress) => void,
+    downloadId: string,
+    cookiesPath?: string,
+    browserCookies?: string
+  ): ChildProcess {
+    const args: string[] = [];
+
+    // Output template
+    const outputTemplate = path.join(outputPath, filename || '%(title)s.%(ext)s');
+    args.push('-o', outputTemplate);
+
+    // Platform-specific bypass args
+    args.push(...this.buildPlatformArgs(url, cookiesPath));
+
+    // Browser cookies
+    if (browserCookies) {
+      args.push('--cookies-from-browser', browserCookies);
+    }
+
+    // Platform-specific format handling
+    const platform = this.detectPlatformFromUrl(url);
+    const config = PLATFORM_BYPASS_CONFIG[platform];
+
+    // Format selection
+    if (audioOnly) {
+      args.push('-x');
+      if (audioFormat) {
+        args.push('--audio-format', audioFormat);
+      }
+      args.push('--audio-quality', '0');
+    } else if (config?.formatOverride && (!formatId || formatId === 'best')) {
+      // Use platform-specific format override (e.g. 'b' for TikTok watermark-free)
+      args.push('-f', config.formatOverride);
+    } else if (formatId && formatId !== 'best') {
+      args.push('-f', formatId);
+    } else {
+      args.push('-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best');
+    }
+
+    // Embed options
+    if (embedSubs) {
+      args.push('--write-subs', '--embed-subs');
+    }
+    if (embedThumbnail) {
+      args.push('--embed-thumbnail');
+    }
+
+    // Proxy
+    if (proxy) {
+      args.push('--proxy', proxy);
+    }
+
+    // General options
+    args.push('--geo-bypass');
+    args.push('--no-playlist');
+    args.push('--newline');
+    args.push('--progress');
+    args.push('--no-warnings');
+
+    // Only set merge output format for platforms that need it (not TikTok single-stream)
+    if (platform !== 'tiktok') {
+      args.push('--merge-output-format', 'mp4');
+    }
+
+    args.push(url);
+
+    const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
+
+    proc.stdout.on('data', (data) => {
+      const line = data.toString().trim();
+      const progress = this.parseProgress(line, downloadId);
+      if (progress) {
+        onProgress(progress);
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      const line = data.toString().trim();
+      if (line && !line.startsWith('WARNING')) {
+        onProgress({
+          downloadId,
+          status: 'error',
+          percent: 0,
+          speed: '',
+          eta: '',
+          filesize: '',
+          filename: '',
+          error: line,
+        });
+      }
+    });
+
+    return proc;
+  }
+
+  private parseProgress(line: string, downloadId: string): DownloadProgress | null {
+    // Match yt-dlp progress format: [download]  45.2% of  150.00MiB at  2.50MiB/s ETA 00:35
+    const downloadMatch = line.match(
+      /\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\s*\w+)\s+at\s+([\d.]+\s*\w+\/s)\s+ETA\s+(\S+)/
+    );
+
+    if (downloadMatch) {
+      return {
+        downloadId,
+        status: 'downloading',
+        percent: parseFloat(downloadMatch[1]),
+        filesize: downloadMatch[2],
+        speed: downloadMatch[3],
+        eta: downloadMatch[4],
+        filename: '',
+      };
+    }
+
+    // Match completion: [download] 100% of 150.00MiB
+    const completeMatch = line.match(/\[download\]\s+100%\s+of\s+([\d.]+\s*\w+)/);
+    if (completeMatch) {
+      return {
+        downloadId,
+        status: 'downloading',
+        percent: 100,
+        filesize: completeMatch[1],
+        speed: '',
+        eta: '0:00',
+        filename: '',
+      };
+    }
+
+    // Match merge/processing
+    if (line.includes('[Merger]') || line.includes('[ExtractAudio]') || line.includes('[ffmpeg]')) {
+      return {
+        downloadId,
+        status: 'processing',
+        percent: 100,
+        speed: '',
+        eta: '',
+        filesize: '',
+        filename: '',
+      };
+    }
+
+    // Match destination filename
+    const destMatch = line.match(/\[download\]\s+Destination:\s+(.+)/);
+    if (destMatch) {
+      return {
+        downloadId,
+        status: 'downloading',
+        percent: 0,
+        speed: '',
+        eta: '',
+        filesize: '',
+        filename: destMatch[1],
+      };
+    }
+
+    return null;
+  }
+}
