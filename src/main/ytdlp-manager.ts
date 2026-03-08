@@ -112,6 +112,20 @@ export class YtdlpManager {
   private binaryManager: BinaryManager;
   private potProvider: PotProviderManager;
 
+  /**
+   * Cached browser name that successfully extracted cookies for YouTube.
+   * Once detected, all subsequent YouTube requests use this browser automatically.
+   */
+  private autoBrowser: string | null = null;
+
+  /**
+   * Browsers to try for automatic cookie extraction, ordered by popularity.
+   * yt-dlp supports these via --cookies-from-browser.
+   */
+  private static readonly AUTO_BROWSERS = [
+    'chrome', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'chromium',
+  ];
+
   constructor(binaryManager?: BinaryManager) {
     this.binaryManager = binaryManager || new BinaryManager();
     this.potProvider = new PotProviderManager(this.binaryManager);
@@ -263,10 +277,30 @@ export class YtdlpManager {
   }
 
   /**
+   * Check if an error message indicates YouTube bot/IP block.
+   */
+  private isBotError(msg: string): boolean {
+    const lower = msg.toLowerCase();
+    return lower.includes('sign in to confirm') ||
+           lower.includes('not a bot') ||
+           lower.includes('confirm your age') ||
+           lower.includes('use --cookies');
+  }
+
+  /**
+   * Get the auto-detected browser for cookie extraction.
+   * Returns null if no browser has been auto-detected yet.
+   */
+  getAutoBrowser(): string | null {
+    return this.autoBrowser;
+  }
+
+  /**
    * Build platform-specific yt-dlp args for bypass.
    * Includes POT provider args for YouTube if the server is running.
+   * Automatically uses cached browser cookies for YouTube if no explicit cookies are set.
    */
-  private buildPlatformArgs(url: string, cookiesPath?: string): string[] {
+  private buildPlatformArgs(url: string, cookiesPath?: string, browserCookies?: string): string[] {
     const args: string[] = [];
     const platform = this.detectPlatformFromUrl(url);
     const config = PLATFORM_BYPASS_CONFIG[platform];
@@ -294,8 +328,16 @@ export class YtdlpManager {
       args.push(...config.extraArgs);
     }
 
+    // Cookie file (explicit)
     if (cookiesPath && fs.existsSync(cookiesPath)) {
       args.push('--cookies', cookiesPath);
+    }
+
+    // Browser cookies: explicit setting > auto-detected > none
+    const effectiveBrowser = browserCookies ||
+      (platform === 'youtube' && !cookiesPath && this.autoBrowser ? this.autoBrowser : undefined);
+    if (effectiveBrowser) {
+      args.push('--cookies-from-browser', effectiveBrowser);
     }
 
     // Use bundled FFmpeg if available
@@ -318,13 +360,8 @@ export class YtdlpManager {
         '--no-playlist',
       ];
 
-      // Platform-specific bypass args
-      args.push(...this.buildPlatformArgs(url, cookiesPath));
-
-      // Browser cookies (--cookies-from-browser)
-      if (browserCookies) {
-        args.push('--cookies-from-browser', browserCookies);
-      }
+      // Platform-specific bypass args (includes auto-browser cookies for YouTube)
+      args.push(...this.buildPlatformArgs(url, cookiesPath, browserCookies));
 
       if (proxy) {
         args.push('--proxy', proxy);
@@ -366,7 +403,9 @@ export class YtdlpManager {
 
   /**
    * Fetch video info with automatic retry and fallback strategies.
-   * Tries with platform bypass first, then retries with cookies if needed.
+   * For YouTube: auto-detects and uses browser cookies if bot-blocked.
+   * Tries Chrome, Edge, Firefox, Brave, etc. until one works.
+   * Caches the working browser for all future requests.
    */
   async getVideoInfoWithRetry(
     url: string,
@@ -377,13 +416,54 @@ export class YtdlpManager {
     const platform = this.detectPlatformFromUrl(url);
     const config = PLATFORM_BYPASS_CONFIG[platform];
 
-    // First attempt: with platform-specific bypass
+    // First attempt: with platform-specific bypass (includes cached auto-browser if available)
     try {
       return await this.getVideoInfo(url, proxy, cookiesPath, browserCookies);
     } catch (firstError: unknown) {
       const firstMsg = firstError instanceof Error ? firstError.message : String(firstError);
 
-      // If platform needs cookies and none provided, throw helpful error
+      // YouTube bot/IP block: auto-detect browser cookies
+      // Only if no explicit cookies are configured (user hasn't set anything up)
+      if (platform === 'youtube' && this.isBotError(firstMsg) && !browserCookies && !cookiesPath) {
+        console.log('[GrabTube] YouTube bot block detected. Auto-detecting browser cookies...');
+
+        for (const browser of YtdlpManager.AUTO_BROWSERS) {
+          try {
+            console.log(`[GrabTube] Trying ${browser} cookies...`);
+            const result = await this.getVideoInfo(url, proxy, undefined, browser);
+            // Success! Cache this browser for all future YouTube requests
+            this.autoBrowser = browser;
+            console.log(`[GrabTube] Auto-detected working browser: ${browser}. Cached for future use.`);
+            return result;
+          } catch (browserError: unknown) {
+            const browserMsg = browserError instanceof Error ? browserError.message : String(browserError);
+            // If it's still a bot error or cookie error, try next browser
+            // If it's a different error (e.g., video not found), throw immediately
+            if (!this.isBotError(browserMsg) && !browserMsg.toLowerCase().includes('cookie') && !browserMsg.toLowerCase().includes('browser')) {
+              throw browserError;
+            }
+            continue;
+          }
+        }
+
+        // All browsers failed — try without proxy as last resort
+        if (proxy) {
+          try {
+            console.log('[GrabTube] All browsers failed. Trying without proxy...');
+            return await this.getVideoInfo(url, undefined, cookiesPath, browserCookies);
+          } catch {
+            // Fall through to final error
+          }
+        }
+
+        // Nothing worked — throw a clean user-friendly error
+        throw new Error(
+          'YouTube is blocking this request. Please open YouTube in your browser (Chrome/Edge/Firefox), ' +
+          'make sure you are logged in, then try again. GrabTube will automatically use your browser cookies.'
+        );
+      }
+
+      // Non-YouTube: if platform needs cookies and none provided, throw helpful error
       if (config?.requiresCookies && !cookiesPath && !browserCookies) {
         throw new Error(
           `${platform.charAt(0).toUpperCase() + platform.slice(1)} requires authentication. ` +
@@ -391,7 +471,7 @@ export class YtdlpManager {
         );
       }
 
-      // Second attempt: retry without proxy if we had one
+      // Retry without proxy if we had one
       if (proxy) {
         try {
           return await this.getVideoInfo(url, undefined, cookiesPath, browserCookies);
@@ -498,13 +578,8 @@ export class YtdlpManager {
     const outputTemplate = path.join(outputPath, filename || '%(title)s.%(ext)s');
     args.push('-o', outputTemplate);
 
-    // Platform-specific bypass args
-    args.push(...this.buildPlatformArgs(url, cookiesPath));
-
-    // Browser cookies
-    if (browserCookies) {
-      args.push('--cookies-from-browser', browserCookies);
-    }
+    // Platform-specific bypass args (includes auto-browser cookies for YouTube)
+    args.push(...this.buildPlatformArgs(url, cookiesPath, browserCookies));
 
     // Platform-specific format handling
     const platform = this.detectPlatformFromUrl(url);
