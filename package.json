@@ -79,16 +79,16 @@
     ],
     "win": {
       "target": ["nsis"],
-      "icon": "resources/icon.png"
+      "icon": "build/icon.ico"
     },
     "mac": {
       "target": ["dmg"],
-      "icon": "resources/icon.png",
+      "icon": "build/icon.icns",
       "category": "public.app-category.utilities"
     },
     "linux": {
       "target": ["AppImage"],
-      "icon": "resources/icon.png",
+      "icon": "build/icon-512.png",
       "category": "Utility"
     },
     "nsis": {

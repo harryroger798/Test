@@ -1,5 +1,6 @@
 import React from 'react';
-import { Home, Video, Music, Settings, HelpCircle, Download, type LucideIcon } from 'lucide-react';
+import { Home, Video, Music, Settings, HelpCircle, type LucideIcon } from 'lucide-react';
+import logoImg from '../assets/logo.png';
 import { cn } from '../lib/utils';
 import { useDownloadStore } from '../store/downloadStore';
 
@@ -54,9 +55,7 @@ export const Sidebar: React.FC = () => {
     <div className="w-16 lg:w-56 bg-card border-r border-border flex flex-col h-full">
       {/* Logo */}
       <div className="p-4 flex items-center gap-3 border-b border-border">
-        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center flex-shrink-0 hover-glow">
-          <Download size={18} className="text-primary-foreground" />
-        </div>
+        <img src={logoImg} alt="GrabTube" className="w-8 h-8 rounded-lg flex-shrink-0 hover-glow" />
         <span className="font-bold text-foreground text-lg hidden lg:block">GrabTube</span>
       </div>
 
