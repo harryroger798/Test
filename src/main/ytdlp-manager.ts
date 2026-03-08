@@ -1,6 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { BinaryManager } from './binary-manager';
+import { PotProviderManager } from './pot-provider';
 
 export interface VideoFormat {
   formatId: string;
@@ -104,24 +106,47 @@ const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
 
 export class YtdlpManager {
   private ytdlpPath: string;
+  private ffmpegPath: string;
+  private pluginDir: string;
+  private binaryManager: BinaryManager;
+  private potProvider: PotProviderManager;
 
-  constructor() {
-    this.ytdlpPath = this.findYtdlp();
+  constructor(binaryManager?: BinaryManager) {
+    this.binaryManager = binaryManager || new BinaryManager();
+    this.potProvider = new PotProviderManager(this.binaryManager);
+    this.ytdlpPath = this.binaryManager.getYtdlpPath();
+    this.ffmpegPath = this.binaryManager.getFfmpegPath();
+    this.pluginDir = this.binaryManager.getPluginDir();
   }
 
-  private findYtdlp(): string {
-    // Check bundled binary first
-    const resourcesPath = process.resourcesPath || path.join(__dirname, '../../resources');
-    const platform = process.platform;
-    const binName = platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+  /**
+   * Start the POT provider server for YouTube bypass.
+   * Should be called once on app startup.
+   */
+  async startPotProvider(): Promise<boolean> {
+    return this.potProvider.start();
+  }
 
-    const bundledPath = path.join(resourcesPath, 'bin', binName);
-    if (fs.existsSync(bundledPath)) {
-      return bundledPath;
-    }
+  /**
+   * Stop the POT provider server.
+   * Should be called on app shutdown.
+   */
+  stopPotProvider(): void {
+    this.potProvider.stop();
+  }
 
-    // Fallback to system yt-dlp
-    return 'yt-dlp';
+  /**
+   * Get the POT provider manager instance.
+   */
+  getPotProvider(): PotProviderManager {
+    return this.potProvider;
+  }
+
+  /**
+   * Get the binary manager instance.
+   */
+  getBinaryManager(): BinaryManager {
+    return this.binaryManager;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -178,11 +203,20 @@ export class YtdlpManager {
 
   /**
    * Build platform-specific yt-dlp args for bypass.
+   * Includes POT provider args for YouTube if the server is running.
    */
   private buildPlatformArgs(url: string, cookiesPath?: string): string[] {
     const args: string[] = [];
     const platform = this.detectPlatformFromUrl(url);
     const config = PLATFORM_BYPASS_CONFIG[platform];
+
+    // POT provider args for YouTube (auto-generated tokens, no proxy needed)
+    if (platform === 'youtube') {
+      const potArgs = this.potProvider.getYtdlpArgs();
+      if (potArgs.length > 0) {
+        args.push(...potArgs);
+      }
+    }
 
     if (config?.impersonate) {
       args.push('--impersonate', config.impersonate);
@@ -194,6 +228,16 @@ export class YtdlpManager {
 
     if (cookiesPath && fs.existsSync(cookiesPath)) {
       args.push('--cookies', cookiesPath);
+    }
+
+    // Use bundled FFmpeg if available
+    if (this.ffmpegPath !== 'ffmpeg') {
+      args.push('--ffmpeg-location', this.ffmpegPath);
+    }
+
+    // Use bundled plugin directory if it exists
+    if (fs.existsSync(this.pluginDir)) {
+      args.push('--plugin-dirs', this.pluginDir);
     }
 
     return args;

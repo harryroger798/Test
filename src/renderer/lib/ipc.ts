@@ -39,6 +39,13 @@ export interface ElectronAPI {
     cookiesHint: string;
     hasImpersonation: boolean;
   }>;
+  // Binary status
+  getBinaryStatus: () => Promise<{
+    ytdlp: { path: string; bundled: boolean; available: boolean };
+    ffmpeg: { path: string; bundled: boolean; available: boolean };
+    potProvider: { path: string; bundled: boolean; available: boolean; running: boolean };
+    pluginDir: { path: string; exists: boolean };
+  }>;
 }
 
 // Type-safe access to electron API
@@ -77,6 +84,12 @@ const mockAPI: ElectronAPI = {
   clearCookiesPath: async () => ({ success: true }),
   setBrowserCookies: async () => ({ success: true }),
   getPlatformInfo: async () => ({ platform: 'unknown', requiresCookies: false, cookiesHint: '', hasImpersonation: false }),
+  getBinaryStatus: async () => ({
+    ytdlp: { path: '', bundled: false, available: false },
+    ffmpeg: { path: '', bundled: false, available: false },
+    potProvider: { path: '', bundled: false, available: false, running: false },
+    pluginDir: { path: '', exists: false },
+  }),
 };
 
 export const api: ElectronAPI = isElectron ? window.electronAPI : mockAPI;

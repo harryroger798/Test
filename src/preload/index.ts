@@ -50,6 +50,9 @@ const electronAPI = {
 
   // Platform info
   getPlatformInfo: (url: string) => ipcRenderer.invoke('get-platform-info', url),
+
+  // Binary status (bundled binaries, POT provider)
+  getBinaryStatus: () => ipcRenderer.invoke('get-binary-status'),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

@@ -1,12 +1,14 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage } from 'electron';
 import * as path from 'path';
+import { BinaryManager } from './binary-manager';
 import { YtdlpManager } from './ytdlp-manager';
 import { DownloadManager } from './download-manager';
 import { SettingsManager } from './settings-store';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-const ytdlp = new YtdlpManager();
+const binaryManager = new BinaryManager();
+const ytdlp = new YtdlpManager(binaryManager);
 const downloadManager = new DownloadManager(ytdlp);
 const settings = new SettingsManager();
 
@@ -231,13 +233,34 @@ function setupIPC(): void {
       hasImpersonation: !!config?.impersonate,
     };
   });
+
+  // Get binary status (bundled binaries, POT provider, etc.)
+  ipcMain.handle('get-binary-status', async () => {
+    const status = binaryManager.getStatus();
+    const potRunning = ytdlp.getPotProvider().isRunning();
+    return {
+      ...status,
+      potProvider: {
+        ...status.potProvider,
+        running: potRunning,
+      },
+    };
+  });
 }
 
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
   createTray();
   setupIPC();
+
+  // Auto-start POT provider for YouTube bypass (runs in background)
+  const potStarted = await ytdlp.startPotProvider();
+  if (potStarted) {
+    console.log('[GrabTube] POT provider started — YouTube downloads work from any IP.');
+  } else {
+    console.log('[GrabTube] POT provider not available — YouTube may need proxy from datacenter IPs.');
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -254,4 +277,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   downloadManager.cancelAll();
+  ytdlp.stopPotProvider();
 });
