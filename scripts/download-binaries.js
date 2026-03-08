@@ -22,9 +22,9 @@ const { execSync } = require('child_process');
 // Parse --platform flag or use current OS
 const args = process.argv.slice(2);
 const platformIdx = args.indexOf('--platform');
-const targetPlatform = platformIdx >= 0 ? args[platformIdx + 1] : (
+const targetPlatform = process.env.GRABTUBE_PLATFORM || (platformIdx >= 0 ? args[platformIdx + 1] : (
   process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'
-);
+));
 
 // ── Binary URLs ──────────────────────────────────────────────────────
 
@@ -182,10 +182,38 @@ async function downloadFfmpeg() {
       console.log('  Install via: brew install ffmpeg');
     }
   } else {
-    // Windows: large zip — suggest choco/winget instead
-    console.log('  For Windows, we recommend installing FFmpeg via:');
-    console.log('    choco install ffmpeg   OR   winget install ffmpeg');
-    console.log('  GrabTube will auto-detect it from your PATH.');
+    // Windows
+    const zipDest = path.join(binDir, 'ffmpeg.zip');
+    try {
+      await downloadFile(url, zipDest);
+      console.log('  Extracting ffmpeg from archive...');
+      if (process.platform === 'win32') {
+        execSync('powershell -command "Expand-Archive -Path \'' + zipDest + '\' -DestinationPath \'' + binDir + '\' -Force"', { stdio: 'pipe' });
+      } else {
+        execSync('cd "' + binDir + '" && unzip -o ffmpeg.zip', { stdio: 'pipe' });
+      }
+      // Find ffmpeg.exe in extracted directories
+      const entries = fs.readdirSync(binDir);
+      for (const entry of entries) {
+        const binSubDir = path.join(binDir, entry, 'bin');
+        if (fs.existsSync(binSubDir)) {
+          const ffmpegExe = path.join(binSubDir, 'ffmpeg.exe');
+          if (fs.existsSync(ffmpegExe)) {
+            fs.renameSync(ffmpegExe, path.join(binDir, 'ffmpeg.exe'));
+            const ffprobeExe = path.join(binSubDir, 'ffprobe.exe');
+            if (fs.existsSync(ffprobeExe)) {
+              fs.renameSync(ffprobeExe, path.join(binDir, 'ffprobe.exe'));
+            }
+            break;
+          }
+        }
+      }
+      try { fs.unlinkSync(zipDest); } catch (e) { /* ignore */ }
+      console.log('  FFmpeg extracted successfully.');
+    } catch (err) {
+      console.log('  FFmpeg download/extract failed: ' + err.message);
+      console.log('  Install via: choco install ffmpeg');
+    }
   }
 }
 

@@ -70,11 +70,6 @@
         "from": "resources/bin/${os}",
         "to": "bin",
         "filter": ["**/*"]
-      },
-      {
-        "from": "resources/bin/${os}/plugins",
-        "to": "bin/plugins",
-        "filter": ["**/*"]
       }
     ],
     "win": {
