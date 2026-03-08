@@ -84,12 +84,14 @@ function createTray(): void {
 
 // IPC Handlers
 function setupIPC(): void {
-  // Fetch video info
+  // Fetch video info (uses retry with platform-specific bypass)
   ipcMain.handle('fetch-info', async (_event, url: string) => {
     try {
       const proxySettings = settings.get('proxy') as { enabled: boolean; url: string } | undefined;
       const proxy = proxySettings?.enabled ? proxySettings.url : undefined;
-      const info = await ytdlp.getVideoInfo(url, proxy);
+      const cookiesPath = settings.get('cookiesPath') as string | undefined;
+      const browserCookies = settings.get('browserCookies') as string | undefined;
+      const info = await ytdlp.getVideoInfoWithRetry(url, proxy, cookiesPath || undefined, browserCookies || undefined);
       return { success: true, data: info };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to fetch video info';
@@ -111,6 +113,8 @@ function setupIPC(): void {
     try {
       const proxySettings = settings.get('proxy') as { enabled: boolean; url: string } | undefined;
       const proxy = proxySettings?.enabled ? proxySettings.url : undefined;
+      const cookiesPath = settings.get('cookiesPath') as string | undefined;
+      const browserCookies = settings.get('browserCookies') as string | undefined;
       const downloadId = downloadManager.startDownload(
         options,
         proxy,
@@ -119,7 +123,9 @@ function setupIPC(): void {
         },
         (result) => {
           mainWindow?.webContents.send('download-complete', result);
-        }
+        },
+        cookiesPath || undefined,
+        browserCookies || undefined
       );
       return { success: true, downloadId };
     } catch (error: unknown) {
@@ -182,6 +188,48 @@ function setupIPC(): void {
   // Get active downloads
   ipcMain.handle('get-active-downloads', async () => {
     return downloadManager.getActiveDownloads();
+  });
+
+  // Select cookies file (P2: Cookie Import)
+  ipcMain.handle('select-cookies-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      title: 'Select Cookies File (cookies.txt)',
+      filters: [
+        { name: 'Cookies', extensions: ['txt'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      const cookiesPath = result.filePaths[0];
+      settings.set('cookiesPath', cookiesPath);
+      return { success: true, path: cookiesPath };
+    }
+    return { success: false };
+  });
+
+  // Clear cookies path
+  ipcMain.handle('clear-cookies-path', async () => {
+    settings.set('cookiesPath', '');
+    return { success: true };
+  });
+
+  // Set browser cookies source (P3: Cookies from Browser)
+  ipcMain.handle('set-browser-cookies', async (_event, browser: string) => {
+    settings.set('browserCookies', browser);
+    return { success: true };
+  });
+
+  // Get platform bypass info
+  ipcMain.handle('get-platform-info', async (_event, url: string) => {
+    const platform = ytdlp.detectPlatformFromUrl(url);
+    const config = ytdlp.getBypassConfig(platform);
+    return {
+      platform,
+      requiresCookies: config?.requiresCookies || false,
+      cookiesHint: config?.cookiesHint || '',
+      hasImpersonation: !!config?.impersonate,
+    };
   });
 }
 

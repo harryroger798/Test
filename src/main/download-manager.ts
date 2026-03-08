@@ -25,12 +25,14 @@ export interface DownloadOptions {
   audioFormat?: string;
   embedSubs?: boolean;
   embedThumbnail?: boolean;
+  cookiesPath?: string;
+  browserCookies?: string;
 }
 
 export class DownloadManager {
   private ytdlp: YtdlpManager;
   private activeDownloads: Map<string, { process: ChildProcess; item: DownloadItem }> = new Map();
-  private queue: Array<{ id: string; options: DownloadOptions; proxy?: string; onProgress: (p: DownloadProgress) => void; onComplete: (r: DownloadItem) => void }> = [];
+  private queue: Array<{ id: string; options: DownloadOptions; proxy?: string; cookiesPath?: string; browserCookies?: string; onProgress: (p: DownloadProgress) => void; onComplete: (r: DownloadItem) => void }> = [];
   private maxConcurrent = 2;
 
   constructor(ytdlp: YtdlpManager) {
@@ -41,7 +43,9 @@ export class DownloadManager {
     options: DownloadOptions,
     proxy: string | undefined,
     onProgress: (progress: DownloadProgress) => void,
-    onComplete: (result: DownloadItem) => void
+    onComplete: (result: DownloadItem) => void,
+    cookiesPath?: string,
+    browserCookies?: string
   ): string {
     const downloadId = v4Style();
 
@@ -59,9 +63,9 @@ export class DownloadManager {
     };
 
     if (this.activeDownloads.size < this.maxConcurrent) {
-      this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item);
+      this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, browserCookies);
     } else {
-      this.queue.push({ id: downloadId, options, proxy, onProgress, onComplete });
+      this.queue.push({ id: downloadId, options, proxy, cookiesPath, browserCookies, onProgress, onComplete });
     }
 
     return downloadId;
@@ -73,7 +77,10 @@ export class DownloadManager {
     proxy: string | undefined,
     onProgress: (progress: DownloadProgress) => void,
     onComplete: (result: DownloadItem) => void,
-    item: DownloadItem
+    item: DownloadItem,
+    cookiesPath?: string,
+    browserCookies?: string,
+    retryCount = 0
   ): void {
     item.status = 'downloading';
 
@@ -97,7 +104,9 @@ export class DownloadManager {
         if (progress.error) item.error = progress.error;
         onProgress(progress);
       },
-      downloadId
+      downloadId,
+      cookiesPath,
+      browserCookies
     );
 
     this.activeDownloads.set(downloadId, { process: proc, item });
@@ -106,14 +115,36 @@ export class DownloadManager {
       if (code === 0) {
         item.status = 'completed';
         item.progress = 100;
-      } else if (item.status !== 'cancelled') {
-        item.status = 'error';
-        item.error = item.error || 'Download failed with exit code ' + code;
-      }
+        this.activeDownloads.delete(downloadId);
+        onComplete(item);
+        this.processQueue();
+      } else if (item.status === 'cancelled') {
+        this.activeDownloads.delete(downloadId);
+        onComplete(item);
+        this.processQueue();
+      } else {
+        // Auto-retry logic (P4): Try with cookies if first attempt failed
+        const platform = this.ytdlp.detectPlatformFromUrl(options.url);
+        const needsRetry = retryCount === 0 && this.shouldRetryWithCookies(platform, item.error);
 
-      this.activeDownloads.delete(downloadId);
-      onComplete(item);
-      this.processQueue();
+        if (needsRetry && (cookiesPath || browserCookies)) {
+          // Retry with cookies
+          item.error = undefined;
+          item.progress = 0;
+          this.activeDownloads.delete(downloadId);
+          this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, browserCookies, retryCount + 1);
+        } else {
+          item.status = 'error';
+          item.error = item.error || 'Download failed with exit code ' + code;
+          const config = this.ytdlp.getBypassConfig(platform);
+          if (config?.cookiesHint && !cookiesPath && !browserCookies) {
+            item.error += '. Tip: ' + config.cookiesHint;
+          }
+          this.activeDownloads.delete(downloadId);
+          onComplete(item);
+          this.processQueue();
+        }
+      }
     });
 
     proc.on('error', (err) => {
@@ -123,6 +154,17 @@ export class DownloadManager {
       onComplete(item);
       this.processQueue();
     });
+  }
+
+  /**
+   * Determine if a failed download should be retried with cookies.
+   */
+  private shouldRetryWithCookies(platform: string, error?: string): boolean {
+    const cookiePlatforms = ['instagram', 'reddit', 'facebook', 'twitter', 'linkedin'];
+    if (!cookiePlatforms.includes(platform)) return false;
+    if (!error) return true; // Unknown error, try cookies
+    const authErrors = ['authentication', 'login', 'sign in', 'cookies', 'forbidden', '403', '401', 'private'];
+    return authErrors.some((keyword) => error.toLowerCase().includes(keyword));
   }
 
   private processQueue(): void {
@@ -141,7 +183,7 @@ export class DownloadManager {
           filename: '',
           outputPath: next.options.outputPath,
         };
-        this.executeDownload(next.id, next.options, next.proxy, next.onProgress, next.onComplete, item);
+        this.executeDownload(next.id, next.options, next.proxy, next.onProgress, next.onComplete, item, next.cookiesPath, next.browserCookies);
       }
     }
   }

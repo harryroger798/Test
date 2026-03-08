@@ -42,6 +42,14 @@ const electronAPI = {
 
   // System
   checkYtdlp: () => ipcRenderer.invoke('check-ytdlp'),
+
+  // Cookie management (P2/P3)
+  selectCookiesFile: () => ipcRenderer.invoke('select-cookies-file'),
+  clearCookiesPath: () => ipcRenderer.invoke('clear-cookies-path'),
+  setBrowserCookies: (browser: string) => ipcRenderer.invoke('set-browser-cookies', browser),
+
+  // Platform info
+  getPlatformInfo: (url: string) => ipcRenderer.invoke('get-platform-info', url),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

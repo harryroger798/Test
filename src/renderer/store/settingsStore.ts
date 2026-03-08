@@ -18,6 +18,8 @@ interface Settings {
   defaultAudioFormat: string;
   clipboardMonitoring: boolean;
   notifications: boolean;
+  cookiesPath: string;
+  browserCookies: string;
 }
 
 interface SettingsStore extends Settings {
@@ -27,6 +29,8 @@ interface SettingsStore extends Settings {
   setDownloadPath: (path: string) => void;
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
   setProxy: (proxy: ProxySettings) => void;
+  setCookiesPath: (path: string) => void;
+  setBrowserCookies: (browser: string) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
@@ -40,13 +44,29 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   defaultAudioFormat: 'mp3',
   clipboardMonitoring: false,
   notifications: true,
+  cookiesPath: '',
+  browserCookies: '',
   isLoaded: false,
 
   loadSettings: async () => {
     try {
       const settings = await api.getSettings();
-      const downloadPath = settings.downloadPath || (await api.getDefaultPath());
-      set({ ...settings, downloadPath, isLoaded: true });
+      const downloadPath = (settings.downloadPath as string) || (await api.getDefaultPath());
+      set({
+        downloadPath,
+        theme: (settings.theme as Settings['theme']) || 'dark',
+        proxy: (settings.proxy as ProxySettings) || { enabled: false, url: '', type: 'http' },
+        maxConcurrentDownloads: (settings.maxConcurrentDownloads as number) || 2,
+        embedThumbnail: (settings.embedThumbnail as boolean) || false,
+        embedSubtitles: (settings.embedSubtitles as boolean) || false,
+        defaultVideoFormat: (settings.defaultVideoFormat as string) || 'best',
+        defaultAudioFormat: (settings.defaultAudioFormat as string) || 'mp3',
+        clipboardMonitoring: (settings.clipboardMonitoring as boolean) || false,
+        notifications: (settings.notifications as boolean) ?? true,
+        cookiesPath: (settings.cookiesPath as string) || '',
+        browserCookies: (settings.browserCookies as string) || '',
+        isLoaded: true,
+      });
     } catch {
       const downloadPath = await api.getDefaultPath();
       set({ downloadPath, isLoaded: true });
@@ -67,6 +87,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       defaultAudioFormat: state.defaultAudioFormat,
       clipboardMonitoring: state.clipboardMonitoring,
       notifications: state.notifications,
+      cookiesPath: state.cookiesPath,
+      browserCookies: state.browserCookies,
     });
   },
 
@@ -89,5 +111,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   setProxy: (proxy) => {
     set({ proxy });
     get().updateSettings({ proxy });
+  },
+
+  setCookiesPath: (path) => {
+    set({ cookiesPath: path });
+    get().updateSettings({ cookiesPath: path });
+  },
+
+  setBrowserCookies: (browser) => {
+    set({ browserCookies: browser });
+    get().updateSettings({ browserCookies: browser });
   },
 }));

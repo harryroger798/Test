@@ -168,7 +168,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     try {
       const result = await api.fetchInfo(url);
       if (result.success) {
-        set({ videoInfo: result.data, isLoading: false });
+        set({ videoInfo: result.data as VideoInfo, isLoading: false });
       } else {
         set({ error: result.error || 'Failed to fetch video info', isLoading: false });
       }

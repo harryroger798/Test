@@ -18,6 +18,8 @@ export interface AppSettings {
   clipboardMonitoring: boolean;
   notifications: boolean;
   downloadHistory: HistoryItem[];
+  cookiesPath: string;
+  browserCookies: string;
 }
 
 export interface HistoryItem {
@@ -48,6 +50,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   clipboardMonitoring: false,
   notifications: true,
   downloadHistory: [],
+  cookiesPath: '',
+  browserCookies: '',
 };
 
 export class SettingsManager {

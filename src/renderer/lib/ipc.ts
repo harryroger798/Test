@@ -1,4 +1,45 @@
-import type { ElectronAPI } from '../../preload/index';
+// ElectronAPI type definition (mirrors preload/index.ts)
+export interface ElectronAPI {
+  // Video info
+  fetchInfo: (url: string) => Promise<{ success: boolean; data?: unknown; error?: string }>;
+  // Downloads
+  startDownload: (options: {
+    url: string;
+    formatId: string;
+    outputPath: string;
+    filename: string;
+    audioOnly: boolean;
+    audioFormat?: string;
+    embedSubs?: boolean;
+    embedThumbnail?: boolean;
+  }) => Promise<{ success: boolean; downloadId?: string; error?: string }>;
+  cancelDownload: (downloadId: string) => Promise<{ success: boolean }>;
+  getActiveDownloads: () => Promise<unknown[]>;
+  // Progress events
+  onDownloadProgress: (callback: (progress: unknown) => void) => () => void;
+  onDownloadComplete: (callback: (result: unknown) => void) => () => void;
+  // File system
+  selectFolder: () => Promise<{ success: boolean; path?: string }>;
+  getDefaultPath: () => Promise<string>;
+  openFileLocation: (filePath: string) => Promise<{ success: boolean }>;
+  openExternal: (url: string) => Promise<{ success: boolean }>;
+  // Settings
+  getSettings: () => Promise<Record<string, unknown>>;
+  saveSettings: (settings: Record<string, unknown>) => Promise<{ success: boolean }>;
+  // System
+  checkYtdlp: () => Promise<{ available: boolean; version: string | null }>;
+  // Cookie management (P2/P3)
+  selectCookiesFile: () => Promise<{ success: boolean; path?: string }>;
+  clearCookiesPath: () => Promise<{ success: boolean }>;
+  setBrowserCookies: (browser: string) => Promise<{ success: boolean }>;
+  // Platform info
+  getPlatformInfo: (url: string) => Promise<{
+    platform: string;
+    requiresCookies: boolean;
+    cookiesHint: string;
+    hasImpersonation: boolean;
+  }>;
+}
 
 // Type-safe access to electron API
 // In development (browser), provide mock implementations
@@ -27,9 +68,15 @@ const mockAPI: ElectronAPI = {
     clipboardMonitoring: false,
     notifications: true,
     downloadHistory: [],
+    cookiesPath: '',
+    browserCookies: '',
   }),
   saveSettings: async () => ({ success: true }),
   checkYtdlp: async () => ({ available: false, version: null }),
+  selectCookiesFile: async () => ({ success: false }),
+  clearCookiesPath: async () => ({ success: true }),
+  setBrowserCookies: async () => ({ success: true }),
+  getPlatformInfo: async () => ({ platform: 'unknown', requiresCookies: false, cookiesHint: '', hasImpersonation: false }),
 };
 
 export const api: ElectronAPI = isElectron ? window.electronAPI : mockAPI;

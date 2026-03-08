@@ -1,7 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { app } from 'electron';
 
 export interface VideoFormat {
   formatId: string;
@@ -49,6 +48,60 @@ export interface DownloadProgress {
   error?: string;
 }
 
+/**
+ * Platform-specific bypass configuration.
+ * Each platform may need different flags to avoid bans/blocks.
+ */
+interface PlatformBypassConfig {
+  impersonate?: string;
+  formatOverride?: string;
+  extraArgs?: string[];
+  requiresCookies?: boolean;
+  cookiesHint?: string;
+}
+
+const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
+  youtube: {
+    extraArgs: ['--extractor-args', 'youtube:player_client=mweb'],
+    requiresCookies: false,
+    cookiesHint: 'YouTube works best with POT provider plugin or browser cookies for age-restricted content.',
+  },
+  tiktok: {
+    impersonate: 'chrome-131',
+    formatOverride: 'b',
+    extraArgs: [],
+    requiresCookies: false,
+    cookiesHint: 'TikTok works from home IPs with browser impersonation. May be blocked on datacenter IPs.',
+  },
+  instagram: {
+    impersonate: 'chrome-131',
+    requiresCookies: true,
+    cookiesHint: 'Instagram requires login cookies. Import cookies.txt via Settings.',
+  },
+  facebook: {
+    impersonate: 'chrome-131',
+    requiresCookies: false,
+    cookiesHint: 'Public Facebook videos work with impersonation. Private videos need cookies.',
+  },
+  reddit: {
+    requiresCookies: false,
+    cookiesHint: 'Reddit works from home IPs. May need cookies on datacenter/cloud IPs.',
+  },
+  twitter: {
+    requiresCookies: false,
+    cookiesHint: 'Public video tweets work without auth. NSFW/sensitive content needs cookies.',
+  },
+  linkedin: {
+    requiresCookies: true,
+    cookiesHint: 'LinkedIn always requires login cookies.',
+  },
+  bilibili: {
+    extraArgs: ['--geo-bypass-country', 'CN'],
+    requiresCookies: false,
+    cookiesHint: 'Bilibili may need a Chinese proxy for geo-restricted content.',
+  },
+};
+
 export class YtdlpManager {
   private ytdlpPath: string;
 
@@ -92,7 +145,61 @@ export class YtdlpManager {
     });
   }
 
-  async getVideoInfo(url: string, proxy?: string): Promise<VideoInfo> {
+  /**
+   * Detect platform from URL string.
+   */
+  detectPlatformFromUrl(url: string): string {
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+    if (url.includes('tiktok.com')) return 'tiktok';
+    if (url.includes('instagram.com')) return 'instagram';
+    if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
+    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'facebook';
+    if (url.includes('reddit.com')) return 'reddit';
+    if (url.includes('vimeo.com')) return 'vimeo';
+    if (url.includes('twitch.tv')) return 'twitch';
+    if (url.includes('dailymotion.com')) return 'dailymotion';
+    if (url.includes('soundcloud.com')) return 'soundcloud';
+    if (url.includes('bilibili.com')) return 'bilibili';
+    if (url.includes('pinterest.com')) return 'pinterest';
+    if (url.includes('linkedin.com')) return 'linkedin';
+    if (url.includes('rumble.com')) return 'rumble';
+    if (url.includes('bandcamp.com')) return 'bandcamp';
+    if (url.includes('bitchute.com')) return 'bitchute';
+    if (url.includes('archive.org')) return 'archive';
+    return 'unknown';
+  }
+
+  /**
+   * Get bypass config for a given platform.
+   */
+  getBypassConfig(platform: string): PlatformBypassConfig | undefined {
+    return PLATFORM_BYPASS_CONFIG[platform];
+  }
+
+  /**
+   * Build platform-specific yt-dlp args for bypass.
+   */
+  private buildPlatformArgs(url: string, cookiesPath?: string): string[] {
+    const args: string[] = [];
+    const platform = this.detectPlatformFromUrl(url);
+    const config = PLATFORM_BYPASS_CONFIG[platform];
+
+    if (config?.impersonate) {
+      args.push('--impersonate', config.impersonate);
+    }
+
+    if (config?.extraArgs) {
+      args.push(...config.extraArgs);
+    }
+
+    if (cookiesPath && fs.existsSync(cookiesPath)) {
+      args.push('--cookies', cookiesPath);
+    }
+
+    return args;
+  }
+
+  async getVideoInfo(url: string, proxy?: string, cookiesPath?: string, browserCookies?: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
       const args = [
         '--dump-json',
@@ -101,13 +208,19 @@ export class YtdlpManager {
         '--no-playlist',
       ];
 
+      // Platform-specific bypass args
+      args.push(...this.buildPlatformArgs(url, cookiesPath));
+
+      // Browser cookies (--cookies-from-browser)
+      if (browserCookies) {
+        args.push('--cookies-from-browser', browserCookies);
+      }
+
       if (proxy) {
         args.push('--proxy', proxy);
       }
 
-      // Add geo-bypass
       args.push('--geo-bypass');
-
       args.push(url);
 
       const proc = spawn(this.ytdlpPath, args);
@@ -123,7 +236,7 @@ export class YtdlpManager {
             const raw = JSON.parse(stdout);
             const info = this.parseVideoInfo(raw);
             resolve(info);
-          } catch (e) {
+          } catch {
             reject(new Error('Failed to parse video info'));
           }
         } else {
@@ -133,12 +246,53 @@ export class YtdlpManager {
 
       proc.on('error', (err) => reject(err));
 
-      // Timeout after 30 seconds
+      // Timeout after 60 seconds (increased for platforms needing impersonation)
       setTimeout(() => {
         proc.kill();
         reject(new Error('Timed out fetching video info'));
-      }, 30000);
+      }, 60000);
     });
+  }
+
+  /**
+   * Fetch video info with automatic retry and fallback strategies.
+   * Tries with platform bypass first, then retries with cookies if needed.
+   */
+  async getVideoInfoWithRetry(
+    url: string,
+    proxy?: string,
+    cookiesPath?: string,
+    browserCookies?: string
+  ): Promise<VideoInfo> {
+    const platform = this.detectPlatformFromUrl(url);
+    const config = PLATFORM_BYPASS_CONFIG[platform];
+
+    // First attempt: with platform-specific bypass
+    try {
+      return await this.getVideoInfo(url, proxy, cookiesPath, browserCookies);
+    } catch (firstError: unknown) {
+      const firstMsg = firstError instanceof Error ? firstError.message : String(firstError);
+
+      // If platform needs cookies and none provided, throw helpful error
+      if (config?.requiresCookies && !cookiesPath && !browserCookies) {
+        throw new Error(
+          `${platform.charAt(0).toUpperCase() + platform.slice(1)} requires authentication. ` +
+          (config.cookiesHint || 'Please provide cookies in Settings.')
+        );
+      }
+
+      // Second attempt: retry without proxy if we had one
+      if (proxy) {
+        try {
+          return await this.getVideoInfo(url, undefined, cookiesPath, browserCookies);
+        } catch {
+          // Fall through to error
+        }
+      }
+
+      const hint = config?.cookiesHint ? ` Tip: ${config.cookiesHint}` : '';
+      throw new Error(firstMsg + hint);
+    }
   }
 
   private parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
@@ -210,15 +364,7 @@ export class YtdlpManager {
     if (ext.includes('rumble')) return 'rumble';
 
     // URL-based fallback
-    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
-    if (url.includes('tiktok.com')) return 'tiktok';
-    if (url.includes('instagram.com')) return 'instagram';
-    if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
-    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'facebook';
-    if (url.includes('reddit.com')) return 'reddit';
-    if (url.includes('vimeo.com')) return 'vimeo';
-
-    return extractor || 'unknown';
+    return this.detectPlatformFromUrl(url);
   }
 
   startDownload(
@@ -232,13 +378,27 @@ export class YtdlpManager {
     embedThumbnail: boolean,
     proxy: string | undefined,
     onProgress: (progress: DownloadProgress) => void,
-    downloadId: string
+    downloadId: string,
+    cookiesPath?: string,
+    browserCookies?: string
   ): ChildProcess {
     const args: string[] = [];
 
     // Output template
     const outputTemplate = path.join(outputPath, filename || '%(title)s.%(ext)s');
     args.push('-o', outputTemplate);
+
+    // Platform-specific bypass args
+    args.push(...this.buildPlatformArgs(url, cookiesPath));
+
+    // Browser cookies
+    if (browserCookies) {
+      args.push('--cookies-from-browser', browserCookies);
+    }
+
+    // Platform-specific format handling
+    const platform = this.detectPlatformFromUrl(url);
+    const config = PLATFORM_BYPASS_CONFIG[platform];
 
     // Format selection
     if (audioOnly) {
@@ -247,6 +407,9 @@ export class YtdlpManager {
         args.push('--audio-format', audioFormat);
       }
       args.push('--audio-quality', '0');
+    } else if (config?.formatOverride && (!formatId || formatId === 'best')) {
+      // Use platform-specific format override (e.g. 'b' for TikTok watermark-free)
+      args.push('-f', config.formatOverride);
     } else if (formatId && formatId !== 'best') {
       args.push('-f', formatId);
     } else {
@@ -272,7 +435,11 @@ export class YtdlpManager {
     args.push('--newline');
     args.push('--progress');
     args.push('--no-warnings');
-    args.push('--merge-output-format', 'mp4');
+
+    // Only set merge output format for platforms that need it (not TikTok single-stream)
+    if (platform !== 'tiktok') {
+      args.push('--merge-output-format', 'mp4');
+    }
 
     args.push(url);
 

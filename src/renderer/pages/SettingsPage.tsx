@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -18,6 +18,10 @@ export const SettingsPage: React.FC = () => {
     defaultAudioFormat,
     notifications,
     updateSettings,
+    cookiesPath,
+    setCookiesPath,
+    browserCookies,
+    setBrowserCookies,
   } = useSettingsStore();
 
   const [ytdlpStatus, setYtdlpStatus] = useState<{ checked: boolean; available: boolean; version: string | null }>({
@@ -36,6 +40,23 @@ export const SettingsPage: React.FC = () => {
   const handleCheckYtdlp = async () => {
     const result = await api.checkYtdlp();
     setYtdlpStatus({ checked: true, available: result.available, version: result.version });
+  };
+
+  const handleSelectCookiesFile = async () => {
+    const result = await api.selectCookiesFile();
+    if (result?.success && result.path) {
+      setCookiesPath(result.path);
+    }
+  };
+
+  const handleClearCookies = async () => {
+    await api.clearCookiesPath();
+    setCookiesPath('');
+  };
+
+  const handleBrowserCookiesChange = async (browser: string) => {
+    await api.setBrowserCookies(browser);
+    setBrowserCookies(browser);
   };
 
   return (
@@ -140,6 +161,73 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
             )}
+          </section>
+
+          {/* Cookie Authentication (P2/P3) */}
+          <section className="bg-card border border-border rounded-xl p-5">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <Cookie size={16} className="text-primary" />
+              Cookie Authentication
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Some platforms (Instagram, Reddit, Facebook, Twitter) require login cookies to download videos.
+              You can import a cookies.txt file or extract cookies from your browser.
+            </p>
+
+            {/* Import cookies.txt file */}
+            <div className="mb-4">
+              <label className="block text-xs text-muted-foreground mb-1.5">
+                <FileText size={12} className="inline mr-1" />
+                Cookies File (cookies.txt)
+              </label>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 px-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-muted-foreground truncate">
+                  {cookiesPath || 'No cookies file selected'}
+                </div>
+                {cookiesPath ? (
+                  <button
+                    onClick={handleClearCookies}
+                    className="px-3 py-2.5 bg-destructive/10 text-destructive rounded-xl text-sm font-medium hover:bg-destructive/20 transition-all flex-shrink-0 flex items-center gap-1"
+                  >
+                    <X size={14} />
+                    Clear
+                  </button>
+                ) : null}
+                <button
+                  onClick={handleSelectCookiesFile}
+                  className="px-4 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-all flex-shrink-0"
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+
+            {/* Browser cookies extraction */}
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1.5">
+                Extract Cookies from Browser
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {[{ value: '', label: 'None' }, { value: 'firefox', label: 'Firefox' }, { value: 'chrome', label: 'Chrome' }, { value: 'edge', label: 'Edge' }, { value: 'safari', label: 'Safari' }].map((browser) => (
+                  <button
+                    key={browser.value}
+                    onClick={() => handleBrowserCookiesChange(browser.value)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+                      browserCookies === browser.value
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'bg-secondary/50 border-border text-muted-foreground'
+                    )}
+                  >
+                    {browser.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Firefox is recommended (Chrome encrypts cookies since July 2024).
+                The browser must be installed on this computer.
+              </p>
+            </div>
           </section>
 
           {/* Download Preferences */}
