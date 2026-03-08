@@ -296,6 +296,15 @@ export class YtdlpManager {
   }
 
   /**
+   * Set the auto-detected browser for cookie extraction.
+   * Called by DownloadManager when a browser succeeds during download retry.
+   */
+  setAutoBrowser(browser: string): void {
+    this.autoBrowser = browser;
+    console.log(`[GrabTube] Auto-detected working browser: ${browser}`);
+  }
+
+  /**
    * Build platform-specific yt-dlp args for bypass.
    * Includes POT provider args for YouTube if the server is running.
    * Automatically uses cached browser cookies for YouTube if no explicit cookies are set.

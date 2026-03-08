@@ -112,19 +112,43 @@ export class DownloadManager {
     this.activeDownloads.set(downloadId, { process: proc, item });
 
     proc.on('close', (code) => {
-      if (code === 0) {
-        item.status = 'completed';
-        item.progress = 100;
-        this.activeDownloads.delete(downloadId);
-        onComplete(item);
-        this.processQueue();
+        if (code === 0) {
+          item.status = 'completed';
+          item.progress = 100;
+          this.activeDownloads.delete(downloadId);
+
+          // Cache successful browser for YouTube auto-detection
+          if (browserCookies && this.ytdlp.detectPlatformFromUrl(options.url) === 'youtube' && !this.ytdlp.getAutoBrowser()) {
+            this.ytdlp.setAutoBrowser(browserCookies);
+          }
+
+          onComplete(item);
+          this.processQueue();
       } else if (item.status === 'cancelled') {
         this.activeDownloads.delete(downloadId);
         onComplete(item);
         this.processQueue();
       } else {
-        // Auto-retry logic (P4): Try with cookies if first attempt failed
         const platform = this.ytdlp.detectPlatformFromUrl(options.url);
+
+        // YouTube auto-browser cookie retry: cycle through browsers on 403/bot errors
+        if (platform === 'youtube' && this.isYouTubeDownloadError(item.error)) {
+          const browsers = ['chrome', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'chromium'];
+          const currentIndex = browserCookies ? browsers.indexOf(browserCookies) : -1;
+          const nextIndex = currentIndex + 1;
+
+          if (nextIndex < browsers.length) {
+            const nextBrowser = browsers[nextIndex];
+            console.log(`[GrabTube] YouTube download failed (${item.error?.substring(0, 60)}), trying browser: ${nextBrowser}`);
+            item.error = undefined;
+            item.progress = 0;
+            this.activeDownloads.delete(downloadId);
+            this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, nextBrowser, 0);
+            return;
+          }
+        }
+
+        // Auto-retry logic (P4): Try with cookies if first attempt failed
         const needsRetry = retryCount === 0 && this.shouldRetryWithCookies(platform, item.error);
 
         if (needsRetry && (cookiesPath || browserCookies)) {
@@ -138,7 +162,7 @@ export class DownloadManager {
           item.error = item.error || 'Download failed with exit code ' + code;
           const config = this.ytdlp.getBypassConfig(platform);
           if (config?.cookiesHint && !cookiesPath && !browserCookies) {
-            item.error += '. Tip: ' + config.cookiesHint;
+            item.error += '. Tip: YouTube works best with POT provider plugin or browser cookies for age-restricted content.';
           }
           this.activeDownloads.delete(downloadId);
           onComplete(item);
@@ -165,6 +189,20 @@ export class DownloadManager {
     if (!error) return true; // Unknown error, try cookies
     const authErrors = ['authentication', 'login', 'sign in', 'cookies', 'forbidden', '403', '401', 'private'];
     return authErrors.some((keyword) => error.toLowerCase().includes(keyword));
+  }
+
+  /**
+   * Detect if a YouTube download error is a 403/bot/cookie issue that can be fixed with browser cookies.
+   */
+  private isYouTubeDownloadError(error?: string): boolean {
+    if (!error) return false;
+    const lower = error.toLowerCase();
+    return lower.includes('403') ||
+           lower.includes('forbidden') ||
+           lower.includes('sign in to confirm') ||
+           lower.includes('not a bot') ||
+           lower.includes('confirm your age') ||
+           lower.includes('use --cookies');
   }
 
   private processQueue(): void {

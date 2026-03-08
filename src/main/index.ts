@@ -123,6 +123,8 @@ function setupIPC(): void {
       const proxy = proxySettings?.enabled ? proxySettings.url : undefined;
       const cookiesPath = settings.get('cookiesPath') as string | undefined;
       const browserCookies = settings.get('browserCookies') as string | undefined;
+      // Use auto-detected browser cookies for YouTube if no explicit cookies configured
+      const effectiveBrowserCookies = browserCookies || ytdlp.getAutoBrowser() || undefined;
       const downloadId = downloadManager.startDownload(
         options,
         proxy,
@@ -133,7 +135,7 @@ function setupIPC(): void {
           mainWindow?.webContents.send('download-complete', result);
         },
         cookiesPath || undefined,
-        browserCookies || undefined
+        effectiveBrowserCookies
       );
       return { success: true, downloadId };
     } catch (error: unknown) {
