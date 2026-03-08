@@ -3,45 +3,47 @@
 @tailwind utilities;
 
 @layer base {
+  /* Dark mode (default) — TubeMate dark theme */
   :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --background: 200 10% 8%;
+    --foreground: 0 0% 95%;
+    --card: 200 10% 11%;
+    --card-foreground: 0 0% 95%;
+    --primary: 142 70% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 10% 15%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 200 10% 18%;
+    --muted-foreground: 200 10% 55%;
+    --accent: 142 70% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 10% 18%;
+    --input: 200 10% 18%;
+    --ring: 142 70% 45%;
     --radius: 0.75rem;
   }
 
+  /* Light mode — TubeMate light theme */
   .light {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 0 0% 97%;
+    --foreground: 200 10% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --card-foreground: 200 10% 10%;
+    --primary: 142 70% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 10% 93%;
+    --secondary-foreground: 200 10% 10%;
+    --muted: 200 10% 93%;
+    --muted-foreground: 200 10% 45%;
+    --accent: 142 70% 42%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 10% 88%;
+    --input: 200 10% 88%;
+    --ring: 142 70% 42%;
   }
 }
 
@@ -51,7 +53,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -77,21 +79,134 @@
   background: hsl(var(--muted-foreground));
 }
 
-/* Animations */
+/* ============================================
+   ANIMATIONS & TRANSITIONS
+   ============================================ */
+
+/* Slide in from bottom */
+@keyframes slide-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-in {
+  animation: slide-in 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Fade in */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Scale in (for badges, modals) */
+@keyframes scale-in {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.animate-scale-in {
+  animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Slide in from left (for sidebar items) */
+@keyframes slide-in-left {
+  from { transform: translateX(-10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Progress bar shimmer */
+@keyframes progress-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-progress-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary)) 0%,
+    hsl(142 70% 55%) 50%,
+    hsl(var(--primary)) 100%
+  );
+  background-size: 200% 100%;
+  animation: progress-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Download pulse */
 @keyframes pulse-download {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
 }
-
 .animate-pulse-download {
   animation: pulse-download 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-@keyframes slide-in {
-  from { transform: translateY(10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+/* Bounce subtle */
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.animate-bounce-subtle {
+  animation: bounce-subtle 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.animate-slide-in {
-  animation: slide-in 0.3s ease-out;
+/* ============================================
+   HOVER & TRANSITION UTILITIES
+   ============================================ */
+
+/* Smooth hover lift effect for cards */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.15);
+}
+
+/* Glow effect on hover for primary buttons */
+.hover-glow {
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.hover-glow:hover {
+  box-shadow: 0 0 20px -3px hsl(var(--primary) / 0.4);
+  transform: scale(1.02);
+}
+.hover-glow:active {
+  transform: scale(0.98);
+}
+
+/* Press animation */
+.press-effect {
+  transition: transform 0.1s ease;
+}
+.press-effect:active {
+  transform: scale(0.97);
+}
+
+/* macOS traffic light dots */
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: opacity 0.15s ease;
+}
+.traffic-light:hover { opacity: 0.8; }
+.traffic-light-red { background: #FF5F57; }
+.traffic-light-yellow { background: #FEBC2E; }
+.traffic-light-green { background: #28C840; }
+
+/* Staggered animation delays */
+.stagger-1 { animation-delay: 0.05s; animation-fill-mode: both; }
+.stagger-2 { animation-delay: 0.1s; animation-fill-mode: both; }
+.stagger-3 { animation-delay: 0.15s; animation-fill-mode: both; }
+.stagger-4 { animation-delay: 0.2s; animation-fill-mode: both; }
+.stagger-5 { animation-delay: 0.25s; animation-fill-mode: both; }
+
+/* URL input focus glow */
+.url-input-glow:focus-within {
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15), 0 2px 8px hsl(var(--primary) / 0.1);
 }

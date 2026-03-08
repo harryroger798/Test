@@ -62,14 +62,19 @@ export const SettingsPage: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Settings size={24} className="text-primary" />
-          <h2 className="text-xl font-bold text-foreground">Settings</h2>
+        <div className="flex items-center gap-3 mb-6 animate-fade-in">
+          <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+            <Settings size={20} className="text-primary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">Settings</h2>
+            <p className="text-xs text-muted-foreground">Configure your preferences</p>
+          </div>
         </div>
 
         <div className="space-y-6">
           {/* Download Path */}
-          <section className="bg-card border border-border rounded-xl p-5">
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in stagger-1">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <FolderOpen size={16} className="text-primary" />
               Download Location
@@ -88,7 +93,7 @@ export const SettingsPage: React.FC = () => {
           </section>
 
           {/* Theme */}
-          <section className="bg-card border border-border rounded-xl p-5">
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in stagger-2">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Palette size={16} className="text-primary" />
               Appearance
@@ -112,7 +117,7 @@ export const SettingsPage: React.FC = () => {
           </section>
 
           {/* Proxy */}
-          <section className="bg-card border border-border rounded-xl p-5">
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in stagger-3">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Globe size={16} className="text-primary" />
               Proxy Settings
@@ -164,7 +169,7 @@ export const SettingsPage: React.FC = () => {
           </section>
 
           {/* Cookie Authentication (P2/P3) */}
-          <section className="bg-card border border-border rounded-xl p-5">
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in stagger-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Cookie size={16} className="text-primary" />
               Cookie Authentication
@@ -231,7 +236,7 @@ export const SettingsPage: React.FC = () => {
           </section>
 
           {/* Download Preferences */}
-          <section className="bg-card border border-border rounded-xl p-5">
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in stagger-5">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Shield size={16} className="text-primary" />
               Download Preferences
@@ -297,7 +302,7 @@ export const SettingsPage: React.FC = () => {
           </section>
 
           {/* System Info */}
-          <section className="bg-card border border-border rounded-xl p-5">
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Info size={16} className="text-primary" />
               System

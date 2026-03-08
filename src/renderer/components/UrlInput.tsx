@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Search, Clipboard, X, Loader2 } from 'lucide-react';
+import { Link2, Clipboard, X, Loader2 } from 'lucide-react';
 import { isValidUrl, detectPlatformFromUrl } from '../lib/utils';
 import { PlatformBadge } from './PlatformBadge';
 import { useDownloadStore } from '../store/downloadStore';
@@ -52,19 +52,20 @@ export const UrlInput: React.FC = () => {
   }, [reset]);
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
+    <div className="w-full max-w-3xl mx-auto animate-slide-in">
       <form onSubmit={handleSubmit} className="relative">
-        <div className="relative flex items-center">
+        <div className="relative flex items-center url-input-glow rounded-2xl">
+          {/* Link icon */}
           <div className="absolute left-4 text-muted-foreground">
-            <Search size={20} />
+            <Link2 size={20} />
           </div>
 
           <input
             type="text"
             value={url}
             onChange={(e) => handleUrlChange(e.target.value)}
-            placeholder="Paste a video URL from YouTube, TikTok, Instagram, Twitter..."
-            className="w-full pl-12 pr-32 py-4 bg-secondary/50 border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-base"
+            placeholder="Paste a video URL here..."
+            className="w-full pl-12 pr-40 py-4 bg-secondary/50 border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 transition-all duration-200 text-base"
             disabled={isLoading}
           />
 
@@ -73,7 +74,7 @@ export const UrlInput: React.FC = () => {
               <button
                 type="button"
                 onClick={handleClear}
-                className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
+                className="p-2 text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-secondary press-effect"
               >
                 <X size={18} />
               </button>
@@ -81,7 +82,7 @@ export const UrlInput: React.FC = () => {
             <button
               type="button"
               onClick={handlePaste}
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
+              className="p-2 text-muted-foreground hover:text-primary transition-all duration-200 rounded-lg hover:bg-primary/10 press-effect"
               title="Paste from clipboard"
             >
               <Clipboard size={18} />
@@ -89,15 +90,15 @@ export const UrlInput: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading || !url}
-              className="px-5 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              className="px-5 py-2 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 hover-glow"
             >
               {isLoading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Fetching...
+                  Converting...
                 </>
               ) : (
-                'Fetch'
+                'Convert'
               )}
             </button>
           </div>
@@ -106,7 +107,7 @@ export const UrlInput: React.FC = () => {
 
       {/* Platform detection badge */}
       {detectedPlatform && detectedPlatform !== 'unknown' && (
-        <div className="mt-3 flex items-center gap-2 animate-slide-in">
+        <div className="mt-3 flex items-center gap-2 animate-scale-in">
           <span className="text-sm text-muted-foreground">Detected:</span>
           <PlatformBadge platform={detectedPlatform} size="sm" />
         </div>

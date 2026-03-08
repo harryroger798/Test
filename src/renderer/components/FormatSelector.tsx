@@ -85,13 +85,13 @@ export const FormatSelector: React.FC = () => {
 
   return (
     <div className="w-full max-w-3xl mx-auto mt-4 animate-slide-in">
-      <div className="bg-card border border-border rounded-2xl p-5">
+      <div className="bg-card border border-border rounded-2xl p-5 hover-lift transition-all duration-300">
         {/* Video/Audio Toggle */}
         <div className="flex items-center gap-2 mb-5">
           <button
             onClick={() => setAudioOnly(false)}
             className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all text-sm',
+              'flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 text-sm press-effect',
               !audioOnly
                 ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
                 : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -103,7 +103,7 @@ export const FormatSelector: React.FC = () => {
           <button
             onClick={() => setAudioOnly(true)}
             className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all text-sm',
+              'flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-200 text-sm press-effect',
               audioOnly
                 ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25'
                 : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -122,7 +122,7 @@ export const FormatSelector: React.FC = () => {
               <button
                 onClick={() => setSelectedFormat('best')}
                 className={cn(
-                  'px-3 py-2.5 rounded-xl text-sm font-medium transition-all border',
+                  'px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border press-effect',
                   selectedFormat === 'best'
                     ? 'bg-primary/10 border-primary text-primary'
                     : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
@@ -135,10 +135,10 @@ export const FormatSelector: React.FC = () => {
                   key={q.formatId}
                   onClick={() => setSelectedFormat(q.formatId)}
                   className={cn(
-                    'px-3 py-2.5 rounded-xl text-sm font-medium transition-all border',
-                    selectedFormat === q.formatId
-                      ? 'bg-primary/10 border-primary text-primary'
-                      : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+                      'px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border press-effect',
+                      selectedFormat === q.formatId
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
                   )}
                 >
                   <div>{q.quality}</div>
@@ -158,10 +158,10 @@ export const FormatSelector: React.FC = () => {
                   key={fmt}
                   onClick={() => setAudioFormat(fmt)}
                   className={cn(
-                    'px-4 py-2.5 rounded-xl text-sm font-medium transition-all border uppercase',
-                    audioFormat === fmt
-                      ? 'bg-primary/10 border-primary text-primary'
-                      : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+                      'px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border uppercase press-effect',
+                      audioFormat === fmt
+                        ? 'bg-primary/10 border-primary text-primary'
+                        : 'bg-secondary/50 border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
                   )}
                 >
                   {fmt}
@@ -227,7 +227,7 @@ export const FormatSelector: React.FC = () => {
           <button
             onClick={handleDownload}
             disabled={isLoading}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40"
+            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-primary/25 hover:shadow-primary/40 hover-glow"
           >
             <Download size={18} />
             Download {audioOnly ? 'Audio' : 'Video'}

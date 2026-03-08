@@ -106,8 +106,8 @@ interface DownloadStore {
   reset: () => void;
 
   // Navigation
-  currentPage: 'home' | 'queue' | 'history' | 'settings';
-  setCurrentPage: (page: 'home' | 'queue' | 'history' | 'settings') => void;
+  currentPage: 'home' | 'video' | 'audio' | 'settings' | 'help';
+  setCurrentPage: (page: 'home' | 'video' | 'audio' | 'settings' | 'help') => void;
 }
 
 export const useDownloadStore = create<DownloadStore>((set, get) => ({
