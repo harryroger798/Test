@@ -21,6 +21,7 @@ export interface AppSettings {
   cookiesPath: string;
   browserCookies: string;
   setupComplete: boolean;
+  featureTourComplete: boolean;
 }
 
 export interface HistoryItem {
@@ -54,6 +55,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   cookiesPath: '',
   browserCookies: '',
   setupComplete: false,
+  featureTourComplete: false,
 };
 
 export class SettingsManager {
