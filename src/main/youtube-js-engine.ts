@@ -1,5 +1,5 @@
 /**
- * YouTube.js (InnerTube API) Engine for GrabTube v1.0.11.
+ * YouTube.js (InnerTube API) Engine for GrabTube v1.0.12.
  *
  * METADATA-ONLY engine for YouTube -- used for fast video info retrieval
  * (title, thumbnail, duration, author). Does NOT handle downloads.
@@ -111,6 +111,8 @@ export class YouTubeJSEngine {
   private lastInitTime = 0;
   private lastSuccessfulClient: InnerTubeClientType | null = null;
   private static readonly REINIT_INTERVAL = 30 * 60 * 1000; // 30 minutes
+  private static readonly CLIENT_TIMEOUT_MS = 8000;  // 8 sec per client
+  private static readonly TOTAL_METADATA_TIMEOUT_MS = 20000;  // 20 sec total for all clients
 
   /**
    * Initialize a single Innertube instance.
@@ -212,11 +214,25 @@ export class YouTubeJSEngine {
 
     const clientOrder = this.getClientOrder();
     let lastError: Error | null = null;
+    const overallStart = Date.now();
 
     for (const clientType of clientOrder) {
+      // Check overall timeout before trying another client
+      if (Date.now() - overallStart > YouTubeJSEngine.TOTAL_METADATA_TIMEOUT_MS) {
+        console.log('[GrabTube][YTJS] Overall metadata timeout reached, giving up on YouTube.js');
+        break;
+      }
+
       try {
         console.log(`[GrabTube][YTJS] Trying ${clientType} client for video info...`);
-        const info = await yt.getInfo(videoId, { client: clientType });
+
+        // Race yt.getInfo against a per-client timeout
+        const info = await Promise.race([
+          yt.getInfo(videoId, { client: clientType }),
+          new Promise<never>((_resolve, reject) =>
+            setTimeout(() => reject(new Error(`${clientType} client timed out after ${YouTubeJSEngine.CLIENT_TIMEOUT_MS}ms`)), YouTubeJSEngine.CLIENT_TIMEOUT_MS)
+          ),
+        ]);
         const basicInfo = info.basic_info;
         if (!basicInfo || !basicInfo.title) {
           throw new Error(`No video info from ${clientType} client`);

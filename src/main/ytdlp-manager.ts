@@ -66,7 +66,7 @@ interface PlatformBypassConfig {
 const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
   youtube: {
     impersonate: 'chrome',
-    extraArgs: ['--check-formats', '-4'],
+    extraArgs: ['-4'],
     requiresCookies: false,
     cookiesHint: 'YouTube works best with browser cookies or --impersonate chrome for reliable downloads.',
   },

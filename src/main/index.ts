@@ -98,10 +98,16 @@ function setupIPC(): void {
       const platform = ytdlp.detectPlatformFromUrl(url);
 
       // YouTube: try YouTube.js engine first (no cookies needed)
+      // Wrap with a hard 25-second timeout so the UI never hangs indefinitely
       if (platform === 'youtube') {
         try {
           const ytjsEngine = downloadManager.getYTJSEngine();
-          const ytjsInfo = await ytjsEngine.getVideoInfo(url);
+          const ytjsInfo = await Promise.race([
+            ytjsEngine.getVideoInfo(url),
+            new Promise<never>((_resolve, reject) =>
+              setTimeout(() => reject(new Error('YouTube.js metadata fetch timed out (25s)')), 25000)
+            ),
+          ]);
           // Convert to the same format yt-dlp returns
           return {
             success: true,
@@ -140,7 +146,7 @@ function setupIPC(): void {
           };
         } catch (ytjsError) {
           const ytjsMsg = ytjsError instanceof Error ? ytjsError.message : String(ytjsError);
-          console.log(`[GrabTube] YouTube.js info fetch failed (${ytjsMsg.substring(0, 80)}), falling back to yt-dlp...`);
+          console.log(`[GrabTube] YouTube.js info fetch failed (${ytjsMsg.substring(0, 100)}), falling back to yt-dlp...`);
           // Fall through to yt-dlp
         }
       }
