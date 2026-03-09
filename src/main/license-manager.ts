@@ -12,7 +12,7 @@ import * as os from 'os';
 import { app } from 'electron';
 
 // License server URL — update this after deploying the Cloudflare Worker
-const LICENSE_SERVER_URL = 'https://grabtube-license.YOUR_ACCOUNT.workers.dev';
+const LICENSE_SERVER_URL = 'https://grabtube-license.grabtube-app.workers.dev';
 
 export type LicenseTier = 'free' | 'pro' | 'family';
 

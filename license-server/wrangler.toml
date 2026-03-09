@@ -5,4 +5,4 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "grabtube-licenses"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "7fab7a22-cd2d-4efc-ac08-574372dd7290"
