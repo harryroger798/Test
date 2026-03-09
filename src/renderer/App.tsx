@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, LogIn } from 'lucide-react';
+import { Bell, Key, Crown } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { SetupWizard } from './components/SetupWizard';
@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
 import { useDownloadStore } from './store/downloadStore';
 import { useSettingsStore } from './store/settingsStore';
+import { cn } from './lib/utils';
 import { api } from './lib/ipc';
 
 const App: React.FC = () => {
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [showCookieBlock, setShowCookieBlock] = useState(false);
   const [showFeatureTour, setShowFeatureTour] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
+  const [licenseTier, setLicenseTier] = useState<string>('free');
 
   // Check if first-run setup and feature tour have been completed
   useEffect(() => {
@@ -36,6 +38,10 @@ const App: React.FC = () => {
         });
       }
       setSetupChecked(true);
+    });
+    // Load license tier for the top bar badge
+    api.getLicenseState().then((state) => {
+      setLicenseTier(state.tier);
     });
   }, []);
 
@@ -134,7 +140,7 @@ const App: React.FC = () => {
             <span className="traffic-light traffic-light-green" />
           </div>
 
-          {/* Right side: theme toggle, notification, sign in */}
+          {/* Right side: theme toggle, notification, license badge */}
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
             <button
@@ -146,10 +152,19 @@ const App: React.FC = () => {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full animate-pulse-download" />
             </button>
             <button
-              className="ml-1 flex items-center gap-2 px-3 py-1.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-medium hover:bg-destructive/90 transition-all duration-200 press-effect"
+              onClick={() => useDownloadStore.getState().setCurrentPage('settings')}
+              className={cn(
+                'ml-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 press-effect',
+                licenseTier === 'free'
+                  ? 'bg-secondary/50 border border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+                  : 'bg-primary/10 border border-primary text-primary hover:bg-primary/20'
+              )}
+              title={licenseTier === 'free' ? 'Activate License' : `${licenseTier.toUpperCase()} Plan`}
             >
-              <LogIn size={14} />
-              <span className="hidden sm:inline">Sign In</span>
+              {licenseTier === 'free' ? <Key size={14} /> : <Crown size={14} />}
+              <span className="hidden sm:inline">
+                {licenseTier === 'free' ? 'Activate' : licenseTier.toUpperCase()}
+              </span>
             </button>
           </div>
         </div>
