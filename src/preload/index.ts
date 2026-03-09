@@ -83,6 +83,12 @@ const electronAPI = {
   // App version
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
+  // Setup wizard
+  detectBrowsers: () => ipcRenderer.invoke('detect-browsers'),
+  verifyBrowserCookies: (browser?: string) => ipcRenderer.invoke('verify-browser-cookies', browser),
+  getSetupComplete: () => ipcRenderer.invoke('get-setup-complete'),
+  setSetupComplete: () => ipcRenderer.invoke('set-setup-complete'),
+
   // Health monitor
   getHealthStatus: () => ipcRenderer.invoke('get-health-status'),
   runHealthCheck: () => ipcRenderer.invoke('run-health-check'),

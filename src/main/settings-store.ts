@@ -20,6 +20,7 @@ export interface AppSettings {
   downloadHistory: HistoryItem[];
   cookiesPath: string;
   browserCookies: string;
+  setupComplete: boolean;
 }
 
 export interface HistoryItem {
@@ -52,6 +53,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   downloadHistory: [],
   cookiesPath: '',
   browserCookies: '',
+  setupComplete: false,
 };
 
 export class SettingsManager {

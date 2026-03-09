@@ -375,6 +375,27 @@ function setupIPC(): void {
   ipcMain.handle('get-app-version', async () => {
     return { version: app.getVersion() };
   });
+
+  // Detect installed browsers for setup wizard
+  ipcMain.handle('detect-browsers', async () => {
+    return ytdlp.getInstalledBrowsers();
+  });
+
+  // Verify browser cookies work for YouTube (setup wizard + cookie check)
+  ipcMain.handle('verify-browser-cookies', async (_event, browser?: string) => {
+    return ytdlp.verifyBrowserCookies(browser);
+  });
+
+  // Check if setup has been completed
+  ipcMain.handle('get-setup-complete', async () => {
+    return { complete: settings.get('setupComplete') === true };
+  });
+
+  // Mark setup as complete
+  ipcMain.handle('set-setup-complete', async () => {
+    settings.set('setupComplete', true);
+    return { success: true };
+  });
 }
 
 // App lifecycle

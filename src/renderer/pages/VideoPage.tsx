@@ -17,10 +17,12 @@ export const VideoPage: React.FC = () => {
     fetchVideoInfo(url);
   };
 
-  const videoDownloads = downloads.filter(
+  // Only show video downloads (exclude audio-only)
+  const videoOnly = downloads.filter((d) => !d.audioOnly);
+  const videoDownloads = videoOnly.filter(
     (d) => d.status === 'downloading' || d.status === 'queued' || d.status === 'processing'
   );
-  const completedDownloads = downloads.filter(
+  const completedDownloads = videoOnly.filter(
     (d) => d.status === 'completed' || d.status === 'error' || d.status === 'cancelled'
   );
 
@@ -48,7 +50,7 @@ export const VideoPage: React.FC = () => {
           )}
         </div>
 
-        {downloads.length === 0 ? (
+        {videoOnly.length === 0 ? (
           <div className="text-center py-16 animate-fade-in">
             <div className="w-16 h-16 bg-secondary/50 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Video size={28} className="text-muted-foreground/40" />

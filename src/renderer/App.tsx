@@ -1,7 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bell, LogIn } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
+import { SetupWizard } from './components/SetupWizard';
+import { CookieBlockModal } from './components/CookieBlockModal';
 import { HomePage } from './pages/HomePage';
 import { VideoPage } from './pages/VideoPage';
 import { AudioPage } from './pages/AudioPage';
@@ -9,10 +11,44 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
 import { useDownloadStore } from './store/downloadStore';
 import { useSettingsStore } from './store/settingsStore';
+import { api } from './lib/ipc';
 
 const App: React.FC = () => {
   const currentPage = useDownloadStore((s) => s.currentPage);
   const { loadSettings, theme } = useSettingsStore();
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showCookieBlock, setShowCookieBlock] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
+
+  // Check if first-run setup has been completed
+  useEffect(() => {
+    api.getSetupComplete().then((result) => {
+      if (!result.complete) {
+        setShowSetupWizard(true);
+      }
+      setSetupChecked(true);
+    });
+  }, []);
+
+  // Listen for download errors that indicate cookie issues
+  useEffect(() => {
+    const cleanup = api.onDownloadComplete((result: unknown) => {
+      const r = result as { success?: boolean; error?: string };
+      if (!r.success && r.error) {
+        const errorLower = r.error.toLowerCase();
+        if (
+          errorLower.includes('sign in') ||
+          errorLower.includes('not a bot') ||
+          errorLower.includes('browser cookies') ||
+          errorLower.includes('youtube is blocking') ||
+          errorLower.includes('cookies')
+        ) {
+          setShowCookieBlock(true);
+        }
+      }
+    });
+    return cleanup;
+  }, []);
 
   useEffect(() => {
     loadSettings();
@@ -42,6 +78,20 @@ const App: React.FC = () => {
         return <HomePage />;
     }
   };
+
+  // Show setup wizard on first run
+  if (showSetupWizard && setupChecked) {
+    return <SetupWizard onComplete={() => setShowSetupWizard(false)} />;
+  }
+
+  // Don't render until setup check is done
+  if (!setupChecked) {
+    return (
+      <div className="flex h-screen bg-background items-center justify-center">
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -79,6 +129,14 @@ const App: React.FC = () => {
         {/* Page Content */}
         {renderPage()}
       </div>
+
+      {/* Cookie Block Modal — shown when YouTube blocks a download */}
+      {showCookieBlock && (
+        <CookieBlockModal
+          onDismiss={() => setShowCookieBlock(false)}
+          onVerified={() => setShowCookieBlock(false)}
+        />
+      )}
     </div>
   );
 };
