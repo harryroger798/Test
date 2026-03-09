@@ -65,9 +65,10 @@ interface PlatformBypassConfig {
 
 const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
   youtube: {
-    extraArgs: ['--extractor-args', 'youtube:player_client=mweb'],
+    impersonate: 'chrome',
+    extraArgs: ['--check-formats', '-4'],
     requiresCookies: false,
-    cookiesHint: 'YouTube works best with POT provider plugin or browser cookies for age-restricted content.',
+    cookiesHint: 'YouTube works best with browser cookies or --impersonate chrome for reliable downloads.',
   },
   tiktok: {
     impersonate: 'chrome-131',
