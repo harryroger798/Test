@@ -48,6 +48,11 @@ export interface ElectronAPI {
   }>;
   // App version
   getAppVersion: () => Promise<{ version: string }>;
+  // Setup wizard
+  detectBrowsers: () => Promise<Array<{ name: string; installed: boolean }>>;
+  verifyBrowserCookies: (browser?: string) => Promise<{ success: boolean; browser?: string; error?: string }>;
+  getSetupComplete: () => Promise<{ complete: boolean }>;
+  setSetupComplete: () => Promise<{ success: boolean }>;
   // Binary status
   getBinaryStatus: () => Promise<{
     ytdlp: { path: string; bundled: boolean; available: boolean };
@@ -127,7 +132,12 @@ const mockAPI: ElectronAPI = {
   checkBinaryUpdates: async () => ({ success: true }),
   onBinaryUpdateStatus: () => () => {},
   // App version mock
-  getAppVersion: async () => ({ version: '1.0.7' }),
+  getAppVersion: async () => ({ version: '1.0.13' }),
+  // Setup wizard mocks
+  detectBrowsers: async () => [{ name: 'chrome', installed: true }, { name: 'firefox', installed: false }, { name: 'edge', installed: true }],
+  verifyBrowserCookies: async () => ({ success: true, browser: 'chrome' }),
+  getSetupComplete: async () => ({ complete: true }),
+  setSetupComplete: async () => ({ success: true }),
   // Health monitor mocks
   getHealthStatus: async () => [],
   runHealthCheck: async () => [],

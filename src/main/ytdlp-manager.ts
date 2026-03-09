@@ -649,6 +649,108 @@ export class YtdlpManager {
   }
 
   /**
+   * Get list of installed browsers that could provide cookies.
+   * Returns array of { name, installed } for each known browser.
+   */
+  getInstalledBrowsers(): Array<{ name: string; installed: boolean }> {
+    const home = os.homedir();
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+
+    const browserChecks: Array<{ name: string; paths: string[] }> = [
+      {
+        name: 'firefox',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Roaming', 'Mozilla', 'Firefox', 'Profiles')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Firefox', 'Profiles')]
+            : [path.join(home, '.mozilla', 'firefox')],
+      },
+      {
+        name: 'chrome',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Google', 'Chrome', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Google', 'Chrome')]
+            : [path.join(home, '.config', 'google-chrome')],
+      },
+      {
+        name: 'edge',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Microsoft Edge')]
+            : [path.join(home, '.config', 'microsoft-edge')],
+      },
+      {
+        name: 'brave',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'BraveSoftware', 'Brave-Browser', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'BraveSoftware', 'Brave-Browser')]
+            : [path.join(home, '.config', 'BraveSoftware', 'Brave-Browser')],
+      },
+      {
+        name: 'opera',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Roaming', 'Opera Software', 'Opera Stable')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'com.operasoftware.Opera')]
+            : [path.join(home, '.config', 'opera')],
+      },
+      {
+        name: 'vivaldi',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Vivaldi', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Vivaldi')]
+            : [path.join(home, '.config', 'vivaldi')],
+      },
+    ];
+
+    return browserChecks.map((browser) => ({
+      name: browser.name,
+      installed: browser.paths.some((p) => {
+        try {
+          return fs.existsSync(p);
+        } catch {
+          return false;
+        }
+      }),
+    }));
+  }
+
+  /**
+   * Verify that browser cookies work for YouTube by doing a quick test fetch.
+   * Returns { success, browser } if cookies work, or { success: false, error } if not.
+   */
+  async verifyBrowserCookies(browser?: string): Promise<{ success: boolean; browser?: string; error?: string }> {
+    const testUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const browsers = browser ? [browser] : YtdlpManager.AUTO_BROWSERS;
+
+    for (const b of browsers) {
+      try {
+        console.log(`[GrabTube] Verifying cookies for browser: ${b}...`);
+        await this.getVideoInfo(testUrl, undefined, undefined, b);
+        this.autoBrowser = b;
+        console.log(`[GrabTube] Browser cookies verified: ${b}`);
+        return { success: true, browser: b };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // If it's a video-level error (not auth), cookies are actually working
+        if (msg.toLowerCase().includes('video unavailable') || msg.toLowerCase().includes('private')) {
+          this.autoBrowser = b;
+          return { success: true, browser: b };
+        }
+        console.log(`[GrabTube] Browser ${b} cookies failed: ${msg.substring(0, 80)}`);
+        continue;
+      }
+    }
+
+    return { success: false, error: 'No browser with valid YouTube cookies found. Please open YouTube in your browser and log in.' };
+  }
+
+  /**
    * Fetch video info with automatic retry and fallback strategies.
    * For YouTube: proactively uses browser cookies on the FIRST attempt.
    * If the first attempt fails, cycles through ALL browsers.
