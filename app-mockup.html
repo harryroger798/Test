@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; }
+
+.app-window {
+  width: 1200px;
+  height: 780px;
+  background: #0f172a;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 72px;
+  background: #0a0f1e;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 8px;
+}
+.sidebar-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sidebar-icon.active {
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.3);
+}
+.sidebar-icon:not(.active) {
+  background: transparent;
+  border: 1px solid transparent;
+}
+.sidebar-logo {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 18px;
+  color: white;
+}
+
+/* Main content */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Title bar */
+.titlebar {
+  height: 44px;
+  background: #0a0f1e;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+}
+.dot { width: 12px; height: 12px; border-radius: 50%; }
+.dot-red { background: #ef4444; }
+.dot-yellow { background: #eab308; }
+.dot-green { background: #22c55e; }
+.titlebar-text {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* URL bar */
+.url-section {
+  padding: 24px 32px 16px;
+  display: flex;
+  gap: 12px;
+}
+.url-input {
+  flex: 1;
+  height: 48px;
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 0 16px;
+  color: #94a3b8;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+.grab-btn {
+  height: 48px;
+  padding: 0 28px;
+  background: #22c55e;
+  border: none;
+  border-radius: 12px;
+  color: #0a0f1e;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* Video cards */
+.content-area {
+  flex: 1;
+  padding: 8px 32px 24px;
+  overflow-y: auto;
+}
+.section-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.video-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.video-card {
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+.video-card:hover {
+  border-color: rgba(34,197,94,0.3);
+  box-shadow: 0 0 20px rgba(34,197,94,0.1);
+}
+.video-thumb {
+  height: 140px;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.play-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(34,197,94,0.9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+.video-info {
+  padding: 14px 16px;
+}
+.video-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+.video-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+.video-progress {
+  margin-top: 10px;
+  height: 4px;
+  background: #0f172a;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.video-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+.video-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-complete { background: rgba(34,197,94,0.15); color: #4ade80; }
+.status-downloading { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.status-queued { background: rgba(234,179,8,0.15); color: #facc15; }
+
+/* Bottom status bar */
+.statusbar {
+  height: 32px;
+  background: #0a0f1e;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 11px;
+  color: #475569;
+  gap: 16px;
+}
+.statusbar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+</style>
+</head>
+<body>
+<div class="app-window" id="app">
+  <div class="sidebar">
+    <div class="sidebar-logo">G</div>
+    <div class="sidebar-icon active">🏠</div>
+    <div class="sidebar-icon">🎬</div>
+    <div class="sidebar-icon">🎵</div>
+    <div class="sidebar-icon">⚙️</div>
+    <div class="sidebar-icon">❓</div>
+  </div>
+  <div class="main">
+    <div class="titlebar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <div class="titlebar-text">GrabTube v1.0.16</div>
+    </div>
+    <div class="url-section">
+      <div class="url-input">https://www.youtube.com/watch?v=dQw4w9WgXcQ</div>
+      <button class="grab-btn">Grab It</button>
+    </div>
+    <div class="content-area">
+      <div class="section-label">Recent Downloads</div>
+      <div class="video-grid">
+        <div class="video-card">
+          <div class="video-thumb" style="background: linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 100%);">
+            <div class="play-icon">▶</div>
+          </div>
+          <div class="video-info">
+            <div class="video-title">Rick Astley - Never Gonna Give You Up</div>
+            <div class="video-meta">YouTube · MP4 · 4K · 245 MB</div>
+            <div class="video-progress"><div class="video-progress-fill" style="width:100%"></div></div>
+            <div class="video-status">
+              <span class="status-badge status-complete">Complete</span>
+              <span>3 min ago</span>
+            </div>
+          </div>
+        </div>
+        <div class="video-card">
+          <div class="video-thumb" style="background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);">
+            <div class="play-icon">▶</div>
+          </div>
+          <div class="video-info">
+            <div class="video-title">Lofi Hip Hop Radio - beats to relax/study to</div>
+            <div class="video-meta">YouTube · MP4 · 1080p · 128 MB</div>
+            <div class="video-progress"><div class="video-progress-fill" style="width:100%"></div></div>
+            <div class="video-status">
+              <span class="status-badge status-complete">Complete</span>
+              <span>12 min ago</span>
+            </div>
+          </div>
+        </div>
+        <div class="video-card">
+          <div class="video-thumb" style="background: linear-gradient(135deg, #141e30 0%, #243b55 100%);">
+            <div class="play-icon">▶</div>
+          </div>
+          <div class="video-info">
+            <div class="video-title">TikTok Compilation - Best of March 2026</div>
+            <div class="video-meta">TikTok · MP4 · 1080p · 89 MB</div>
+            <div class="video-progress"><div class="video-progress-fill" style="width:67%"></div></div>
+            <div class="video-status">
+              <span class="status-badge status-downloading">Downloading 67%</span>
+              <span>12.4 MB/s</span>
+            </div>
+          </div>
+        </div>
+        <div class="video-card">
+          <div class="video-thumb" style="background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);">
+            <div class="play-icon">▶</div>
+          </div>
+          <div class="video-info">
+            <div class="video-title">Instagram Reel - Travel Vlog Tokyo</div>
+            <div class="video-meta">Instagram · MP4 · 720p · 34 MB</div>
+            <div class="video-progress"><div class="video-progress-fill" style="width:0%"></div></div>
+            <div class="video-status">
+              <span class="status-badge status-queued">Queued</span>
+              <span>Waiting...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar">
+      <div class="statusbar-dot"></div>
+      <span>Connected</span>
+      <span>·</span>
+      <span>yt-dlp v2026.03.01</span>
+      <span>·</span>
+      <span>Free Tier: 3/5 downloads remaining</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
