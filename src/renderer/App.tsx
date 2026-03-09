@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { SetupWizard } from './components/SetupWizard';
 import { CookieBlockModal } from './components/CookieBlockModal';
+import { FeatureTour } from './components/FeatureTour';
 import { HomePage } from './pages/HomePage';
 import { VideoPage } from './pages/VideoPage';
 import { AudioPage } from './pages/AudioPage';
@@ -18,13 +19,21 @@ const App: React.FC = () => {
   const { loadSettings, theme } = useSettingsStore();
   const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [showCookieBlock, setShowCookieBlock] = useState(false);
+  const [showFeatureTour, setShowFeatureTour] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
 
-  // Check if first-run setup has been completed
+  // Check if first-run setup and feature tour have been completed
   useEffect(() => {
     api.getSetupComplete().then((result) => {
       if (!result.complete) {
         setShowSetupWizard(true);
+      } else {
+        // Setup is done — check if feature tour needs to show
+        api.getFeatureTourComplete().then((tourResult) => {
+          if (!tourResult.complete) {
+            setShowFeatureTour(true);
+          }
+        });
       }
       setSetupChecked(true);
     });
@@ -81,7 +90,26 @@ const App: React.FC = () => {
 
   // Show setup wizard on first run
   if (showSetupWizard && setupChecked) {
-    return <SetupWizard onComplete={() => setShowSetupWizard(false)} />;
+    return (
+      <SetupWizard
+        onComplete={() => {
+          setShowSetupWizard(false);
+          setShowFeatureTour(true);
+        }}
+      />
+    );
+  }
+
+  // Show feature tour after setup wizard completes
+  if (showFeatureTour && setupChecked) {
+    return (
+      <FeatureTour
+        onComplete={() => {
+          setShowFeatureTour(false);
+          api.setFeatureTourComplete();
+        }}
+      />
+    );
   }
 
   // Don't render until setup check is done

@@ -396,6 +396,16 @@ function setupIPC(): void {
     settings.set('setupComplete', true);
     return { success: true };
   });
+
+  // Feature tour completion
+  ipcMain.handle('get-feature-tour-complete', async () => {
+    return { complete: settings.get('featureTourComplete') === true };
+  });
+
+  ipcMain.handle('set-feature-tour-complete', async () => {
+    settings.set('featureTourComplete', true);
+    return { success: true };
+  });
 }
 
 // App lifecycle

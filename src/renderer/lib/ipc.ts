@@ -53,6 +53,9 @@ export interface ElectronAPI {
   verifyBrowserCookies: (browser?: string) => Promise<{ success: boolean; browser?: string; error?: string }>;
   getSetupComplete: () => Promise<{ complete: boolean }>;
   setSetupComplete: () => Promise<{ success: boolean }>;
+  // Feature tour
+  getFeatureTourComplete: () => Promise<{ complete: boolean }>;
+  setFeatureTourComplete: () => Promise<{ success: boolean }>;
   // Binary status
   getBinaryStatus: () => Promise<{
     ytdlp: { path: string; bundled: boolean; available: boolean };
@@ -138,6 +141,9 @@ const mockAPI: ElectronAPI = {
   verifyBrowserCookies: async () => ({ success: true, browser: 'chrome' }),
   getSetupComplete: async () => ({ complete: true }),
   setSetupComplete: async () => ({ success: true }),
+  // Feature tour mocks
+  getFeatureTourComplete: async () => ({ complete: false }),
+  setFeatureTourComplete: async () => ({ success: true }),
   // Health monitor mocks
   getHealthStatus: async () => [],
   runHealthCheck: async () => [],
