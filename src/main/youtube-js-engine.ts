@@ -51,18 +51,17 @@ export interface YTJSDownloadProgress {
 
 /**
  * InnerTube client types -- ordered by reliability for metadata retrieval.
- * TV_SIMPLY is tried first as it returns metadata without auth.
+ * TV_SIMPLY and TV do NOT require PO tokens, so they are tried first.
+ * MWEB/ANDROID/IOS require PO tokens and trigger more bot detection,
+ * so they are excluded from the metadata-only rotation.
  */
 type InnerTubeClientType = 'TV_SIMPLY' | 'TV' | 'WEB_EMBEDDED' | 'MWEB' | 'ANDROID' | 'IOS' | 'WEB';
 
 const CLIENT_ROTATION_ORDER: InnerTubeClientType[] = [
-  'TV_SIMPLY',    // Best for metadata -- no auth, returns title/thumbnail
-  'TV',           // May require auth but sometimes works
-  'WEB_EMBEDDED', // Embeddable videos only
-  'MWEB',         // Mobile web
-  'ANDROID',      // Android client
-  'IOS',          // iOS client
-  'WEB',          // Last resort
+  'TV_SIMPLY',    // Best for metadata -- no auth, no PO token required
+  'TV',           // No PO token required, sometimes needs auth
+  'WEB_EMBEDDED', // No PO token required, embeddable videos only
+  'WEB',          // Last resort -- has GVS enforcement but can return metadata
 ];
 
 /**
@@ -70,6 +69,19 @@ const CLIENT_ROTATION_ORDER: InnerTubeClientType[] = [
  */
 async function loadInnertube(): Promise<typeof import('youtubei.js')> {
   return import('youtubei.js');
+}
+
+/**
+ * Wrap a promise with a timeout. Cleans up the timer on completion.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
 }
 
 /**
@@ -226,13 +238,15 @@ export class YouTubeJSEngine {
       try {
         console.log(`[GrabTube][YTJS] Trying ${clientType} client for video info...`);
 
-        // Race yt.getInfo against a per-client timeout
-        const info = await Promise.race([
+        // Race yt.getInfo against a per-client timeout (capped by remaining overall budget)
+        const elapsed = Date.now() - overallStart;
+        const remaining = YouTubeJSEngine.TOTAL_METADATA_TIMEOUT_MS - elapsed;
+        const budget = Math.min(YouTubeJSEngine.CLIENT_TIMEOUT_MS, remaining);
+        const info = await withTimeout(
           yt.getInfo(videoId, { client: clientType }),
-          new Promise<never>((_resolve, reject) =>
-            setTimeout(() => reject(new Error(`${clientType} client timed out after ${YouTubeJSEngine.CLIENT_TIMEOUT_MS}ms`)), YouTubeJSEngine.CLIENT_TIMEOUT_MS)
-          ),
-        ]);
+          budget,
+          `yt.getInfo(${clientType})`
+        );
         const basicInfo = info.basic_info;
         if (!basicInfo || !basicInfo.title) {
           throw new Error(`No video info from ${clientType} client`);
