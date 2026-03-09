@@ -94,6 +94,12 @@ export class DownloadManager {
   ): void {
     item.status = 'downloading';
 
+    // For YouTube: if no browser cookies specified, use the auto-detected browser
+    // so the FIRST download attempt already has cookies (no wasted attempt)
+    const platform = this.ytdlp.detectPlatformFromUrl(options.url);
+    const effectiveBrowserCookies = browserCookies ||
+      (platform === 'youtube' && !cookiesPath && this.ytdlp.getAutoBrowser() ? this.ytdlp.getAutoBrowser() ?? undefined : undefined);
+
     const proc = this.ytdlp.startDownload(
       options.url,
       options.outputPath,
@@ -116,7 +122,7 @@ export class DownloadManager {
       },
       downloadId,
       cookiesPath,
-      browserCookies
+      effectiveBrowserCookies
     );
 
     this.activeDownloads.set(downloadId, { process: proc, item });
@@ -128,8 +134,8 @@ export class DownloadManager {
           this.activeDownloads.delete(downloadId);
 
           // Cache successful browser for YouTube auto-detection
-          if (browserCookies && this.ytdlp.detectPlatformFromUrl(options.url) === 'youtube' && !this.ytdlp.getAutoBrowser()) {
-            this.ytdlp.setAutoBrowser(browserCookies);
+          if (effectiveBrowserCookies && platform === 'youtube' && !this.ytdlp.getAutoBrowser()) {
+            this.ytdlp.setAutoBrowser(effectiveBrowserCookies);
           }
 
           onComplete(item);
@@ -139,31 +145,36 @@ export class DownloadManager {
         onComplete(item);
         this.processQueue();
       } else {
-        const platform = this.ytdlp.detectPlatformFromUrl(options.url);
-
-        // YouTube auto-browser cookie retry: cycle through browsers on 403/bot/DPAPI errors
-        if (platform === 'youtube' && (this.isYouTubeDownloadError(item.error) || this.isDpapiOrCookieError(item.error))) {
+        // YouTube: always cycle through browsers on ANY download failure.
+        // During browser cycling (effectiveBrowserCookies is set), ANY error means skip to next browser.
+        // This handles DPAPI, browser-not-found, cookie DB locked, permission denied, etc.
+        if (platform === 'youtube' && effectiveBrowserCookies) {
           const browsers = ['firefox', 'edge', 'brave', 'opera', 'vivaldi', 'chromium', 'chrome'];
-          const currentIndex = browserCookies ? browsers.indexOf(browserCookies) : -1;
+          const currentIndex = browsers.indexOf(effectiveBrowserCookies);
           const nextIndex = currentIndex + 1;
 
           if (nextIndex < browsers.length) {
             const nextBrowser = browsers[nextIndex];
-            console.log(`[GrabTube] YouTube download failed (${item.error?.substring(0, 80)}), trying browser: ${nextBrowser}`);
+            console.log(`[GrabTube] YouTube download failed with ${effectiveBrowserCookies} (${item.error?.substring(0, 80)}), trying browser: ${nextBrowser}`);
             item.error = undefined;
             item.progress = 0;
             this.activeDownloads.delete(downloadId);
             this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, nextBrowser, 0);
             return;
           }
+
+          // All browsers exhausted — try Cobalt API fallback
+          if (this.cobalt.isEnabled()) {
+            console.log('[GrabTube] All browsers failed. Trying Cobalt API fallback...');
+            this.activeDownloads.delete(downloadId);
+            this.tryCobaltFallback(downloadId, options, onProgress, onComplete, item);
+            return;
+          }
         }
 
-        // Auto-retry logic (P4): Try with cookies if first attempt failed
-        const needsRetry = retryCount === 0 && this.shouldRetryWithCookies(platform, item.error);
-
-        // For YouTube: if no browser was tried yet, try without cookies first (many videos work without auth)
-        if (platform === 'youtube' && !browserCookies && !cookiesPath && retryCount === 0 && this.isYouTubeDownloadError(item.error)) {
-          console.log('[GrabTube] YouTube download failed without cookies. Starting browser cookie cycle...');
+        // YouTube: if no browser was tried yet, start browser cycling on ANY failure
+        if (platform === 'youtube' && !effectiveBrowserCookies && !cookiesPath) {
+          console.log(`[GrabTube] YouTube download failed (${item.error?.substring(0, 80)}). Starting browser cookie cycle...`);
           item.error = undefined;
           item.progress = 0;
           this.activeDownloads.delete(downloadId);
@@ -171,13 +182,16 @@ export class DownloadManager {
           return;
         }
 
-        if (needsRetry && (cookiesPath || browserCookies)) {
+        // Auto-retry logic (P4): Try with cookies if first attempt failed
+        const needsRetry = retryCount === 0 && this.shouldRetryWithCookies(platform, item.error);
+
+        if (needsRetry && (cookiesPath || effectiveBrowserCookies)) {
           // Retry with cookies
           item.error = undefined;
           item.progress = 0;
           this.activeDownloads.delete(downloadId);
-          this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, browserCookies, retryCount + 1);
-        } else if (platform === 'youtube' && this.cobalt.isEnabled() && this.isYouTubeDownloadError(item.error)) {
+          this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, effectiveBrowserCookies, retryCount + 1);
+        } else if (platform === 'youtube' && this.cobalt.isEnabled()) {
           // Cobalt API fallback: last resort for YouTube
           console.log('[GrabTube] All local methods failed. Trying Cobalt API fallback...');
           this.activeDownloads.delete(downloadId);
@@ -186,7 +200,7 @@ export class DownloadManager {
           item.status = 'error';
           item.error = item.error || 'Download failed with exit code ' + code;
           const config = this.ytdlp.getBypassConfig(platform);
-          if (config?.cookiesHint && !cookiesPath && !browserCookies) {
+          if (config?.cookiesHint && !cookiesPath && !effectiveBrowserCookies) {
             item.error += '. Tip: YouTube works best with POT provider plugin or browser cookies for age-restricted content.';
           }
           this.activeDownloads.delete(downloadId);
@@ -217,7 +231,9 @@ export class DownloadManager {
   }
 
   /**
-   * Detect if a YouTube download error is a 403/bot/cookie issue that can be fixed with browser cookies.
+   * Detect if a YouTube download error is a known retryable issue.
+   * Note: For browser cycling, we now retry on ANY error (not just these patterns).
+   * This method is kept for non-YouTube platforms and Cobalt fallback decisions.
    */
   private isYouTubeDownloadError(error?: string): boolean {
     if (!error) return false;
@@ -229,26 +245,14 @@ export class DownloadManager {
            lower.includes('confirm your age') ||
            lower.includes('use --cookies') ||
            lower.includes('could not copy') ||
+           lower.includes('could not find') ||
            lower.includes('cookie database') ||
+           lower.includes('cookies database') ||
            lower.includes('failed to decrypt') ||
-           lower.includes('dpapi');
-  }
-
-  /**
-   * Detect DPAPI / cookie encryption errors that mean the current browser can't be used.
-   * On Windows, Chrome 127+ uses app-bound encryption that blocks external cookie access.
-   * Firefox cookies are unencrypted and always readable.
-   */
-  private isDpapiOrCookieError(error?: string): boolean {
-    if (!error) return false;
-    const lower = error.toLowerCase();
-    return lower.includes('failed to decrypt') ||
            lower.includes('dpapi') ||
-           lower.includes('could not copy') ||
-           lower.includes('cookie database') ||
            lower.includes('permission denied') ||
-           lower.includes('cookies could not be decrypted') ||
-           lower.includes('failed to extract cookies');
+           lower.includes('failed to extract cookies') ||
+           lower.includes('cookies could not be decrypted');
   }
 
   /**

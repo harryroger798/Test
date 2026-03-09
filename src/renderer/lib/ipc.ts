@@ -127,7 +127,7 @@ const mockAPI: ElectronAPI = {
   checkBinaryUpdates: async () => ({ success: true }),
   onBinaryUpdateStatus: () => () => {},
   // App version mock
-  getAppVersion: async () => ({ version: '1.0.6' }),
+  getAppVersion: async () => ({ version: '1.0.7' }),
   // Health monitor mocks
   getHealthStatus: async () => [],
   runHealthCheck: async () => [],

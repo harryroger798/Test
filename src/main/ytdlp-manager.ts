@@ -119,6 +119,11 @@ export class YtdlpManager {
   private autoBrowser: string | null = null;
 
   /**
+   * Whether we've already run proactive browser detection.
+   */
+  private browserDetectionDone = false;
+
+  /**
    * OAuth2 refresh token path for YouTube authentication.
    * Stored in the app config directory for persistence across sessions.
    */
@@ -298,27 +303,34 @@ export class YtdlpManager {
            lower.includes('confirm your age') ||
            lower.includes('use --cookies') ||
            lower.includes('could not copy') ||
+           lower.includes('could not find') ||
            lower.includes('cookie database') ||
+           lower.includes('cookies database') ||
            lower.includes('failed to decrypt') ||
            lower.includes('dpapi') ||
+           lower.includes('permission denied') ||
+           lower.includes('failed to extract cookies') ||
+           lower.includes('cookies could not be decrypted') ||
            lower.includes('403') ||
            lower.includes('forbidden');
   }
 
   /**
-   * Check if an error is specifically a DPAPI/cookie encryption error.
-   * These errors mean the current browser's cookies can't be read and we
-   * should skip to the next browser immediately.
+   * Check if an error is a cookie/browser-related error that means
+   * the current browser can't be used (DPAPI, not installed, locked, etc).
    */
-  isDpapiOrCookieError(msg: string): boolean {
+  isCookieOrBrowserError(msg: string): boolean {
     const lower = msg.toLowerCase();
     return lower.includes('failed to decrypt') ||
            lower.includes('dpapi') ||
            lower.includes('could not copy') ||
+           lower.includes('could not find') ||
            lower.includes('cookie database') ||
+           lower.includes('cookies database') ||
            lower.includes('permission denied') ||
            lower.includes('cookies could not be decrypted') ||
-           lower.includes('failed to extract cookies');
+           lower.includes('failed to extract cookies') ||
+           lower.includes('no cookies were found');
   }
 
   /**
@@ -544,9 +556,101 @@ export class YtdlpManager {
   }
 
   /**
+   * Proactively detect the best installed browser for YouTube cookie extraction.
+   * Checks common cookie database paths for each browser on the current OS.
+   * Sets autoBrowser so the FIRST YouTube attempt already uses cookies.
+   * This runs once and caches the result.
+   */
+  private detectBestBrowser(): void {
+    if (this.browserDetectionDone) return;
+    this.browserDetectionDone = true;
+
+    const home = os.homedir();
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+
+    // Map of browser name → possible cookie DB paths
+    // Ordered: Firefox first (unencrypted, no DPAPI), then others
+    const browserPaths: Array<{ name: string; paths: string[] }> = [
+      {
+        name: 'firefox',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Roaming', 'Mozilla', 'Firefox', 'Profiles')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Firefox', 'Profiles')]
+            : [path.join(home, '.mozilla', 'firefox')],
+      },
+      {
+        name: 'edge',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Microsoft Edge')]
+            : [path.join(home, '.config', 'microsoft-edge')],
+      },
+      {
+        name: 'brave',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'BraveSoftware', 'Brave-Browser', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'BraveSoftware', 'Brave-Browser')]
+            : [path.join(home, '.config', 'BraveSoftware', 'Brave-Browser')],
+      },
+      {
+        name: 'opera',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Roaming', 'Opera Software', 'Opera Stable')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'com.operasoftware.Opera')]
+            : [path.join(home, '.config', 'opera')],
+      },
+      {
+        name: 'vivaldi',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Vivaldi', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Vivaldi')]
+            : [path.join(home, '.config', 'vivaldi')],
+      },
+      {
+        name: 'chromium',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Chromium', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Chromium')]
+            : [path.join(home, '.config', 'chromium')],
+      },
+      {
+        name: 'chrome',
+        paths: isWin
+          ? [path.join(home, 'AppData', 'Local', 'Google', 'Chrome', 'User Data')]
+          : isMac
+            ? [path.join(home, 'Library', 'Application Support', 'Google', 'Chrome')]
+            : [path.join(home, '.config', 'google-chrome')],
+      },
+    ];
+
+    for (const browser of browserPaths) {
+      for (const p of browser.paths) {
+        try {
+          if (fs.existsSync(p)) {
+            this.autoBrowser = browser.name;
+            console.log(`[GrabTube] Proactively detected browser: ${browser.name} (${p})`);
+            return;
+          }
+        } catch {
+          // Permission error — skip this browser
+        }
+      }
+    }
+
+    console.log('[GrabTube] No installed browsers detected for cookie extraction.');
+  }
+
+  /**
    * Fetch video info with automatic retry and fallback strategies.
-   * For YouTube: auto-detects and uses browser cookies if bot-blocked.
-   * Tries Chrome, Edge, Firefox, Brave, etc. until one works.
+   * For YouTube: proactively uses browser cookies on the FIRST attempt.
+   * If the first attempt fails, cycles through ALL browsers.
    * Caches the working browser for all future requests.
    */
   async getVideoInfoWithRetry(
@@ -558,18 +662,26 @@ export class YtdlpManager {
     const platform = this.detectPlatformFromUrl(url);
     const config = PLATFORM_BYPASS_CONFIG[platform];
 
-    // First attempt: with platform-specific bypass (includes cached auto-browser if available)
+    // Proactively detect best browser for YouTube so the FIRST attempt uses cookies
+    if (platform === 'youtube' && !this.autoBrowser && !browserCookies && !cookiesPath) {
+      this.detectBestBrowser();
+    }
+
+    // First attempt: with platform-specific bypass (includes auto-browser cookies for YouTube)
     try {
       return await this.getVideoInfo(url, proxy, cookiesPath, browserCookies);
     } catch (firstError: unknown) {
       const firstMsg = firstError instanceof Error ? firstError.message : String(firstError);
 
-      // YouTube bot/IP block: auto-detect browser cookies
+      // YouTube: cycle through ALL browsers on ANY failure
       // Only if no explicit cookies are configured (user hasn't set anything up)
-      if (platform === 'youtube' && (this.isBotError(firstMsg) || this.isDpapiOrCookieError(firstMsg)) && !browserCookies && !cookiesPath) {
-        console.log('[GrabTube] YouTube bot/cookie block detected. Auto-detecting browser cookies...');
+      if (platform === 'youtube' && !browserCookies && !cookiesPath) {
+        console.log(`[GrabTube] YouTube info fetch failed (${firstMsg.substring(0, 80)}). Cycling through all browsers...`);
 
         for (const browser of YtdlpManager.AUTO_BROWSERS) {
+          // Skip the browser we already tried (autoBrowser was used in the first attempt)
+          if (browser === this.autoBrowser) continue;
+
           try {
             console.log(`[GrabTube] Trying ${browser} cookies...`);
             const result = await this.getVideoInfo(url, proxy, undefined, browser);
@@ -579,15 +691,17 @@ export class YtdlpManager {
             return result;
           } catch (browserError: unknown) {
             const browserMsg = browserError instanceof Error ? browserError.message : String(browserError);
-            // If it's still a bot error or cookie error, try next browser
-            // If it's a different error (e.g., video not found), throw immediately
-            // DPAPI/cookie errors mean this browser can't be read — skip to next
-            if (this.isDpapiOrCookieError(browserMsg) || this.isBotError(browserMsg) || browserMsg.toLowerCase().includes('cookie') || browserMsg.toLowerCase().includes('browser')) {
-              console.log(`[GrabTube] ${browser} cookies failed (${browserMsg.substring(0, 80)}), trying next browser...`);
-              continue;
+            // Only throw immediately for truly unrelated errors (video removed, invalid URL)
+            const isVideoError = browserMsg.toLowerCase().includes('video unavailable') ||
+                                 browserMsg.toLowerCase().includes('private video') ||
+                                 browserMsg.toLowerCase().includes('removed') ||
+                                 browserMsg.toLowerCase().includes('not exist') ||
+                                 browserMsg.toLowerCase().includes('invalid url');
+            if (isVideoError) {
+              throw browserError;
             }
-            // Different error (e.g., video not found) — throw immediately
-            throw browserError;
+            console.log(`[GrabTube] ${browser} cookies failed (${browserMsg.substring(0, 80)}), trying next browser...`);
+            continue;
           }
         }
 
