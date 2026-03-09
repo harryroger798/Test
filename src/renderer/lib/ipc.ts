@@ -76,6 +76,40 @@ export interface ElectronAPI {
   getFailureLog: () => Promise<Array<{ binary: string; platform: string; error: string; timestamp: number; healed: boolean }>>;
   onHealthReport: (callback: (report: unknown) => void) => () => void;
   onHealthHeal: (callback: (data: unknown) => void) => () => void;
+  // License management
+  getLicenseState: () => Promise<{
+    tier: 'free' | 'pro' | 'family';
+    key: string;
+    deviceId: string;
+    activated: boolean;
+    validatedAt: string;
+    maxDevices: number;
+    devicesUsed: number;
+    offlineGraceDays: number;
+  }>;
+  getTierLimits: () => Promise<{
+    maxDownloadsPerDay: number;
+    maxQuality: string;
+    maxConcurrent: number;
+    batchDownload: boolean;
+    playlistDownload: boolean;
+    cooldownSeconds: number;
+  }>;
+  activateLicense: (key: string) => Promise<{ success: boolean; error?: string; tier?: string }>;
+  deactivateLicense: () => Promise<{ success: boolean; error?: string }>;
+  validateLicense: () => Promise<{ valid: boolean; tier: string; offline?: boolean }>;
+  checkDownloadAllowed: () => Promise<{ allowed: boolean; reason?: string }>;
+  getDownloadStats: () => Promise<{
+    tier: string;
+    dailyCount: number;
+    remaining: number;
+    limits: { maxDownloadsPerDay: number; maxQuality: string; maxConcurrent: number; batchDownload: boolean; playlistDownload: boolean; cooldownSeconds: number };
+    rateLimitStatus: { inBackoff: boolean; backoffUntil: number; consecutiveBans: number; backoffMinutes: number };
+  }>;
+  checkQualityAllowed: (height: number) => Promise<{ allowed: boolean }>;
+  checkPlaylistAllowed: () => Promise<{ allowed: boolean }>;
+  resetRateLimiter: () => Promise<{ success: boolean }>;
+  onRateLimitWarning: (callback: (status: unknown) => void) => () => void;
 }
 
 // Type-safe access to electron API
@@ -150,6 +184,40 @@ const mockAPI: ElectronAPI = {
   getFailureLog: async () => [],
   onHealthReport: () => () => {},
   onHealthHeal: () => () => {},
+  // License mocks
+  getLicenseState: async () => ({
+    tier: 'free' as const,
+    key: '',
+    deviceId: 'mock-device-id',
+    activated: false,
+    validatedAt: '',
+    maxDevices: 0,
+    devicesUsed: 0,
+    offlineGraceDays: 90,
+  }),
+  getTierLimits: async () => ({
+    maxDownloadsPerDay: 5,
+    maxQuality: '1080',
+    maxConcurrent: 1,
+    batchDownload: false,
+    playlistDownload: false,
+    cooldownSeconds: 30,
+  }),
+  activateLicense: async () => ({ success: false, error: 'Not running in Electron' }),
+  deactivateLicense: async () => ({ success: false, error: 'Not running in Electron' }),
+  validateLicense: async () => ({ valid: true, tier: 'free' }),
+  checkDownloadAllowed: async () => ({ allowed: true }),
+  getDownloadStats: async () => ({
+    tier: 'free',
+    dailyCount: 0,
+    remaining: 5,
+    limits: { maxDownloadsPerDay: 5, maxQuality: '1080', maxConcurrent: 1, batchDownload: false, playlistDownload: false, cooldownSeconds: 30 },
+    rateLimitStatus: { inBackoff: false, backoffUntil: 0, consecutiveBans: 0, backoffMinutes: 0 },
+  }),
+  checkQualityAllowed: async () => ({ allowed: true }),
+  checkPlaylistAllowed: async () => ({ allowed: false }),
+  resetRateLimiter: async () => ({ success: true }),
+  onRateLimitWarning: () => () => {},
 };
 
 export const api: ElectronAPI = isElectron ? window.electronAPI : mockAPI;

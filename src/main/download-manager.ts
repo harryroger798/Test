@@ -39,6 +39,13 @@ export class DownloadManager {
   private queue: Array<{ id: string; options: DownloadOptions; proxy?: string; cookiesPath?: string; browserCookies?: string; onProgress: (p: DownloadProgress) => void; onComplete: (r: DownloadItem) => void }> = [];
   private maxConcurrent = 2;
 
+  /**
+   * Set max concurrent downloads (called by license manager on tier change).
+   */
+  setMaxConcurrent(max: number): void {
+    this.maxConcurrent = max;
+  }
+
   constructor(ytdlp: YtdlpManager) {
     this.ytdlp = ytdlp;
     this.cobalt = new CobaltFallback();

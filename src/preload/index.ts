@@ -107,6 +107,23 @@ const electronAPI = {
     ipcRenderer.on('health-heal-complete', handler);
     return () => ipcRenderer.removeListener('health-heal-complete', handler);
   },
+
+  // License management
+  getLicenseState: () => ipcRenderer.invoke('get-license-state'),
+  getTierLimits: () => ipcRenderer.invoke('get-tier-limits'),
+  activateLicense: (key: string) => ipcRenderer.invoke('activate-license', key),
+  deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
+  validateLicense: () => ipcRenderer.invoke('validate-license'),
+  checkDownloadAllowed: () => ipcRenderer.invoke('check-download-allowed'),
+  getDownloadStats: () => ipcRenderer.invoke('get-download-stats'),
+  checkQualityAllowed: (height: number) => ipcRenderer.invoke('check-quality-allowed', height),
+  checkPlaylistAllowed: () => ipcRenderer.invoke('check-playlist-allowed'),
+  resetRateLimiter: () => ipcRenderer.invoke('reset-rate-limiter'),
+  onRateLimitWarning: (callback: (status: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+    ipcRenderer.on('rate-limit-warning', handler);
+    return () => ipcRenderer.removeListener('rate-limit-warning', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

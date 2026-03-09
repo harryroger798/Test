@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, ExternalLink } from 'lucide-react';
+import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, ExternalLink, Crown, Zap, Users } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -32,14 +32,68 @@ export const SettingsPage: React.FC = () => {
 
   const [cobaltEnabled, setCobaltEnabled] = useState(true);
 
-  // Load Cobalt status on mount
+  // License state
+  const [licenseState, setLicenseState] = useState<{
+    tier: string; key: string; activated: boolean; maxDevices: number; devicesUsed: number;
+  }>({ tier: 'free', key: '', activated: false, maxDevices: 0, devicesUsed: 0 });
+  const [licenseKey, setLicenseKey] = useState('');
+  const [licenseLoading, setLicenseLoading] = useState(false);
+  const [licenseMessage, setLicenseMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [downloadStats, setDownloadStats] = useState<{
+    tier: string; dailyCount: number; remaining: number;
+    limits: { maxDownloadsPerDay: number; maxQuality: string; maxConcurrent: number; batchDownload: boolean; playlistDownload: boolean; cooldownSeconds: number };
+  } | null>(null);
+
+  // Load license + Cobalt status on mount
   useEffect(() => {
     const loadStatus = async () => {
       const cobalt = await api.getCobaltStatus();
       setCobaltEnabled(cobalt.enabled);
+      const license = await api.getLicenseState();
+      setLicenseState(license);
+      const stats = await api.getDownloadStats();
+      setDownloadStats(stats);
     };
     loadStatus();
   }, []);
+
+  const handleActivateLicense = async () => {
+    if (!licenseKey.trim()) return;
+    setLicenseLoading(true);
+    setLicenseMessage(null);
+    try {
+      const result = await api.activateLicense(licenseKey.trim());
+      if (result.success) {
+        setLicenseMessage({ type: 'success', text: `License activated! Tier: ${(result.tier || 'pro').toUpperCase()}` });
+        const license = await api.getLicenseState();
+        setLicenseState(license);
+        const stats = await api.getDownloadStats();
+        setDownloadStats(stats);
+        setLicenseKey('');
+      } else {
+        setLicenseMessage({ type: 'error', text: result.error || 'Activation failed' });
+      }
+    } catch {
+      setLicenseMessage({ type: 'error', text: 'Could not reach license server. Check your internet connection.' });
+    }
+    setLicenseLoading(false);
+  };
+
+  const handleDeactivateLicense = async () => {
+    setLicenseLoading(true);
+    setLicenseMessage(null);
+    const result = await api.deactivateLicense();
+    if (result.success) {
+      setLicenseMessage({ type: 'success', text: 'License deactivated. Reverted to Free tier.' });
+      const license = await api.getLicenseState();
+      setLicenseState(license);
+      const stats = await api.getDownloadStats();
+      setDownloadStats(stats);
+    } else {
+      setLicenseMessage({ type: 'error', text: result.error || 'Deactivation failed' });
+    }
+    setLicenseLoading(false);
+  };
 
   const handleCobaltToggle = async (enabled: boolean) => {
     await api.setCobaltEnabled(enabled);
@@ -89,6 +143,131 @@ export const SettingsPage: React.FC = () => {
         </div>
 
         <div className="space-y-6">
+          {/* License & Tier */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <Crown size={16} className="text-primary" />
+              License & Plan
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Activate a license key to unlock Pro or Family features. No account or signup required — just paste your key.
+                </span>
+              </span>
+            </h3>
+
+            {/* Current tier badge */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider border',
+                licenseState.tier === 'free'
+                  ? 'bg-secondary/50 border-border text-muted-foreground'
+                  : licenseState.tier === 'pro'
+                    ? 'bg-primary/10 border-primary text-primary'
+                    : 'bg-yellow-500/10 border-yellow-500 text-yellow-500'
+              )}>
+                {licenseState.tier === 'free' && <Zap size={12} className="inline mr-1" />}
+                {licenseState.tier === 'pro' && <Crown size={12} className="inline mr-1" />}
+                {licenseState.tier === 'family' && <Users size={12} className="inline mr-1" />}
+                {licenseState.tier} Plan
+              </div>
+              {licenseState.activated && (
+                <span className="text-xs text-muted-foreground">
+                  Key: {licenseState.key.substring(0, 7)}...{licenseState.key.slice(-4)} | Devices: {licenseState.devicesUsed}/{licenseState.maxDevices}
+                </span>
+              )}
+            </div>
+
+            {/* Tier limits display */}
+            {downloadStats && (
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="bg-secondary/30 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-foreground">
+                    {downloadStats.limits.maxDownloadsPerDay === -1 ? '\u221E' : `${downloadStats.remaining}/${downloadStats.limits.maxDownloadsPerDay}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Downloads Today</div>
+                </div>
+                <div className="bg-secondary/30 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-foreground">
+                    {downloadStats.limits.maxQuality === 'unlimited' ? '8K' : `${downloadStats.limits.maxQuality}p`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Max Quality</div>
+                </div>
+                <div className="bg-secondary/30 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-foreground">
+                    {downloadStats.limits.maxConcurrent}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Concurrent</div>
+                </div>
+              </div>
+            )}
+
+            {/* License key input (for activation) */}
+            {!licenseState.activated ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1.5">License Key</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={licenseKey}
+                      onChange={(e) => setLicenseKey(e.target.value.toUpperCase())}
+                      placeholder="GT-XXXX-XXXX-XXXX-XXXX"
+                      className="flex-1 px-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-mono tracking-wider"
+                      maxLength={22}
+                    />
+                    <button
+                      onClick={handleActivateLicense}
+                      disabled={licenseLoading || !licenseKey.trim()}
+                      className={cn(
+                        'px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex-shrink-0',
+                        licenseLoading || !licenseKey.trim()
+                          ? 'bg-secondary/50 text-muted-foreground cursor-not-allowed'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      )}
+                    >
+                      {licenseLoading ? 'Activating...' : 'Activate'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Upgrade CTA */}
+                <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl">
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="text-primary">Upgrade to Pro ($14.99)</strong> for unlimited downloads, 8K quality, batch/playlist support, and faster downloads.
+                    <strong className="text-primary"> Family ($29.99)</strong> includes all Pro features for up to 3 devices.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <button
+                  onClick={handleDeactivateLicense}
+                  disabled={licenseLoading}
+                  className="px-4 py-2 bg-destructive/10 text-destructive rounded-xl text-sm font-medium hover:bg-destructive/20 transition-all"
+                >
+                  {licenseLoading ? 'Processing...' : 'Deactivate License'}
+                </button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Deactivating frees this device slot so you can activate on another device.
+                </p>
+              </div>
+            )}
+
+            {/* License message */}
+            {licenseMessage && (
+              <div className={cn(
+                'mt-3 p-3 rounded-xl text-xs flex items-center gap-2',
+                licenseMessage.type === 'success'
+                  ? 'bg-green-500/10 border border-green-500/20 text-green-500'
+                  : 'bg-destructive/10 border border-destructive/20 text-destructive'
+              )}>
+                {licenseMessage.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                {licenseMessage.text}
+              </div>
+            )}
+          </section>
+
           {/* Download Path */}
           <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in stagger-1">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">

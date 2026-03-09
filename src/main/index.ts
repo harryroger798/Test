@@ -7,6 +7,8 @@ import { SettingsManager } from './settings-store';
 import { AppAutoUpdater } from './auto-updater';
 import { BinaryUpdater } from './binary-updater';
 import { HealthMonitor } from './health-monitor';
+import { LicenseManager } from './license-manager';
+import { RateLimiter } from './rate-limiter';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -17,6 +19,8 @@ const settings = new SettingsManager();
 const appUpdater = new AppAutoUpdater();
 const binaryUpdater = new BinaryUpdater(binaryManager);
 const healthMonitor = new HealthMonitor(ytdlp, binaryManager, binaryUpdater);
+const licenseManager = new LicenseManager();
+const rateLimiter = new RateLimiter();
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -164,7 +168,7 @@ function setupIPC(): void {
     }
   });
 
-  // Start download
+  // Start download (with tier gating + rate limiting)
   ipcMain.handle('start-download', async (_event, options: {
     url: string;
     formatId: string;
@@ -176,6 +180,18 @@ function setupIPC(): void {
     embedThumbnail?: boolean;
   }) => {
     try {
+      // Check tier gating: daily limit + cooldown
+      const canDl = licenseManager.canDownload();
+      if (!canDl.allowed) {
+        return { success: false, error: canDl.reason };
+      }
+
+      // Check rate limiter backoff (IP protection)
+      const backoff = rateLimiter.checkBackoff();
+      if (!backoff.canProceed) {
+        return { success: false, error: backoff.reason };
+      }
+
       const proxySettings = settings.get('proxy') as { enabled: boolean; url: string } | undefined;
       const proxy = proxySettings?.enabled ? proxySettings.url : undefined;
       const cookiesPath = settings.get('cookiesPath') as string | undefined;
@@ -187,8 +203,21 @@ function setupIPC(): void {
         proxy,
         (progress) => {
           mainWindow?.webContents.send('download-progress', progress);
+          // Detect rate limit errors in progress
+          if (progress.error && rateLimiter.isBanError(progress.error)) {
+            rateLimiter.reportBan(progress.error);
+            mainWindow?.webContents.send('rate-limit-warning', rateLimiter.getStatus());
+          }
         },
         (result) => {
+          // Record download for daily counter on success
+          if (result.status === 'completed') {
+            licenseManager.recordDownload();
+            rateLimiter.reportSuccess();
+          } else if (result.status === 'error' && result.error && rateLimiter.isBanError(result.error)) {
+            rateLimiter.reportBan(result.error);
+            mainWindow?.webContents.send('rate-limit-warning', rateLimiter.getStatus());
+          }
           mainWindow?.webContents.send('download-complete', result);
         },
         cookiesPath || undefined,
@@ -404,6 +433,77 @@ function setupIPC(): void {
 
   ipcMain.handle('set-feature-tour-complete', async () => {
     settings.set('featureTourComplete', true);
+    return { success: true };
+  });
+
+  // === LICENSE MANAGEMENT ===
+
+  // Get license state
+  ipcMain.handle('get-license-state', async () => {
+    return licenseManager.getState();
+  });
+
+  // Get tier limits
+  ipcMain.handle('get-tier-limits', async () => {
+    return licenseManager.getLimits();
+  });
+
+  // Activate license key
+  ipcMain.handle('activate-license', async (_event, key: string) => {
+    const result = await licenseManager.activate(key);
+    if (result.success) {
+      // Update download manager concurrent limit based on tier
+      downloadManager.setMaxConcurrent(licenseManager.getMaxConcurrent());
+    }
+    return result;
+  });
+
+  // Deactivate license
+  ipcMain.handle('deactivate-license', async () => {
+    const result = await licenseManager.deactivate();
+    downloadManager.setMaxConcurrent(licenseManager.getMaxConcurrent());
+    return result;
+  });
+
+  // Validate license (periodic check)
+  ipcMain.handle('validate-license', async () => {
+    return licenseManager.validate();
+  });
+
+  // Check if download is allowed (tier gating)
+  ipcMain.handle('check-download-allowed', async () => {
+    const canDl = licenseManager.canDownload();
+    const backoff = rateLimiter.checkBackoff();
+    if (!backoff.canProceed) {
+      return { allowed: false, reason: backoff.reason };
+    }
+    return canDl;
+  });
+
+  // Get download stats (daily count, remaining, tier)
+  ipcMain.handle('get-download-stats', async () => {
+    return {
+      tier: licenseManager.getTier(),
+      dailyCount: licenseManager.getDailyDownloadCount(),
+      remaining: licenseManager.getRemainingDownloads(),
+      limits: licenseManager.getLimits(),
+      rateLimitStatus: rateLimiter.getStatus(),
+    };
+  });
+
+  // Check quality allowed
+  ipcMain.handle('check-quality-allowed', async (_event, height: number) => {
+    return { allowed: licenseManager.isQualityAllowed(height) };
+  });
+
+  // Check playlist allowed
+  ipcMain.handle('check-playlist-allowed', async () => {
+    return { allowed: licenseManager.isPlaylistAllowed() };
+  });
+
+  // Reset rate limiter (e.g. after changing proxy)
+  ipcMain.handle('reset-rate-limiter', async () => {
+    rateLimiter.reset();
     return { success: true };
   });
 }
