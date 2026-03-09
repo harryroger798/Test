@@ -248,7 +248,7 @@ export class YouTubeJSEngine {
           ];
           for (const f of allStreamFormats) {
             try {
-              const decipheredUrl = f.decipher(yt.session.player);
+              const decipheredUrl = await f.decipher(yt.session.player);
               if (decipheredUrl) {
                 const hasVideo = !!(f.width && f.height);
                 formats.push({
@@ -419,7 +419,7 @@ export class YouTubeJSEngine {
           let directSuccess = false;
           for (const fmt of formatsToTry.slice(0, 3)) {
             try {
-              const directUrl = fmt.decipher(yt.session.player);
+              const directUrl = await fmt.decipher(yt.session.player);
               if (!directUrl) continue;
               console.log(`[GrabTube][YTJS] ${clientType}: Trying direct URL for itag ${fmt.itag}...`);
               await this.downloadFromDirectUrl(directUrl, outputFile, onProgress);
