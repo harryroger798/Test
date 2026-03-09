@@ -60,6 +60,7 @@ export interface DownloadItem {
   filesize: string;
   filename: string;
   outputPath: string;
+  audioOnly: boolean;
   error?: string;
   completedAt?: string;
 }
@@ -195,6 +196,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       filesize: '',
       filename: '',
       outputPath,
+      audioOnly: state.audioOnly,
     };
 
     set((s) => ({ downloads: [...s.downloads, downloadItem] }));
