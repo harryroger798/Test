@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 import { YtdlpManager, DownloadProgress } from './ytdlp-manager';
 import { CobaltFallback } from './cobalt-fallback';
+import { YouTubeJSEngine } from './youtube-js-engine';
 import { v4Style } from './utils';
 
 export interface DownloadItem {
@@ -33,13 +34,27 @@ export interface DownloadOptions {
 export class DownloadManager {
   private ytdlp: YtdlpManager;
   private cobalt: CobaltFallback;
+  private ytjs: YouTubeJSEngine;
   private activeDownloads: Map<string, { process: ChildProcess; item: DownloadItem }> = new Map();
+  /**
+   * Track YouTube.js-based downloads separately since they don't have a ChildProcess.
+   * Maps downloadId -> { item, aborted }.
+   */
+  private activeYTJSDownloads: Map<string, { item: DownloadItem; aborted: boolean }> = new Map();
   private queue: Array<{ id: string; options: DownloadOptions; proxy?: string; cookiesPath?: string; browserCookies?: string; onProgress: (p: DownloadProgress) => void; onComplete: (r: DownloadItem) => void }> = [];
   private maxConcurrent = 2;
 
   constructor(ytdlp: YtdlpManager) {
     this.ytdlp = ytdlp;
     this.cobalt = new CobaltFallback();
+    this.ytjs = new YouTubeJSEngine();
+  }
+
+  /**
+   * Get the YouTube.js engine instance.
+   */
+  getYTJSEngine(): YouTubeJSEngine {
+    return this.ytjs;
   }
 
   /**
@@ -94,9 +109,16 @@ export class DownloadManager {
   ): void {
     item.status = 'downloading';
 
-    // For YouTube: if no browser cookies specified, use the auto-detected browser
-    // so the FIRST download attempt already has cookies (no wasted attempt)
     const platform = this.ytdlp.detectPlatformFromUrl(options.url);
+
+    // YouTube: try YouTube.js engine FIRST (no cookies, no auth needed)
+    // This is the primary download method — user sees nothing different
+    if (platform === 'youtube' && retryCount === 0 && !cookiesPath && !browserCookies) {
+      this.tryYouTubeJSDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, browserCookies);
+      return;
+    }
+
+    // For YouTube fallback: use auto-detected browser cookies
     const effectiveBrowserCookies = browserCookies ||
       (platform === 'youtube' && !cookiesPath && this.ytdlp.getAutoBrowser() ? this.ytdlp.getAutoBrowser() ?? undefined : undefined);
 
@@ -220,6 +242,92 @@ export class DownloadManager {
   }
 
   /**
+   * Try downloading a YouTube video using YouTube.js InnerTube API.
+   * This is the PRIMARY download method — no cookies, no auth needed.
+   * If it fails, silently falls back to yt-dlp with browser cookies.
+   * The user never sees which engine is used.
+   */
+  private async tryYouTubeJSDownload(
+    downloadId: string,
+    options: DownloadOptions,
+    proxy: string | undefined,
+    onProgress: (progress: DownloadProgress) => void,
+    onComplete: (result: DownloadItem) => void,
+    item: DownloadItem,
+    cookiesPath?: string,
+    browserCookies?: string
+  ): Promise<void> {
+    // Track this as an active YTJS download
+    this.activeYTJSDownloads.set(downloadId, { item, aborted: false });
+
+    try {
+      console.log('[GrabTube] Attempting YouTube.js engine (no auth needed)...');
+
+      const outputFile = await this.ytjs.download(
+        options.url,
+        options.outputPath,
+        options.filename,
+        options.audioOnly,
+        (progress) => {
+          // Check if cancelled
+          const ytjsDl = this.activeYTJSDownloads.get(downloadId);
+          if (ytjsDl?.aborted) {
+            throw new Error('Download cancelled');
+          }
+
+          item.status = 'downloading';
+          item.progress = progress.percent;
+          item.speed = progress.speed;
+          item.filesize = progress.total > 0
+            ? `${(progress.total / 1048576).toFixed(1)} MiB`
+            : '';
+          onProgress({
+            downloadId,
+            status: 'downloading',
+            percent: progress.percent,
+            speed: progress.speed,
+            eta: '',
+            filesize: item.filesize,
+            filename: options.filename || '',
+          });
+        }
+      );
+
+      // Success!
+      this.activeYTJSDownloads.delete(downloadId);
+      item.status = 'completed';
+      item.progress = 100;
+      item.filename = outputFile;
+      console.log(`[GrabTube] YouTube.js download SUCCESS: ${outputFile}`);
+      onComplete(item);
+      this.processQueue();
+    } catch (err) {
+      this.activeYTJSDownloads.delete(downloadId);
+      const msg = err instanceof Error ? err.message : String(err);
+
+      // If cancelled, don't retry
+      if (msg === 'Download cancelled') {
+        item.status = 'cancelled';
+        onComplete(item);
+        this.processQueue();
+        return;
+      }
+
+      // YouTube.js failed — silently fall back to yt-dlp with browser cookies
+      console.log(`[GrabTube] YouTube.js failed (${msg.substring(0, 100)}). Falling back to yt-dlp...`);
+      item.error = undefined;
+      item.progress = 0;
+      item.status = 'downloading';
+
+      // Start yt-dlp fallback with browser cycling (retryCount=1 to skip YTJS next time)
+      this.executeDownload(
+        downloadId, options, proxy, onProgress, onComplete, item,
+        cookiesPath, browserCookies || this.ytdlp.getAutoBrowser() || 'firefox', 1
+      );
+    }
+  }
+
+  /**
    * Determine if a failed download should be retried with cookies.
    */
   private shouldRetryWithCookies(platform: string, error?: string): boolean {
@@ -324,7 +432,8 @@ export class DownloadManager {
   }
 
   private processQueue(): void {
-    while (this.queue.length > 0 && this.activeDownloads.size < this.maxConcurrent) {
+    const totalActive = this.activeDownloads.size + this.activeYTJSDownloads.size;
+    while (this.queue.length > 0 && totalActive < this.maxConcurrent) {
       const next = this.queue.shift();
       if (next) {
         const item: DownloadItem = {
@@ -352,24 +461,39 @@ export class DownloadManager {
       this.activeDownloads.delete(downloadId);
       this.processQueue();
     }
+    // Cancel YouTube.js download
+    const ytjsDl = this.activeYTJSDownloads.get(downloadId);
+    if (ytjsDl) {
+      ytjsDl.aborted = true;
+      ytjsDl.item.status = 'cancelled';
+      this.activeYTJSDownloads.delete(downloadId);
+      this.processQueue();
+    }
     // Also remove from queue
     this.queue = this.queue.filter((q) => q.id !== downloadId);
   }
 
   cancelAll(): void {
-    for (const [id, download] of this.activeDownloads) {
+    for (const [, download] of this.activeDownloads) {
       download.item.status = 'cancelled';
       download.process.kill('SIGTERM');
     }
     this.activeDownloads.clear();
+    for (const [, ytjsDl] of this.activeYTJSDownloads) {
+      ytjsDl.aborted = true;
+      ytjsDl.item.status = 'cancelled';
+    }
+    this.activeYTJSDownloads.clear();
     this.queue = [];
   }
 
   hasActiveDownloads(): boolean {
-    return this.activeDownloads.size > 0;
+    return this.activeDownloads.size > 0 || this.activeYTJSDownloads.size > 0;
   }
 
   getActiveDownloads(): DownloadItem[] {
-    return Array.from(this.activeDownloads.values()).map((d) => d.item);
+    const ytdlpItems = Array.from(this.activeDownloads.values()).map((d) => d.item);
+    const ytjsItems = Array.from(this.activeYTJSDownloads.values()).map((d) => d.item);
+    return [...ytdlpItems, ...ytjsItems];
   }
 }

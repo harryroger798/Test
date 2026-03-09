@@ -92,9 +92,60 @@ function createTray(): void {
 
 // IPC Handlers
 function setupIPC(): void {
-  // Fetch video info (uses retry with platform-specific bypass)
+  // Fetch video info — YouTube.js first for YouTube URLs, yt-dlp for everything else
   ipcMain.handle('fetch-info', async (_event, url: string) => {
     try {
+      const platform = ytdlp.detectPlatformFromUrl(url);
+
+      // YouTube: try YouTube.js engine first (no cookies needed)
+      if (platform === 'youtube') {
+        try {
+          const ytjsEngine = downloadManager.getYTJSEngine();
+          const ytjsInfo = await ytjsEngine.getVideoInfo(url);
+          // Convert to the same format yt-dlp returns
+          return {
+            success: true,
+            data: {
+              id: ytjsInfo.id,
+              title: ytjsInfo.title,
+              description: ytjsInfo.description,
+              thumbnail: ytjsInfo.thumbnail,
+              duration: ytjsInfo.duration,
+              durationString: ytjsInfo.durationString,
+              uploader: ytjsInfo.author,
+              uploaderUrl: '',
+              viewCount: ytjsInfo.viewCount,
+              likeCount: 0,
+              uploadDate: '',
+              webpage_url: `https://www.youtube.com/watch?v=${ytjsInfo.id}`,
+              extractor: 'youtube',
+              platform: 'youtube',
+              formats: ytjsInfo.formats.map((f) => ({
+                formatId: String(f.itag),
+                ext: f.mimeType.includes('mp4') ? 'mp4' : f.mimeType.includes('webm') ? 'webm' : 'mp4',
+                resolution: f.hasVideo ? `${f.width}x${f.height}` : 'audio only',
+                filesize: f.contentLength || null,
+                vcodec: f.hasVideo ? (f.mimeType.split(';')[0] || 'video') : 'none',
+                acodec: f.hasAudio ? (f.mimeType.split(';')[0] || 'audio') : 'none',
+                fps: f.fps || null,
+                tbr: f.bitrate ? Math.round(f.bitrate / 1000) : null,
+                quality: f.qualityLabel || 'audio',
+                hasVideo: f.hasVideo,
+                hasAudio: f.hasAudio,
+                note: f.qualityLabel || '',
+              })),
+              subtitles: {},
+              requestedSubtitles: null,
+            },
+          };
+        } catch (ytjsError) {
+          const ytjsMsg = ytjsError instanceof Error ? ytjsError.message : String(ytjsError);
+          console.log(`[GrabTube] YouTube.js info fetch failed (${ytjsMsg.substring(0, 80)}), falling back to yt-dlp...`);
+          // Fall through to yt-dlp
+        }
+      }
+
+      // Fallback: yt-dlp with retry (works for all platforms)
       const proxySettings = settings.get('proxy') as { enabled: boolean; url: string } | undefined;
       const proxy = proxySettings?.enabled ? proxySettings.url : undefined;
       const cookiesPath = settings.get('cookiesPath') as string | undefined;
@@ -332,6 +383,13 @@ app.whenReady().then(async () => {
     binaryUpdater.init(mainWindow);
     healthMonitor.init(mainWindow);
   }
+
+  // Pre-initialize YouTube.js engine (runs in background, doesn't block startup)
+  downloadManager.getYTJSEngine().init().then(() => {
+    console.log('[GrabTube] YouTube.js engine ready — primary YouTube download engine initialized.');
+  }).catch((err) => {
+    console.log('[GrabTube] YouTube.js engine init deferred:', err instanceof Error ? err.message : 'unknown error');
+  });
 
   // Auto-start POT provider for YouTube bypass (runs in background)
   const potStarted = await ytdlp.startPotProvider();
