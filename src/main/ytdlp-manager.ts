@@ -129,7 +129,7 @@ export class YtdlpManager {
    * yt-dlp supports these via --cookies-from-browser.
    */
   private static readonly AUTO_BROWSERS = [
-    'edge', 'firefox', 'chrome', 'brave', 'opera', 'vivaldi', 'chromium',
+    'firefox', 'edge', 'brave', 'opera', 'vivaldi', 'chromium', 'chrome',
   ];
 
   constructor(binaryManager?: BinaryManager) {
@@ -299,8 +299,26 @@ export class YtdlpManager {
            lower.includes('use --cookies') ||
            lower.includes('could not copy') ||
            lower.includes('cookie database') ||
+           lower.includes('failed to decrypt') ||
+           lower.includes('dpapi') ||
            lower.includes('403') ||
            lower.includes('forbidden');
+  }
+
+  /**
+   * Check if an error is specifically a DPAPI/cookie encryption error.
+   * These errors mean the current browser's cookies can't be read and we
+   * should skip to the next browser immediately.
+   */
+  isDpapiOrCookieError(msg: string): boolean {
+    const lower = msg.toLowerCase();
+    return lower.includes('failed to decrypt') ||
+           lower.includes('dpapi') ||
+           lower.includes('could not copy') ||
+           lower.includes('cookie database') ||
+           lower.includes('permission denied') ||
+           lower.includes('cookies could not be decrypted') ||
+           lower.includes('failed to extract cookies');
   }
 
   /**
@@ -548,8 +566,8 @@ export class YtdlpManager {
 
       // YouTube bot/IP block: auto-detect browser cookies
       // Only if no explicit cookies are configured (user hasn't set anything up)
-      if (platform === 'youtube' && this.isBotError(firstMsg) && !browserCookies && !cookiesPath) {
-        console.log('[GrabTube] YouTube bot block detected. Auto-detecting browser cookies...');
+      if (platform === 'youtube' && (this.isBotError(firstMsg) || this.isDpapiOrCookieError(firstMsg)) && !browserCookies && !cookiesPath) {
+        console.log('[GrabTube] YouTube bot/cookie block detected. Auto-detecting browser cookies...');
 
         for (const browser of YtdlpManager.AUTO_BROWSERS) {
           try {
@@ -563,10 +581,13 @@ export class YtdlpManager {
             const browserMsg = browserError instanceof Error ? browserError.message : String(browserError);
             // If it's still a bot error or cookie error, try next browser
             // If it's a different error (e.g., video not found), throw immediately
-            if (!this.isBotError(browserMsg) && !browserMsg.toLowerCase().includes('cookie') && !browserMsg.toLowerCase().includes('browser')) {
-              throw browserError;
+            // DPAPI/cookie errors mean this browser can't be read — skip to next
+            if (this.isDpapiOrCookieError(browserMsg) || this.isBotError(browserMsg) || browserMsg.toLowerCase().includes('cookie') || browserMsg.toLowerCase().includes('browser')) {
+              console.log(`[GrabTube] ${browser} cookies failed (${browserMsg.substring(0, 80)}), trying next browser...`);
+              continue;
             }
-            continue;
+            // Different error (e.g., video not found) — throw immediately
+            throw browserError;
           }
         }
 

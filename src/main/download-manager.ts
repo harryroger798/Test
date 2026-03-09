@@ -141,15 +141,15 @@ export class DownloadManager {
       } else {
         const platform = this.ytdlp.detectPlatformFromUrl(options.url);
 
-        // YouTube auto-browser cookie retry: cycle through browsers on 403/bot errors
-        if (platform === 'youtube' && this.isYouTubeDownloadError(item.error)) {
-          const browsers = ['edge', 'firefox', 'chrome', 'brave', 'opera', 'vivaldi', 'chromium'];
+        // YouTube auto-browser cookie retry: cycle through browsers on 403/bot/DPAPI errors
+        if (platform === 'youtube' && (this.isYouTubeDownloadError(item.error) || this.isDpapiOrCookieError(item.error))) {
+          const browsers = ['firefox', 'edge', 'brave', 'opera', 'vivaldi', 'chromium', 'chrome'];
           const currentIndex = browserCookies ? browsers.indexOf(browserCookies) : -1;
           const nextIndex = currentIndex + 1;
 
           if (nextIndex < browsers.length) {
             const nextBrowser = browsers[nextIndex];
-            console.log(`[GrabTube] YouTube download failed (${item.error?.substring(0, 60)}), trying browser: ${nextBrowser}`);
+            console.log(`[GrabTube] YouTube download failed (${item.error?.substring(0, 80)}), trying browser: ${nextBrowser}`);
             item.error = undefined;
             item.progress = 0;
             this.activeDownloads.delete(downloadId);
@@ -160,6 +160,16 @@ export class DownloadManager {
 
         // Auto-retry logic (P4): Try with cookies if first attempt failed
         const needsRetry = retryCount === 0 && this.shouldRetryWithCookies(platform, item.error);
+
+        // For YouTube: if no browser was tried yet, try without cookies first (many videos work without auth)
+        if (platform === 'youtube' && !browserCookies && !cookiesPath && retryCount === 0 && this.isYouTubeDownloadError(item.error)) {
+          console.log('[GrabTube] YouTube download failed without cookies. Starting browser cookie cycle...');
+          item.error = undefined;
+          item.progress = 0;
+          this.activeDownloads.delete(downloadId);
+          this.executeDownload(downloadId, options, proxy, onProgress, onComplete, item, cookiesPath, 'firefox', 0);
+          return;
+        }
 
         if (needsRetry && (cookiesPath || browserCookies)) {
           // Retry with cookies
@@ -219,7 +229,26 @@ export class DownloadManager {
            lower.includes('confirm your age') ||
            lower.includes('use --cookies') ||
            lower.includes('could not copy') ||
-           lower.includes('cookie database');
+           lower.includes('cookie database') ||
+           lower.includes('failed to decrypt') ||
+           lower.includes('dpapi');
+  }
+
+  /**
+   * Detect DPAPI / cookie encryption errors that mean the current browser can't be used.
+   * On Windows, Chrome 127+ uses app-bound encryption that blocks external cookie access.
+   * Firefox cookies are unencrypted and always readable.
+   */
+  private isDpapiOrCookieError(error?: string): boolean {
+    if (!error) return false;
+    const lower = error.toLowerCase();
+    return lower.includes('failed to decrypt') ||
+           lower.includes('dpapi') ||
+           lower.includes('could not copy') ||
+           lower.includes('cookie database') ||
+           lower.includes('permission denied') ||
+           lower.includes('cookies could not be decrypted') ||
+           lower.includes('failed to extract cookies');
   }
 
   /**
