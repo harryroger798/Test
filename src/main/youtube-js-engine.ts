@@ -4,19 +4,24 @@ import * as https from 'https';
 import * as http from 'http';
 
 /**
- * YouTube.js (InnerTube API) Engine for GrabTube.
+ * YouTube.js (InnerTube API) Ultimate Engine for GrabTube v1.0.9.
  *
- * This is the PRIMARY download engine for YouTube videos.
- * It talks directly to YouTube's private InnerTube API using the
- * youtubei.js library, generating its own streaming URLs without
- * needing browser cookies, yt-dlp, or external proxies.
+ * PRIMARY download engine for YouTube with 4 enhancement layers:
  *
- * Fallback chain:
- *   1. YouTube.js (this engine) — no auth needed, fastest
- *   2. yt-dlp with browser cookies — fallback
- *   3. Cobalt API — last resort
+ * 1. Multi-client rotation (WEB -> ANDROID -> IOS -> MWEB -> TV)
+ *    Each client has different bot detection rules. ANDROID sometimes
+ *    returns direct MP4 URLs without cipher.
  *
- * The user never sees which engine is used.
+ * 2. Random visitor data generation (NewPipe's approach)
+ *    Generate random but valid-looking visitor data cookies.
+ *
+ * 3. POT token generation (BotGuard bypass)
+ *    Generate Proof of Origin tokens without a real browser.
+ *
+ * 4. Automatic fallback chain with all clients
+ *    YouTube.js (5 clients) -> yt-dlp + browser cookies -> Cobalt API
+ *
+ * The user never sees which engine or client is used.
  */
 
 export interface YTJSVideoFormat {
@@ -53,63 +58,194 @@ export interface YTJSDownloadProgress {
 }
 
 /**
+ * InnerTube client types to rotate through.
+ */
+type InnerTubeClientType = 'WEB' | 'MWEB' | 'ANDROID' | 'IOS' | 'TV';
+
+const CLIENT_ROTATION_ORDER: InnerTubeClientType[] = [
+  'WEB',      // Standard web client — most compatible
+  'ANDROID',  // Android client — sometimes returns direct MP4 URLs without cipher
+  'IOS',      // iOS client — alternative mobile client
+  'MWEB',     // Mobile web — lightweight, fewer restrictions
+  'TV',       // TV client — different bot detection rules
+];
+
+/**
  * Dynamically import youtubei.js (ESM module).
- * We use dynamic import() because youtubei.js is ESM-only
- * and our project uses CommonJS.
  */
 async function loadInnertube(): Promise<typeof import('youtubei.js')> {
   return import('youtubei.js');
 }
 
+/**
+ * Generate random visitor data similar to NewPipe's approach.
+ * YouTube uses visitor_data to track sessions. Random but valid-looking
+ * visitor data helps bypass bot detection without needing real cookies.
+ */
+function generateRandomVisitorData(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  let visitorId = '';
+  for (let i = 0; i < 11; i++) {
+    visitorId += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  const timestamp = Math.floor(Date.now() / 1000);
+  const data = Buffer.from(`\x0a\x0b${visitorId}\x28${encodeVarint(timestamp)}`);
+  return data.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Encode an integer as a protobuf varint.
+ */
+function encodeVarint(value: number): string {
+  const bytes: number[] = [];
+  while (value > 0x7f) {
+    bytes.push((value & 0x7f) | 0x80);
+    value >>>= 7;
+  }
+  bytes.push(value & 0x7f);
+  return String.fromCharCode(...bytes);
+}
+
+/**
+ * POT (Proof of Origin) Token Manager.
+ * Generates BotGuard tokens without a real browser using youtube-po-token-generator.
+ */
+class POTTokenManager {
+  private cachedToken: { visitorData: string; poToken: string } | null = null;
+  private cacheTime = 0;
+  private static readonly TOKEN_TTL = 15 * 60 * 1000; // 15 minutes
+  private generating = false;
+
+  async getToken(): Promise<{ visitorData: string; poToken: string } | null> {
+    if (this.cachedToken && (Date.now() - this.cacheTime) < POTTokenManager.TOKEN_TTL) {
+      return this.cachedToken;
+    }
+    if (this.generating) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      return this.cachedToken;
+    }
+    this.generating = true;
+    try {
+      const token = await this.generateToken();
+      if (token) {
+        this.cachedToken = token;
+        this.cacheTime = Date.now();
+        console.log('[GrabTube][POT] Generated fresh POT token');
+      }
+      return token;
+    } catch (err) {
+      console.log('[GrabTube][POT] Token generation failed:', err instanceof Error ? err.message : 'unknown');
+      return this.cachedToken;
+    } finally {
+      this.generating = false;
+    }
+  }
+
+  private async generateToken(): Promise<{ visitorData: string; poToken: string } | null> {
+    try {
+      const potGenerator = await import('youtube-po-token-generator');
+      const generate = potGenerator.generate || potGenerator.default?.generate;
+      if (!generate) {
+        console.log('[GrabTube][POT] Generator function not found in module');
+        return null;
+      }
+      const result = await generate();
+      if (result && result.visitorData && result.poToken) {
+        return { visitorData: result.visitorData, poToken: result.poToken };
+      }
+      return null;
+    } catch (err) {
+      console.log('[GrabTube][POT] Generator not available:', err instanceof Error ? err.message : 'unknown');
+      return null;
+    }
+  }
+
+  async isAvailable(): Promise<boolean> {
+    try {
+      await import('youtube-po-token-generator');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export class YouTubeJSEngine {
-  private innertubeInstance: unknown = null;
-  private initPromise: Promise<void> | null = null;
-  private lastInitTime = 0;
+  private clientInstances: Map<string, unknown> = new Map();
+  private initPromises: Map<string, Promise<void>> = new Map();
+  private lastInitTimes: Map<string, number> = new Map();
+  private potManager: POTTokenManager = new POTTokenManager();
   private static readonly REINIT_INTERVAL = 30 * 60 * 1000; // 30 minutes
+  private lastSuccessfulClient: InnerTubeClientType | null = null;
 
   /**
-   * Initialize the InnerTube client.
-   * Caches the instance and re-initializes every 30 minutes
-   * to keep the session fresh.
+   * Initialize a specific InnerTube client type with random visitor data + POT token.
    */
-  async init(): Promise<void> {
+  async initClient(clientType: InnerTubeClientType = 'WEB'): Promise<void> {
     const now = Date.now();
-    if (this.innertubeInstance && (now - this.lastInitTime) < YouTubeJSEngine.REINIT_INTERVAL) {
+    const lastInit = this.lastInitTimes.get(clientType) || 0;
+    const existing = this.clientInstances.get(clientType);
+
+    if (existing && (now - lastInit) < YouTubeJSEngine.REINIT_INTERVAL) {
       return;
     }
 
-    if (this.initPromise) {
-      return this.initPromise;
+    const existingPromise = this.initPromises.get(clientType);
+    if (existingPromise) {
+      return existingPromise;
     }
 
-    this.initPromise = (async () => {
+    const promise = (async () => {
       try {
         const { Innertube } = await loadInnertube();
-        this.innertubeInstance = await Innertube.create({
+        const visitorData = generateRandomVisitorData();
+        const potToken = await this.potManager.getToken();
+
+        const createOptions: Record<string, unknown> = {
           lang: 'en',
           location: 'US',
-        });
-        this.lastInitTime = Date.now();
-        console.log('[GrabTube][YTJS] InnerTube client initialized');
+          visitor_data: potToken?.visitorData || visitorData,
+        };
+
+        if (potToken?.poToken) {
+          createOptions.po_token = potToken.poToken;
+        }
+
+        if (clientType !== 'WEB') {
+          createOptions.client_type = clientType;
+        }
+
+        const instance = await Innertube.create(createOptions);
+        this.clientInstances.set(clientType, instance);
+        this.lastInitTimes.set(clientType, Date.now());
+        console.log(`[GrabTube][YTJS] ${clientType} client initialized${potToken ? ' (with POT token)' : ' (with random visitor data)'}`);
       } catch (err) {
-        console.error('[GrabTube][YTJS] Failed to initialize InnerTube:', err);
-        this.innertubeInstance = null;
+        console.error(`[GrabTube][YTJS] Failed to initialize ${clientType} client:`, err);
+        this.clientInstances.delete(clientType);
         throw err;
       } finally {
-        this.initPromise = null;
+        this.initPromises.delete(clientType);
       }
     })();
 
-    return this.initPromise;
+    this.initPromises.set(clientType, promise);
+    return promise;
   }
 
   /**
-   * Check if the engine is available (youtubei.js can be loaded).
+   * Initialize the default (WEB) client. Backward compatible.
+   */
+  async init(): Promise<void> {
+    return this.initClient('WEB');
+  }
+
+  /**
+   * Check if the engine is available.
    */
   async isAvailable(): Promise<boolean> {
     try {
-      await this.init();
-      return this.innertubeInstance !== null;
+      await this.initClient('WEB');
+      return this.clientInstances.has('WEB');
     } catch {
       return false;
     }
@@ -131,33 +267,61 @@ export class YouTubeJSEngine {
   }
 
   /**
-   * Get video info using YouTube.js InnerTube API.
-   * No cookies or authentication needed.
+   * Get video info with automatic client rotation.
+   * Tries multiple InnerTube clients until one succeeds.
    */
   async getVideoInfo(url: string): Promise<YTJSVideoInfo> {
-    await this.init();
-
     const videoId = this.extractVideoId(url);
     if (!videoId) {
       throw new Error('Invalid YouTube URL');
     }
 
-    const yt = this.innertubeInstance as InstanceType<Awaited<ReturnType<typeof loadInnertube>>['Innertube']>;
+    const clientOrder = this.getClientOrder();
+    let lastError: Error | null = null;
 
-    // Try getInfo which provides full streaming data
-    const info = await yt.getInfo(videoId);
-
-    const basicInfo = info.basic_info;
-    if (!basicInfo || !basicInfo.title) {
-      throw new Error('Failed to get video info from YouTube.js');
+    for (const clientType of clientOrder) {
+      try {
+        console.log(`[GrabTube][YTJS] Trying ${clientType} client for video info...`);
+        const info = await this.getVideoInfoWithClient(videoId, clientType);
+        this.lastSuccessfulClient = clientType;
+        console.log(`[GrabTube][YTJS] ${clientType} client succeeded for video info`);
+        return info;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.log(`[GrabTube][YTJS] ${clientType} client failed: ${lastError.message.substring(0, 80)}`);
+        this.lastInitTimes.delete(clientType);
+        continue;
+      }
     }
 
-    // Build format list from streaming data
+    throw lastError || new Error('All InnerTube clients failed');
+  }
+
+  private getClientOrder(): InnerTubeClientType[] {
+    if (this.lastSuccessfulClient) {
+      return [this.lastSuccessfulClient, ...CLIENT_ROTATION_ORDER.filter((c) => c !== this.lastSuccessfulClient)];
+    }
+    return [...CLIENT_ROTATION_ORDER];
+  }
+
+  private async getVideoInfoWithClient(videoId: string, clientType: InnerTubeClientType): Promise<YTJSVideoInfo> {
+    await this.initClient(clientType);
+
+    const yt = this.clientInstances.get(clientType) as InstanceType<Awaited<ReturnType<typeof loadInnertube>>['Innertube']>;
+    if (!yt) {
+      throw new Error(`${clientType} client not initialized`);
+    }
+
+    const info = await yt.getInfo(videoId);
+    const basicInfo = info.basic_info;
+    if (!basicInfo || !basicInfo.title) {
+      throw new Error(`Failed to get video info from ${clientType} client`);
+    }
+
     const formats: YTJSVideoFormat[] = [];
     const streamingData = info.streaming_data;
 
     if (streamingData) {
-      // Combined formats (video + audio)
       if (streamingData.formats) {
         for (const f of streamingData.formats) {
           try {
@@ -183,7 +347,6 @@ export class YouTubeJSEngine {
         }
       }
 
-      // Adaptive formats (video-only or audio-only)
       if (streamingData.adaptive_formats) {
         for (const f of streamingData.adaptive_formats) {
           try {
@@ -238,8 +401,7 @@ export class YouTubeJSEngine {
   }
 
   /**
-   * Download a YouTube video using YouTube.js streaming.
-   * Uses the info.download() method which handles deciphering internally.
+   * Download a YouTube video with automatic client rotation.
    */
   async download(
     url: string,
@@ -248,49 +410,129 @@ export class YouTubeJSEngine {
     audioOnly: boolean,
     onProgress?: (progress: YTJSDownloadProgress) => void
   ): Promise<string> {
-    await this.init();
-
     const videoId = this.extractVideoId(url);
     if (!videoId) {
       throw new Error('Invalid YouTube URL');
     }
 
-    const yt = this.innertubeInstance as InstanceType<Awaited<ReturnType<typeof loadInnertube>>['Innertube']>;
+    const clientOrder = this.getClientOrder();
+    let lastError: Error | null = null;
 
-    // Get full video info with streaming data
-    const info = await yt.getInfo(videoId);
-
-    if (!info.basic_info?.title) {
-      throw new Error('YouTube.js: Could not get video info');
+    for (const clientType of clientOrder) {
+      try {
+        console.log(`[GrabTube][YTJS] Trying ${clientType} client for download...`);
+        const result = await this.downloadWithClient(videoId, clientType, outputPath, filename, audioOnly, onProgress);
+        this.lastSuccessfulClient = clientType;
+        console.log(`[GrabTube][YTJS] ${clientType} client download SUCCESS`);
+        return result;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.log(`[GrabTube][YTJS] ${clientType} download failed: ${lastError.message.substring(0, 80)}`);
+        this.lastInitTimes.delete(clientType);
+        if (onProgress) {
+          onProgress({ percent: 0, downloaded: 0, total: 0, speed: 'Trying next method...' });
+        }
+        continue;
+      }
     }
 
-    // Determine output filename
+    throw lastError || new Error('All InnerTube clients failed to download');
+  }
+
+  /**
+   * Download using a specific InnerTube client.
+   * Tries built-in download first, then falls back to direct URL download.
+   */
+  private async downloadWithClient(
+    videoId: string,
+    clientType: InnerTubeClientType,
+    outputPath: string,
+    filename: string,
+    audioOnly: boolean,
+    onProgress?: (progress: YTJSDownloadProgress) => void
+  ): Promise<string> {
+    await this.initClient(clientType);
+
+    const yt = this.clientInstances.get(clientType) as InstanceType<Awaited<ReturnType<typeof loadInnertube>>['Innertube']>;
+    if (!yt) {
+      throw new Error(`${clientType} client not initialized`);
+    }
+
+    const info = await yt.getInfo(videoId);
+    if (!info.basic_info?.title) {
+      throw new Error(`${clientType}: Could not get video info`);
+    }
+
     const safeTitle = (filename || info.basic_info.title || 'video')
       .replace(/[<>:"/\\|?*]/g, '_')
       .substring(0, 200);
     const ext = audioOnly ? 'mp3' : 'mp4';
     const outputFile = path.join(outputPath, `${safeTitle}.${ext}`);
 
-    // Use YouTube.js download method
-    const downloadOptions: Record<string, unknown> = audioOnly
-      ? { type: 'audio', quality: 'best' }
-      : { type: 'video+audio', quality: 'best' };
+    // Method 1: YouTube.js built-in download (handles muxing)
+    try {
+      const downloadOptions: Record<string, unknown> = audioOnly
+        ? { type: 'audio', quality: 'best' }
+        : { type: 'video+audio', quality: 'best' };
 
-    const stream = await info.download(downloadOptions);
+      const stream = await info.download(downloadOptions);
+      await this.writeStreamToFile(stream, outputFile, info, onProgress);
+      return outputFile;
+    } catch (downloadErr) {
+      console.log(`[GrabTube][YTJS] ${clientType} download() failed, trying direct URL...`);
+    }
 
-    // Write stream to file with progress tracking
+    // Method 2: Direct URL download from deciphered format URLs
+    const streamingData = info.streaming_data;
+    if (!streamingData) {
+      throw new Error(`${clientType}: No streaming data available`);
+    }
+
+    const allFormats = [
+      ...(streamingData.formats || []),
+      ...(streamingData.adaptive_formats || []),
+    ];
+
+    const targetFormats = audioOnly
+      ? allFormats.filter((f) => !f.width || !f.height)
+      : allFormats.filter((f) => f.width && f.height);
+
+    const formatsToTry = targetFormats.length > 0 ? targetFormats : allFormats;
+    formatsToTry.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
+    for (const fmt of formatsToTry.slice(0, 3)) {
+      try {
+        const directUrl = await fmt.decipher(yt.session.player);
+        if (!directUrl) continue;
+        await this.downloadFromDirectUrl(directUrl, outputFile, onProgress);
+        return outputFile;
+      } catch {
+        continue;
+      }
+    }
+
+    throw new Error(`${clientType}: All format URLs failed`);
+  }
+
+  /**
+   * Write a ReadableStream to a file with progress tracking.
+   */
+  private async writeStreamToFile(
+    stream: ReadableStream<Uint8Array>,
+    outputFile: string,
+    info: { streaming_data?: { formats?: Array<{ content_length?: number }>; adaptive_formats?: Array<{ content_length?: number }> } },
+    onProgress?: (progress: YTJSDownloadProgress) => void
+  ): Promise<void> {
     const fileStream = fs.createWriteStream(outputFile);
     let downloaded = 0;
     let totalSize = 0;
 
-    // Try to estimate total size from streaming data
     if (info.streaming_data) {
       const allFormats = [
         ...(info.streaming_data.formats || []),
         ...(info.streaming_data.adaptive_formats || []),
       ];
       if (allFormats.length > 0) {
-        // Rough estimate from best format
         const bestFormat = allFormats.reduce((best, f) =>
           (f.content_length || 0) > (best.content_length || 0) ? f : best
         );
@@ -301,11 +543,13 @@ export class YouTubeJSEngine {
     let lastTime = Date.now();
     let lastBytes = 0;
 
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const writeChunks = async () => {
         try {
-          for await (const chunk of stream) {
-            const buffer = Buffer.from(chunk);
+          const reader = stream.getReader();
+          let readResult = await reader.read();
+          while (!readResult.done) {
+            const buffer = Buffer.from(readResult.value);
             fileStream.write(buffer);
             downloaded += buffer.length;
 
@@ -321,6 +565,8 @@ export class YouTubeJSEngine {
               lastTime = now;
               lastBytes = downloaded;
             }
+
+            readResult = await reader.read();
           }
 
           fileStream.end();
@@ -329,11 +575,10 @@ export class YouTubeJSEngine {
               onProgress({ percent: 100, downloaded, total: downloaded, speed: '' });
             }
             console.log(`[GrabTube][YTJS] Download complete: ${outputFile} (${this.formatSize(downloaded)})`);
-            resolve(outputFile);
+            resolve();
           });
         } catch (err) {
           fileStream.close();
-          // Clean up partial file
           try {
             if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
           } catch { /* ignore */ }
@@ -350,18 +595,14 @@ export class YouTubeJSEngine {
   }
 
   /**
-   * Download a video using direct URL streaming (for when we have a deciphered URL).
-   * This is used as a secondary method if info.download() fails.
+   * Download from a direct URL with progress tracking (internal).
    */
-  async downloadFromUrl(
+  private downloadFromDirectUrl(
     streamUrl: string,
-    outputPath: string,
-    filename: string,
+    outputFile: string,
     onProgress?: (progress: YTJSDownloadProgress) => void
-  ): Promise<string> {
-    const outputFile = path.join(outputPath, filename);
-
-    return new Promise<string>((resolve, reject) => {
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
       const makeRequest = (requestUrl: string, redirectCount = 0) => {
         if (redirectCount > 5) {
           reject(new Error('Too many redirects'));
@@ -422,7 +663,7 @@ export class YouTubeJSEngine {
             if (onProgress) {
               onProgress({ percent: 100, downloaded, total: downloaded, speed: '' });
             }
-            resolve(outputFile);
+            resolve();
           });
           file.on('error', (err) => {
             try {
@@ -435,6 +676,37 @@ export class YouTubeJSEngine {
 
       makeRequest(streamUrl);
     });
+  }
+
+  /**
+   * Download a video using direct URL streaming (public API for download-manager).
+   */
+  async downloadFromUrl(
+    streamUrl: string,
+    outputPath: string,
+    filename: string,
+    onProgress?: (progress: YTJSDownloadProgress) => void
+  ): Promise<string> {
+    const outputFile = path.join(outputPath, filename);
+    await this.downloadFromDirectUrl(streamUrl, outputFile, onProgress);
+    return outputFile;
+  }
+
+  /**
+   * Refresh all clients (force re-initialization on next use).
+   */
+  refreshAllClients(): void {
+    this.lastInitTimes.clear();
+    this.clientInstances.clear();
+    this.initPromises.clear();
+    console.log('[GrabTube][YTJS] All clients cleared for refresh');
+  }
+
+  /**
+   * Get the POT token manager.
+   */
+  getPOTManager(): POTTokenManager {
+    return this.potManager;
   }
 
   private formatSpeed(bytesPerSec: number): string {

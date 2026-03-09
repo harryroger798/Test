@@ -1,6 +1,6 @@
 {
   "name": "grabtube",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Multi-platform video & audio downloader supporting 1800+ websites",
   "main": "dist/main/index.js",
   "author": "GrabTube",
@@ -24,6 +24,7 @@
   "dependencies": {
     "electron-store": "^8.1.0",
     "electron-updater": "^6.1.7",
+    "youtube-po-token-generator": "^0.6.0",
     "youtubei.js": "^16.0.1",
     "zustand": "^4.5.0"
   },
