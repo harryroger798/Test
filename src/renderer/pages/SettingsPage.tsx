@@ -117,6 +117,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <FolderOpen size={16} className="text-primary" />
               Download Location
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-56 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Choose where downloaded videos and audio files are saved on your computer.
+                </span>
+              </span>
             </h3>
             <div className="flex items-center gap-3">
               <div className="flex-1 px-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-muted-foreground truncate">
@@ -136,6 +142,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Palette size={16} className="text-primary" />
               Appearance
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-56 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Switch between dark and light themes. Dark mode is easier on the eyes.
+                </span>
+              </span>
             </h3>
             <div className="flex gap-2">
               {(['dark', 'light'] as const).map((t) => (
@@ -160,6 +172,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Globe size={16} className="text-primary" />
               Proxy Settings
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Route downloads through a proxy server. Use HTTP/HTTPS for web proxies or SOCKS5 for full tunneling. Only needed if downloads are blocked in your region.
+                </span>
+              </span>
             </h3>
 
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
@@ -212,6 +230,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Cookie size={16} className="text-primary" />
               Cookie Authentication
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Cookies let GrabTube access content requiring login (Instagram, Facebook, age-restricted YouTube). Auto-detect reads from your browser; manual import uses a cookies.txt file.
+                </span>
+              </span>
             </h3>
             <p className="text-xs text-muted-foreground mb-4">
               Some platforms (Instagram, Reddit, Facebook, Twitter) require login cookies to download videos.
@@ -298,6 +322,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Key size={16} className="text-primary" />
               YouTube OAuth2 Login
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Sign in with Google once to permanently bypass "Sign in to confirm you're not a bot" errors. The token refreshes automatically.
+                </span>
+              </span>
             </h3>
             <p className="text-xs text-muted-foreground mb-4">
               Sign in with your Google account once. GrabTube stores a refresh token so you never need to sign in again.
@@ -345,6 +375,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Cloud size={16} className="text-primary" />
               Cobalt API Fallback
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Cobalt is an open-source service used as a last resort when all local methods fail. Downloads route through Cobalt's clean server IPs to bypass blocks.
+                </span>
+              </span>
             </h3>
             <p className="text-xs text-muted-foreground mb-4">
               When all local download methods fail, GrabTube can try downloading via cobalt.tools as a last resort.
@@ -366,6 +402,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Shield size={16} className="text-primary" />
               Download Preferences
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Set concurrent download limits (higher = faster but uses more bandwidth), default audio format, and options to embed thumbnails/subtitles into downloaded files.
+                </span>
+              </span>
             </h3>
 
             <div className="space-y-3">
@@ -473,6 +515,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Download size={16} className="text-primary" />
               Auto Updates
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  GrabTube automatically keeps everything up to date. App updates install on restart. yt-dlp updates daily to stay ahead of website changes. FFmpeg updates weekly.
+                </span>
+              </span>
             </h3>
             <p className="text-xs text-muted-foreground mb-4">
               GrabTube automatically checks for app and binary updates. App updates install on restart.
@@ -517,6 +565,12 @@ export const SettingsPage: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Activity size={16} className="text-primary" />
               Health Monitor
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Monitors all system components and auto-heals issues. Re-downloads corrupted binaries, updates failed extractors, and restarts the POT provider if needed.
+                </span>
+              </span>
             </h3>
             <p className="text-xs text-muted-foreground mb-4">
               Self-healing system monitors for failures and auto-fixes common issues.

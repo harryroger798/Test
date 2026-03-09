@@ -89,6 +89,10 @@ const electronAPI = {
   getSetupComplete: () => ipcRenderer.invoke('get-setup-complete'),
   setSetupComplete: () => ipcRenderer.invoke('set-setup-complete'),
 
+  // Feature tour
+  getFeatureTourComplete: () => ipcRenderer.invoke('get-feature-tour-complete'),
+  setFeatureTourComplete: () => ipcRenderer.invoke('set-feature-tour-complete'),
+
   // Health monitor
   getHealthStatus: () => ipcRenderer.invoke('get-health-status'),
   runHealthCheck: () => ipcRenderer.invoke('run-health-check'),
