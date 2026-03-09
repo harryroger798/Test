@@ -20,14 +20,18 @@ export const Sidebar: React.FC = () => {
     api.getAppVersion().then((res) => setAppVersion(res.version)).catch(() => setAppVersion('1.0.5'));
   }, []);
 
-  const activeDownloads = downloads.filter(
-    (d) => d.status === 'downloading' || d.status === 'queued' || d.status === 'processing'
+  const activeVideoDownloads = downloads.filter(
+    (d) => !d.audioOnly && (d.status === 'downloading' || d.status === 'queued' || d.status === 'processing')
+  ).length;
+
+  const activeAudioDownloads = downloads.filter(
+    (d) => d.audioOnly && (d.status === 'downloading' || d.status === 'queued' || d.status === 'processing')
   ).length;
 
   const downloadItems: NavItem[] = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'video', label: 'Video', icon: Video, badge: activeDownloads },
-    { id: 'audio', label: 'Audio', icon: Music },
+    { id: 'video', label: 'Video', icon: Video, badge: activeVideoDownloads },
+    { id: 'audio', label: 'Audio', icon: Music, badge: activeAudioDownloads },
   ];
 
   const systemItems: NavItem[] = [

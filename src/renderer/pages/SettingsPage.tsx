@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, LogOut, ExternalLink, Loader2 } from 'lucide-react';
+import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, ExternalLink } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -30,39 +30,16 @@ export const SettingsPage: React.FC = () => {
     version: null,
   });
 
-  const [oauth2Status, setOauth2Status] = useState<{ authenticated: boolean; loading: boolean }>({
-    authenticated: false,
-    loading: false,
-  });
-
   const [cobaltEnabled, setCobaltEnabled] = useState(true);
 
-  // Load OAuth2 and Cobalt status on mount
+  // Load Cobalt status on mount
   useEffect(() => {
     const loadStatus = async () => {
-      const oauth2 = await api.getOAuth2Status();
-      setOauth2Status({ authenticated: oauth2.authenticated, loading: false });
       const cobalt = await api.getCobaltStatus();
       setCobaltEnabled(cobalt.enabled);
     };
     loadStatus();
   }, []);
-
-  const handleOAuth2Login = async () => {
-    setOauth2Status((prev) => ({ ...prev, loading: true }));
-    const result = await api.initiateOAuth2Login();
-    if (result.success) {
-      setOauth2Status({ authenticated: true, loading: false });
-    } else {
-      setOauth2Status({ authenticated: false, loading: false });
-      alert(`OAuth2 login failed: ${result.error || 'Unknown error'}`);
-    }
-  };
-
-  const handleOAuth2Logout = async () => {
-    await api.removeOAuth2Token();
-    setOauth2Status({ authenticated: false, loading: false });
-  };
 
   const handleCobaltToggle = async (enabled: boolean) => {
     await api.setCobaltEnabled(enabled);
@@ -317,55 +294,34 @@ export const SettingsPage: React.FC = () => {
             </div>
           </section>
 
-          {/* YouTube OAuth2 Authentication */}
+          {/* YouTube Authentication Notice */}
           <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
               <Key size={16} className="text-primary" />
-              YouTube OAuth2 Login
+              YouTube Authentication
               <span className="relative group ml-auto">
                 <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
                 <span className="absolute right-0 top-6 z-50 w-64 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
-                  Sign in with Google once to permanently bypass "Sign in to confirm you're not a bot" errors. The token refreshes automatically.
+                  YouTube no longer supports OAuth2 login. Use browser cookies or a cookies.txt file instead for authenticated access.
                 </span>
               </span>
             </h3>
-            <p className="text-xs text-muted-foreground mb-4">
-              Sign in with your Google account once. GrabTube stores a refresh token so you never need to sign in again.
-              This bypasses all &quot;Sign in to confirm you&apos;re not a bot&quot; errors permanently.
-            </p>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {oauth2Status.authenticated ? (
-                  <span className="flex items-center gap-1.5 text-sm text-green-500">
-                    <CheckCircle size={14} />
-                    Authenticated
-                  </span>
-                ) : (
-                  <span className="text-sm text-muted-foreground">Not signed in</span>
-                )}
-              </div>
-              <div className="flex gap-2">
-                {oauth2Status.authenticated ? (
-                  <button
-                    onClick={handleOAuth2Logout}
-                    className="px-3 py-1.5 bg-destructive/10 text-destructive rounded-lg text-xs font-medium hover:bg-destructive/20 transition-all flex items-center gap-1.5"
-                  >
-                    <LogOut size={12} />
-                    Sign Out
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleOAuth2Login}
-                    disabled={oauth2Status.loading}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-all flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    {oauth2Status.loading ? (
-                      <><Loader2 size={12} className="animate-spin" /> Signing in...</>
-                    ) : (
-                      <><Key size={12} /> Sign in with Google</>
-                    )}
-                  </button>
-                )}
+            <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={16} className="text-yellow-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-yellow-500 mb-1">OAuth2 Login Deprecated</p>
+                  <p className="text-xs text-muted-foreground">
+                    YouTube/yt-dlp no longer supports OAuth2 authentication. Use one of these methods instead:
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-3 list-disc">
+                    <li><strong>Browser Cookies (Recommended)</strong> — Select your browser above in the Cookie Authentication section. GrabTube will automatically use your logged-in YouTube session.</li>
+                    <li><strong>Cookies.txt File</strong> — Export cookies using a browser extension and import the file above.</li>
+                  </ul>
+                  <p className="text-xs text-muted-foreground mt-2 italic">
+                    GrabTube already auto-detects your browser cookies during the Setup Wizard, so most users don&apos;t need to do anything extra.
+                  </p>
+                </div>
               </div>
             </div>
           </section>
