@@ -11,6 +11,7 @@ export class AppAutoUpdater {
   private mainWindow: BrowserWindow | null = null;
   private checkInterval: ReturnType<typeof setInterval> | null = null;
   private isChecking = false;
+  private initialized = false;
 
   /**
    * Initialize the auto-updater with the main window reference.
@@ -18,6 +19,13 @@ export class AppAutoUpdater {
    */
   init(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow;
+
+    // Guard against double initialization (prevents duplicate IPC handler crash)
+    if (this.initialized) {
+      console.log('[GrabTube] Auto-updater already initialized, skipping.');
+      return;
+    }
+    this.initialized = true;
 
     // Configure auto-updater
     autoUpdater.autoDownload = true;
