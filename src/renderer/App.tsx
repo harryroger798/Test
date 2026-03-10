@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Bell, LogIn } from 'lucide-react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Bell, Key, Crown, CheckCircle, AlertCircle, X, Download } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { SetupWizard } from './components/SetupWizard';
@@ -12,7 +12,17 @@ import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
 import { useDownloadStore } from './store/downloadStore';
 import { useSettingsStore } from './store/settingsStore';
+import { cn } from './lib/utils';
 import { api } from './lib/ipc';
+
+interface AppNotification {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message: string;
+  timestamp: number;
+  read: boolean;
+}
 
 const App: React.FC = () => {
   const currentPage = useDownloadStore((s) => s.currentPage);
@@ -21,6 +31,43 @@ const App: React.FC = () => {
   const [showCookieBlock, setShowCookieBlock] = useState(false);
   const [showFeatureTour, setShowFeatureTour] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
+  const [licenseTier, setLicenseTier] = useState<string>('free');
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const addNotification = useCallback((type: AppNotification['type'], title: string, message: string) => {
+    const notif: AppNotification = {
+      id: Date.now().toString(),
+      type,
+      title,
+      message,
+      timestamp: Date.now(),
+      read: false,
+    };
+    setNotifications((prev) => [notif, ...prev].slice(0, 50));
+  }, []);
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const markAllRead = useCallback(() => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+  }, []);
+
+  // Close notification panel when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check if first-run setup and feature tour have been completed
   useEffect(() => {
@@ -37,13 +84,20 @@ const App: React.FC = () => {
       }
       setSetupChecked(true);
     });
+    // Load license tier for the top bar badge
+    api.getLicenseState().then((state) => {
+      setLicenseTier(state.tier);
+    }).catch(() => {});
   }, []);
 
-  // Listen for download errors that indicate cookie issues
+  // Listen for download completions and errors — feed notifications + cookie block
   useEffect(() => {
     const cleanup = api.onDownloadComplete((result: unknown) => {
-      const r = result as { success?: boolean; error?: string };
-      if (!r.success && r.error) {
+      const r = result as { success?: boolean; error?: string; title?: string; filename?: string };
+      if (r.success) {
+        addNotification('success', 'Download Complete', r.title || r.filename || 'File downloaded successfully');
+      } else if (r.error) {
+        addNotification('error', 'Download Failed', r.error);
         const errorLower = r.error.toLowerCase();
         if (
           errorLower.includes('sign in') ||
@@ -57,7 +111,7 @@ const App: React.FC = () => {
       }
     });
     return cleanup;
-  }, []);
+  }, [addNotification]);
 
   useEffect(() => {
     loadSettings();
@@ -134,22 +188,101 @@ const App: React.FC = () => {
             <span className="traffic-light traffic-light-green" />
           </div>
 
-          {/* Right side: theme toggle, notification, sign in */}
+          {/* Right side: theme toggle, notifications, license badge */}
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications) markAllRead();
+                }}
+                className="relative p-2 text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-secondary/50 press-effect"
+                title="Notifications"
+              >
+                <Bell size={18} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 min-w-[16px] h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center px-1 animate-scale-in">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notification dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 top-full mt-2 w-80 max-h-96 bg-card border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-slide-in">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                    <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+                    <div className="flex items-center gap-2">
+                      {notifications.length > 0 && (
+                        <button
+                          onClick={clearNotifications}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Clear all
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setShowNotifications(false)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="overflow-y-auto max-h-80">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center">
+                        <Download size={24} className="mx-auto text-muted-foreground/40 mb-2" />
+                        <p className="text-sm text-muted-foreground">No notifications yet</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">Download completions and errors will appear here</p>
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className={cn(
+                            'px-4 py-3 border-b border-border/50 hover:bg-secondary/30 transition-colors',
+                            !notif.read && 'bg-primary/5'
+                          )}
+                        >
+                          <div className="flex items-start gap-2">
+                            {notif.type === 'success' ? (
+                              <CheckCircle size={14} className="text-green-500 mt-0.5 flex-shrink-0" />
+                            ) : notif.type === 'error' ? (
+                              <AlertCircle size={14} className="text-destructive mt-0.5 flex-shrink-0" />
+                            ) : (
+                              <Bell size={14} className="text-primary mt-0.5 flex-shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-foreground">{notif.title}</p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">{notif.message}</p>
+                              <p className="text-[10px] text-muted-foreground/50 mt-1">
+                                {new Date(notif.timestamp).toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
-              className="relative p-2 text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg hover:bg-secondary/50 press-effect"
-              title="Notifications"
+              onClick={() => useDownloadStore.getState().setCurrentPage('settings')}
+              className={cn(
+                'ml-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 press-effect',
+                licenseTier === 'free'
+                  ? 'bg-secondary/50 border border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+                  : 'bg-primary/10 border border-primary text-primary hover:bg-primary/20'
+              )}
+              title={licenseTier === 'free' ? 'Activate License' : `${licenseTier.toUpperCase()} Plan`}
             >
-              <Bell size={18} />
-              {/* Notification dot */}
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full animate-pulse-download" />
-            </button>
-            <button
-              className="ml-1 flex items-center gap-2 px-3 py-1.5 bg-destructive text-destructive-foreground rounded-lg text-sm font-medium hover:bg-destructive/90 transition-all duration-200 press-effect"
-            >
-              <LogIn size={14} />
-              <span className="hidden sm:inline">Sign In</span>
+              {licenseTier === 'free' ? <Key size={14} /> : <Crown size={14} />}
+              <span className="hidden sm:inline">
+                {licenseTier === 'free' ? 'Activate' : licenseTier.toUpperCase()}
+              </span>
             </button>
           </div>
         </div>
