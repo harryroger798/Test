@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Home, Video, Music, Settings, HelpCircle, type LucideIcon } from 'lucide-react';
+import { Home, Video, Music, Settings, HelpCircle, Play, RefreshCw, type LucideIcon } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 import { cn } from '../lib/utils';
 import { useDownloadStore } from '../store/downloadStore';
 import { api } from '../lib/ipc';
 
 interface NavItem {
-  id: 'home' | 'video' | 'audio' | 'settings' | 'help';
+  id: 'home' | 'video' | 'audio' | 'player' | 'convert' | 'settings' | 'help';
   label: string;
   icon: LucideIcon;
   badge?: number;
@@ -32,6 +32,11 @@ export const Sidebar: React.FC = () => {
     { id: 'home', label: 'Home', icon: Home },
     { id: 'video', label: 'Video', icon: Video, badge: activeVideoDownloads },
     { id: 'audio', label: 'Audio', icon: Music, badge: activeAudioDownloads },
+  ];
+
+  const toolItems: NavItem[] = [
+    { id: 'player', label: 'Player', icon: Play },
+    { id: 'convert', label: 'Convert', icon: RefreshCw },
   ];
 
   const systemItems: NavItem[] = [
@@ -77,12 +82,20 @@ export const Sidebar: React.FC = () => {
         </p>
         {downloadItems.map((item, i) => renderNavItem(item, i))}
 
+        {/* Tools section */}
+        <div className="pt-4">
+          <p className="hidden lg:block text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold px-3 mb-2">
+            Tools
+          </p>
+          {toolItems.map((item, i) => renderNavItem(item, i + 3))}
+        </div>
+
         {/* System section */}
         <div className="pt-4">
           <p className="hidden lg:block text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold px-3 mb-2">
             System
           </p>
-          {systemItems.map((item, i) => renderNavItem(item, i + 3))}
+          {systemItems.map((item, i) => renderNavItem(item, i + 5))}
         </div>
       </nav>
 

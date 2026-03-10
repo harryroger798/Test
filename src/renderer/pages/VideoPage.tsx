@@ -1,5 +1,5 @@
 import React from 'react';
-import { Video, Trash2 } from 'lucide-react';
+import { Video, Trash2, Play, RefreshCw } from 'lucide-react';
 import { TubeDownloadCard } from '../components/TubeDownloadCard';
 import { useDownloadStore } from '../store/downloadStore';
 import { api } from '../lib/ipc';
@@ -39,15 +39,33 @@ export const VideoPage: React.FC = () => {
               <p className="text-xs text-muted-foreground">Manage your video download queue</p>
             </div>
           </div>
-          {completedDownloads.length > 0 && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={clearCompleted}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-destructive transition-all duration-200 rounded-lg hover:bg-destructive/10 press-effect"
+              onClick={() => setCurrentPage('player')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-primary transition-all duration-200 rounded-lg hover:bg-primary/10 press-effect"
+              title="Open Player"
             >
-              <Trash2 size={14} />
-              Clear Completed
+              <Play size={14} />
+              <span className="hidden sm:inline">Play</span>
             </button>
-          )}
+            <button
+              onClick={() => setCurrentPage('convert')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-primary transition-all duration-200 rounded-lg hover:bg-primary/10 press-effect"
+              title="Open Converter"
+            >
+              <RefreshCw size={14} />
+              <span className="hidden sm:inline">Convert</span>
+            </button>
+            {completedDownloads.length > 0 && (
+              <button
+                onClick={clearCompleted}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-destructive transition-all duration-200 rounded-lg hover:bg-destructive/10 press-effect"
+              >
+                <Trash2 size={14} />
+                Clear Completed
+              </button>
+            )}
+          </div>
         </div>
 
         {videoOnly.length === 0 ? (

@@ -129,6 +129,33 @@ const electronAPI = {
     ipcRenderer.on('rate-limit-warning', handler);
     return () => ipcRenderer.removeListener('rate-limit-warning', handler);
   },
+
+  // === PLAYER ===
+  selectMediaFile: () => ipcRenderer.invoke('select-media-file'),
+  detectSubtitles: (filePath: string) => ipcRenderer.invoke('detect-subtitles', filePath),
+  extractEmbeddedSubtitles: (filePath: string) => ipcRenderer.invoke('extract-embedded-subtitles', filePath),
+  getPlaybackPosition: (filePath: string) => ipcRenderer.invoke('get-playback-position', filePath),
+  savePlaybackPosition: (filePath: string, position: number) => ipcRenderer.invoke('save-playback-position', filePath, position),
+  getPlayerPlaylist: () => ipcRenderer.invoke('get-player-playlist'),
+
+  // === CONVERTER ===
+  checkConversionAllowed: () => ipcRenderer.invoke('check-conversion-allowed'),
+  startConversion: (options: { inputPath: string; outputFormat: string; outputDir?: string; options?: Record<string, string> }) => ipcRenderer.invoke('start-conversion', options),
+  cancelConversion: (conversionId: string) => ipcRenderer.invoke('cancel-conversion', conversionId),
+  getConversionStats: () => ipcRenderer.invoke('get-conversion-stats'),
+  selectConvertFile: () => ipcRenderer.invoke('select-convert-file'),
+  selectOutputDirectory: () => ipcRenderer.invoke('select-output-directory'),
+  openFileInFolder: (filePath: string) => ipcRenderer.invoke('open-file-in-folder', filePath),
+  onConversionProgress: (callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('conversion-progress', handler);
+    return () => ipcRenderer.removeListener('conversion-progress', handler);
+  },
+  onConversionComplete: (callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('conversion-complete', handler);
+    return () => ipcRenderer.removeListener('conversion-complete', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
