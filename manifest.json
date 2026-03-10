@@ -1,0 +1,21 @@
+{
+  "name": "GrabTube - Free Video Downloader",
+  "short_name": "GrabTube",
+  "description": "Download videos from 1800+ websites. Free desktop app for Windows, macOS & Linux with built-in player and converter.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#22c55e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "lang": "en",
+  "dir": "ltr"
+}
