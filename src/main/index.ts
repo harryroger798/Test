@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, net } from 'electron';
+import { pathToFileURL } from 'url';
 import * as path from 'path';
 import { BinaryManager } from './binary-manager';
 import { YtdlpManager } from './ytdlp-manager';
@@ -25,7 +26,7 @@ const healthMonitor = new HealthMonitor(ytdlp, binaryManager, binaryUpdater);
 const licenseManager = new LicenseManager();
 const rateLimiter = new RateLimiter();
 const banPrevention = new BanPrevention();
-const converterManager = new ConverterManager();
+const converterManager = new ConverterManager(binaryManager);
 const conversionCounter = new ConversionCounter(licenseManager);
 
 function createWindow(): void {
@@ -252,16 +253,32 @@ function setupIPC(): void {
             banPrevention.recordSuccess(platform);
 
             // Save to download history for Player playlist
-            const outputFile = result.outputPath || options.outputPath;
-            const fileName = result.filename || options.filename || 'Unknown';
+            // result.filename from yt-dlp may be a FULL path (from "[download] Destination: ...")
+            // or just a filename. Detect and handle both cases.
+            const rawFilename = result.filename || '';
+            const outputDir = result.outputPath || options.outputPath;
+            const isFullPath = rawFilename && (path.isAbsolute(rawFilename) || rawFilename.includes(path.sep));
+            let resolvedFilePath: string;
+            if (isFullPath) {
+              // yt-dlp reported the full destination path — use it directly
+              resolvedFilePath = rawFilename;
+            } else if (rawFilename) {
+              // Just a filename — join with the output directory
+              resolvedFilePath = path.join(outputDir, rawFilename);
+            } else {
+              // No filename reported — use options.filename as best guess
+              const fallbackName = options.filename || 'Unknown';
+              resolvedFilePath = path.join(outputDir, fallbackName);
+            }
+            const displayName = resolvedFilePath.split(/[/\\]/).pop() || 'Unknown';
             settings.addHistoryItem({
               id: `dl_${Date.now()}`,
               url: options.url,
-              title: fileName,
+              title: displayName,
               platform,
               thumbnail: '',
               downloadedAt: new Date().toISOString(),
-              filePath: outputFile ? path.join(outputFile, fileName) : '',
+              filePath: resolvedFilePath,
               fileSize: result.filesize || '',
               format: options.audioOnly ? (options.audioFormat || 'mp3') : (options.formatId || 'best'),
             });
@@ -838,10 +855,20 @@ protocol.registerSchemesAsPrivileged([
 // App lifecycle
 app.whenReady().then(async () => {
   // Register protocol handler for local media files
+  // Handles URL-encoded paths (supports # ? & spaces and other special chars in filenames)
   protocol.handle('grabtube-media', (request) => {
-    // URL format: grabtube-media:///C:/path/to/file.mp4 or grabtube-media:///home/user/file.mp4
-    const url = request.url.replace('grabtube-media://', 'file://');
-    return net.fetch(url);
+    // URL format: grabtube-media:///C%3A/Users/.../file%23name.mp4
+    // Remove protocol prefix to get the encoded path
+    const encodedPath = request.url.replace('grabtube-media:///', '').replace('grabtube-media://', '');
+    // Decode each path segment to get the real file path
+    const segments = encodedPath.split('/').map(s => decodeURIComponent(s));
+    let filePath = segments.join(path.sep);
+    // On non-Windows, paths must start with /
+    if (process.platform !== 'win32' && !filePath.startsWith('/')) {
+      filePath = '/' + filePath;
+    }
+    // Convert to a proper file:// URL using Node's pathToFileURL (handles all special chars)
+    return net.fetch(pathToFileURL(filePath).href);
   });
 
   // Phase 1: Show window ASAP (show: false + ready-to-show pattern already in createWindow)
