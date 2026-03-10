@@ -269,23 +269,29 @@ function setupIPC(): void {
               resolvedFilePath = path.join(outputDir, rawFilename);
             } else {
               // No filename reported — construct from output template
-              const fallbackName = options.filename || 'Unknown';
+              // CRITICAL: options.filename may be a yt-dlp template like "Title.%(ext)s"
+              // Strip the %(...)s placeholders to get the actual base name
+              let fallbackName = (options.filename || 'Unknown').replace(/%\([^)]*\)s/g, '');
+              // Remove trailing dots left after stripping (e.g. "Title." → "Title")
+              fallbackName = fallbackName.replace(/\.+$/, '');
               resolvedFilePath = path.join(outputDir, fallbackName);
             }
 
-            // Verify the resolved file actually exists. If not, scan the output directory
-            // for the most recently created file matching the expected name pattern.
-            // This handles cases where yt-dlp captured a temp file path that was deleted after merge.
+            // Verify the resolved file actually exists. If not, try common extensions and dir scan.
+            // This handles cases where yt-dlp captured a temp file path that was deleted after merge,
+            // or when the filename template was stripped of %(ext)s leaving no extension.
             if (!fs.existsSync(resolvedFilePath)) {
-              // Try adding common extensions if the path has no extension
+              // Try adding common extensions (also handles stripped %(ext)s case)
               const ext = path.extname(resolvedFilePath);
-              if (!ext) {
+              if (!ext || ext.includes('%')) {
+                // No extension or still has yt-dlp template remnants — try common extensions
+                const baseWithoutBadExt = ext.includes('%') ? resolvedFilePath.replace(/\.[^/\\]*%[^/\\]*$/, '') : resolvedFilePath;
                 const tryExts = options.audioOnly
                   ? ['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg']
                   : ['.mp4', '.mkv', '.webm'];
                 for (const tryExt of tryExts) {
-                  if (fs.existsSync(resolvedFilePath + tryExt)) {
-                    resolvedFilePath = resolvedFilePath + tryExt;
+                  if (fs.existsSync(baseWithoutBadExt + tryExt)) {
+                    resolvedFilePath = baseWithoutBadExt + tryExt;
                     break;
                   }
                 }
@@ -294,20 +300,29 @@ function setupIPC(): void {
               // If still not found, scan the output directory for the newest matching file
               if (!fs.existsSync(resolvedFilePath)) {
                 try {
-                  const baseName = (options.filename || '').replace(/\.[^/.]+$/, '');
+                  // Strip yt-dlp template placeholders and extension to get base name for matching
+                  let baseName = (options.filename || '').replace(/%\([^)]*\)s/g, '').replace(/\.+$/, '').replace(/\.[^/.]+$/, '');
+                  // yt-dlp sanitizes filenames (replaces :?"| etc.) — do the same for matching
+                  baseName = baseName.replace(/[<>:"/\\|?*]/g, '_').replace(/__+/g, '_');
                   if (baseName && fs.existsSync(outputDir)) {
                     const files = fs.readdirSync(outputDir);
                     let bestMatch = '';
                     let bestMtime = 0;
                     const now = Date.now();
                     for (const file of files) {
+                      // Sanitize the file name the same way for comparison
+                      const sanitizedFile = file.replace(/[<>:"/\\|?*]/g, '_').replace(/__+/g, '_');
                       // Match files that start with the expected base name, created in last 5 minutes
-                      if (file.startsWith(baseName)) {
+                      if (sanitizedFile.startsWith(baseName) || file.startsWith(baseName)) {
                         const fullPath = path.join(outputDir, file);
-                        const stat = fs.statSync(fullPath);
-                        if (stat.isFile() && stat.mtimeMs > bestMtime && (now - stat.mtimeMs) < 300000) {
-                          bestMatch = fullPath;
-                          bestMtime = stat.mtimeMs;
+                        try {
+                          const stat = fs.statSync(fullPath);
+                          if (stat.isFile() && stat.mtimeMs > bestMtime && (now - stat.mtimeMs) < 300000) {
+                            bestMatch = fullPath;
+                            bestMtime = stat.mtimeMs;
+                          }
+                        } catch {
+                          // Skip files we can't stat
                         }
                       }
                     }
@@ -907,7 +922,7 @@ protocol.registerSchemesAsPrivileged([
 app.whenReady().then(async () => {
   // Register protocol handler for local media files
   // Handles URL-encoded paths (supports # ? & spaces and other special chars in filenames)
-  // CRITICAL: Must forward Range headers from the video element's request for streaming/seeking.
+  // Implements proper Range request handling (HTTP 206 Partial Content) for video seeking.
   // Without Range support, HTML5 <video> can show first frame but fails to play/seek.
   protocol.handle('grabtube-media', (request) => {
     // URL format: grabtube-media:///C%3A/Users/.../file%23name.mp4
@@ -920,12 +935,66 @@ app.whenReady().then(async () => {
     if (process.platform !== 'win32' && !filePath.startsWith('/')) {
       filePath = '/' + filePath;
     }
-    // Convert to a proper file:// URL using Node's pathToFileURL (handles all special chars)
-    // Forward the original request headers (especially Range) so that video seeking works.
-    // HTML5 <video> sends Range: bytes=X-Y headers; net.fetch must receive them for 206 responses.
-    return net.fetch(pathToFileURL(filePath).href, {
-      method: request.method,
-      headers: request.headers,
+
+    // Check file exists
+    if (!fs.existsSync(filePath)) {
+      return new Response('File not found', { status: 404 });
+    }
+
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+
+    // Determine MIME type from extension
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
+      '.avi': 'video/x-msvideo', '.mov': 'video/quicktime', '.flv': 'video/x-flv',
+      '.wmv': 'video/x-ms-wmv', '.m4v': 'video/mp4', '.ts': 'video/mp2t',
+      '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.wav': 'audio/wav',
+      '.ogg': 'audio/ogg', '.aac': 'audio/aac', '.m4a': 'audio/mp4',
+      '.wma': 'audio/x-ms-wma', '.opus': 'audio/opus',
+    };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    // Handle Range requests for proper video seeking
+    const rangeHeader = request.headers.get('range');
+    if (rangeHeader) {
+      const rangeMatch = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+      if (rangeMatch) {
+        const start = parseInt(rangeMatch[1], 10);
+        const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : fileSize - 1;
+        const chunkSize = end - start + 1;
+
+        // Read the requested byte range
+        const buffer = Buffer.alloc(chunkSize);
+        const fd = fs.openSync(filePath, 'r');
+        fs.readSync(fd, buffer, 0, chunkSize, start);
+        fs.closeSync(fd);
+
+        return new Response(buffer, {
+          status: 206,
+          headers: {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(chunkSize),
+            'Content-Type': contentType,
+          },
+        });
+      }
+    }
+
+    // No Range header — serve full file with Accept-Ranges to indicate support
+    // Use net.fetch for efficient streaming of full file
+    return net.fetch(pathToFileURL(filePath).href).then((response) => {
+      // Clone the response but add proper headers for media streaming
+      return new Response(response.body, {
+        status: 200,
+        headers: {
+          'Accept-Ranges': 'bytes',
+          'Content-Length': String(fileSize),
+          'Content-Type': contentType,
+        },
+      });
     });
   });
 

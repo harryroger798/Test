@@ -995,31 +995,57 @@ export class YtdlpManager {
 
     const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
     let stderrBuffer = '';
+    let stdoutRemainder = '';
+    let stderrRemainder = '';
 
     proc.stdout.on('data', (data) => {
-      const line = data.toString().trim();
-      const progress = this.parseProgress(line, downloadId);
-      if (progress) {
-        onProgress(progress);
+      // Split data on newlines — a single data event can contain multiple lines
+      const text = stdoutRemainder + data.toString();
+      const lines = text.split(/\r?\n/);
+      // Last element may be incomplete (no trailing newline yet) — save for next event
+      stdoutRemainder = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const progress = this.parseProgress(trimmed, downloadId);
+        if (progress) {
+          onProgress(progress);
+        }
       }
     });
 
     proc.stderr.on('data', (data) => {
-      const line = data.toString().trim();
-      stderrBuffer += line + '\n';
-      console.log(`[GrabTube] stderr: ${line}`);
-      if (line && !line.startsWith('WARNING')) {
-        // Send error info but don't mark as terminal error yet — wait for process close
-        onProgress({
-          downloadId,
-          status: 'error',
-          percent: 0,
-          speed: '',
-          eta: '',
-          filesize: '',
-          filename: '',
-          error: line,
-        });
+      // Split stderr on newlines — yt-dlp sends [Merger], [ExtractAudio], [download] Destination
+      // to stderr as info messages. We must parse these for filenames too.
+      const text = stderrRemainder + data.toString();
+      const lines = text.split(/\r?\n/);
+      stderrRemainder = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        stderrBuffer += trimmed + '\n';
+        console.log(`[GrabTube] stderr: ${trimmed}`);
+
+        // First, try to parse as progress/filename info (handles [Merger], [ExtractAudio], [download] Destination)
+        const progress = this.parseProgress(trimmed, downloadId);
+        if (progress) {
+          onProgress(progress);
+          continue;
+        }
+
+        // Not a recognized progress line — treat as potential error info
+        if (!trimmed.startsWith('WARNING')) {
+          onProgress({
+            downloadId,
+            status: 'error',
+            percent: 0,
+            speed: '',
+            eta: '',
+            filesize: '',
+            filename: '',
+            error: trimmed,
+          });
+        }
       }
     });
 

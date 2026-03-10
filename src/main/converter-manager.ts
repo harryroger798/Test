@@ -49,17 +49,35 @@ export class ConverterManager {
       }
     }
 
-    // If still fallback to 'ffmpeg', try common installation paths on Windows
-    if (this.ffmpegPath === 'ffmpeg' && process.platform === 'win32') {
-      const winPaths = [
-        path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages', 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe', 'ffmpeg-*', 'bin', 'ffmpeg.exe'),
-        path.join(process.env.ProgramFiles || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
-        path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
-        path.join(process.env.USERPROFILE || '', 'ffmpeg', 'bin', 'ffmpeg.exe'),
-        'C:\\ffmpeg\\bin\\ffmpeg.exe',
-      ];
-      for (const p of winPaths) {
-        // Skip glob patterns
+    // If still fallback to 'ffmpeg', try common installation paths per platform
+    if (this.ffmpegPath === 'ffmpeg') {
+      const platformPaths: string[] = [];
+
+      if (process.platform === 'win32') {
+        platformPaths.push(
+          path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages', 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe', 'ffmpeg-7.1-full_build', 'bin', 'ffmpeg.exe'),
+          path.join(process.env.ProgramFiles || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+          path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+          path.join(process.env.USERPROFILE || '', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+          path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'ffmpeg.exe'),
+          'C:\\ffmpeg\\bin\\ffmpeg.exe',
+        );
+      } else if (process.platform === 'darwin') {
+        platformPaths.push(
+          '/opt/homebrew/bin/ffmpeg',       // Apple Silicon Homebrew
+          '/usr/local/bin/ffmpeg',           // Intel Homebrew / manual install
+          '/opt/local/bin/ffmpeg',           // MacPorts
+        );
+      } else {
+        // Linux
+        platformPaths.push(
+          '/usr/bin/ffmpeg',
+          '/usr/local/bin/ffmpeg',
+          '/snap/bin/ffmpeg',
+        );
+      }
+
+      for (const p of platformPaths) {
         if (p.includes('*')) continue;
         if (fs.existsSync(p)) {
           this.ffmpegPath = p;
@@ -276,7 +294,12 @@ export class ConverterManager {
 
     ffmpeg.on('error', (err) => {
       this.activeProcesses.delete(conversionId);
-      resolve({ success: false, error: `FFmpeg not found: ${err.message}. Please install FFmpeg.` });
+      const installHint = process.platform === 'win32'
+        ? 'Install via: winget install Gyan.FFmpeg'
+        : process.platform === 'darwin'
+          ? 'Install via: brew install ffmpeg'
+          : 'Install via: sudo apt install ffmpeg';
+      resolve({ success: false, error: `FFmpeg not found (${err.message}). ${installHint}` });
     });
   }
 
