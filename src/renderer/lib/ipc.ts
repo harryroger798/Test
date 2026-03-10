@@ -111,6 +111,23 @@ export interface ElectronAPI {
   checkPlaylistAllowed: () => Promise<{ allowed: boolean }>;
   resetRateLimiter: () => Promise<{ success: boolean }>;
   onRateLimitWarning: (callback: (status: unknown) => void) => () => void;
+  // Player
+  selectMediaFile: () => Promise<{ success: boolean; path?: string; name?: string; type?: 'video' | 'audio' }>;
+  detectSubtitles: (filePath: string) => Promise<Array<{ path: string; label: string; lang: string }>>;
+  extractEmbeddedSubtitles: (filePath: string) => Promise<Array<{ path: string; label: string; lang: string }>>;
+  getPlaybackPosition: (filePath: string) => Promise<number>;
+  savePlaybackPosition: (filePath: string, position: number) => Promise<{ success: boolean }>;
+  getPlayerPlaylist: () => Promise<Array<{ path: string; name: string; type: 'video' | 'audio' }>>;
+  // Converter
+  checkConversionAllowed: () => Promise<{ allowed: boolean; reason?: string; remaining?: number; tier?: string; maxSizeMB?: number }>;
+  startConversion: (options: { inputPath: string; outputFormat: string; outputDir?: string; options?: Record<string, string> }) => Promise<{ success: boolean; conversionId?: string; error?: string }>;
+  cancelConversion: (conversionId: string) => Promise<{ success: boolean }>;
+  getConversionStats: () => Promise<{ date: string; count: number; tier: string; remaining: number; maxSizeMB: number }>;
+  selectConvertFile: () => Promise<{ success: boolean; path?: string; name?: string; size?: number }>;
+  selectOutputDirectory: () => Promise<{ success: boolean; path?: string }>;
+  openFileInFolder: (filePath: string) => Promise<{ success: boolean }>;
+  onConversionProgress: (callback: (data: { conversionId: string; progress: number }) => void) => () => void;
+  onConversionComplete: (callback: (data: { conversionId: string; success: boolean; outputPath?: string; error?: string }) => void) => () => void;
 }
 
 // Type-safe access to electron API
@@ -220,6 +237,23 @@ const mockAPI: ElectronAPI = {
   checkPlaylistAllowed: async () => ({ allowed: false }),
   resetRateLimiter: async () => ({ success: true }),
   onRateLimitWarning: () => () => {},
+  // Player mocks
+  selectMediaFile: async () => ({ success: false }),
+  detectSubtitles: async () => [],
+  extractEmbeddedSubtitles: async () => [],
+  getPlaybackPosition: async () => 0,
+  savePlaybackPosition: async () => ({ success: true }),
+  getPlayerPlaylist: async () => [],
+  // Converter mocks
+  checkConversionAllowed: async () => ({ allowed: true, remaining: 3, tier: 'free', maxSizeMB: 500 }),
+  startConversion: async () => ({ success: false, error: 'Not running in Electron' }),
+  cancelConversion: async () => ({ success: true }),
+  getConversionStats: async () => ({ date: '', count: 0, tier: 'free', remaining: 3, maxSizeMB: 500 }),
+  selectConvertFile: async () => ({ success: false }),
+  selectOutputDirectory: async () => ({ success: false }),
+  openFileInFolder: async () => ({ success: true }),
+  onConversionProgress: () => () => {},
+  onConversionComplete: () => () => {},
 };
 
 export const api: ElectronAPI = isElectron ? window.electronAPI : mockAPI;

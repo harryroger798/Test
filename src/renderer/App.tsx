@@ -10,6 +10,8 @@ import { VideoPage } from './pages/VideoPage';
 import { AudioPage } from './pages/AudioPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { HelpPage } from './pages/HelpPage';
+import { PlayerPage } from './pages/PlayerPage';
+import { ConvertPage } from './pages/ConvertPage';
 import { useDownloadStore } from './store/downloadStore';
 import { useSettingsStore } from './store/settingsStore';
 import { cn } from './lib/utils';
@@ -148,6 +150,10 @@ const App: React.FC = () => {
         return <SettingsPage />;
       case 'help':
         return <HelpPage />;
+      case 'player':
+        return <PlayerPage />;
+      case 'convert':
+        return <ConvertPage />;
       default:
         return <HomePage />;
     }

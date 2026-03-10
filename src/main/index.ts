@@ -9,6 +9,8 @@ import { BinaryUpdater } from './binary-updater';
 import { HealthMonitor } from './health-monitor';
 import { LicenseManager } from './license-manager';
 import { RateLimiter } from './rate-limiter';
+import { ConverterManager } from './converter-manager';
+import { ConversionCounter } from './conversion-counter';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -21,6 +23,8 @@ const binaryUpdater = new BinaryUpdater(binaryManager);
 const healthMonitor = new HealthMonitor(ytdlp, binaryManager, binaryUpdater);
 const licenseManager = new LicenseManager();
 const rateLimiter = new RateLimiter();
+const converterManager = new ConverterManager();
+const conversionCounter = new ConversionCounter(licenseManager);
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -518,6 +522,208 @@ function setupIPC(): void {
   // Reset rate limiter (e.g. after changing proxy)
   ipcMain.handle('reset-rate-limiter', async () => {
     rateLimiter.reset();
+    return { success: true };
+  });
+
+  // === PLAYER IPC HANDLERS ===
+
+  // Select media file to play
+  ipcMain.handle('select-media-file', async () => {
+    const videoExts = ['mp4', 'mkv', 'webm', 'avi', 'mov', 'flv', 'wmv', 'mpg', 'mpeg', 'm4v', 'ts'];
+    const audioExts = ['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'wma', 'opus'];
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      title: 'Select Media File',
+      filters: [
+        { name: 'Media Files', extensions: [...videoExts, ...audioExts] },
+        { name: 'Video Files', extensions: videoExts },
+        { name: 'Audio Files', extensions: audioExts },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      const filePath = result.filePaths[0];
+      const ext = filePath.split('.').pop()?.toLowerCase() || '';
+      const isAudio = audioExts.includes(ext);
+      const name = filePath.split(/[/\\]/).pop() || 'Unknown';
+      return { success: true, path: filePath, name, type: isAudio ? 'audio' : 'video' };
+    }
+    return { success: false };
+  });
+
+  // Detect subtitle files alongside a media file
+  ipcMain.handle('detect-subtitles', async (_event, filePath: string) => {
+    const fs = await import('fs');
+    const p = await import('path');
+    const dir = p.dirname(filePath);
+    const baseName = p.basename(filePath, p.extname(filePath));
+    const subExts = ['.srt', '.vtt', '.ass', '.ssa', '.sbv', '.sub'];
+    const results: Array<{ path: string; label: string; lang: string }> = [];
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const ext = p.extname(file).toLowerCase();
+        if (subExts.includes(ext) && file.startsWith(baseName)) {
+          const langMatch = file.match(/\.([a-z]{2,3})\.[a-z]+$/i);
+          results.push({
+            path: p.join(dir, file),
+            label: langMatch ? langMatch[1].toUpperCase() : ext.slice(1).toUpperCase(),
+            lang: langMatch ? langMatch[1] : 'und',
+          });
+        }
+      }
+    } catch { /* ignore */ }
+    return results;
+  });
+
+  // Extract embedded subtitles from media file (placeholder — requires ffmpeg)
+  ipcMain.handle('extract-embedded-subtitles', async () => {
+    // For now return empty — embedded subtitle extraction requires ffmpeg probing
+    return [];
+  });
+
+  // Get saved playback position (stored in a separate JSON file)
+  ipcMain.handle('get-playback-position', async (_event, filePath: string) => {
+    try {
+      const fs = await import('fs');
+      const p = await import('path');
+      const posFile = p.join(app.getPath('userData'), 'playback-positions.json');
+      if (!fs.existsSync(posFile)) return 0;
+      const data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
+      const key = Buffer.from(filePath).toString('base64').substring(0, 40);
+      return data[key] || 0;
+    } catch { return 0; }
+  });
+
+  // Save playback position
+  ipcMain.handle('save-playback-position', async (_event, filePath: string, position: number) => {
+    try {
+      const fs = await import('fs');
+      const p = await import('path');
+      const posFile = p.join(app.getPath('userData'), 'playback-positions.json');
+      let data: Record<string, number> = {};
+      if (fs.existsSync(posFile)) {
+        data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
+      }
+      const key = Buffer.from(filePath).toString('base64').substring(0, 40);
+      data[key] = position;
+      fs.writeFileSync(posFile, JSON.stringify(data));
+      return { success: true };
+    } catch { return { success: false }; }
+  });
+
+  // Get player playlist from download history
+  ipcMain.handle('get-player-playlist', async () => {
+    const history = settings.get('downloadHistory') as Array<{ outputPath?: string; filename?: string; audioOnly?: boolean }> | undefined;
+    if (!history) return [];
+    const fs = await import('fs');
+    return history
+      .filter((item) => item.outputPath && fs.existsSync(item.outputPath))
+      .map((item) => ({
+        path: item.outputPath!,
+        name: item.filename || item.outputPath!.split(/[/\\]/).pop() || 'Unknown',
+        type: item.audioOnly ? 'audio' as const : 'video' as const,
+      }))
+      .slice(0, 50);
+  });
+
+  // === CONVERTER IPC HANDLERS ===
+
+  // Check if conversion is allowed (tier gating)
+  ipcMain.handle('check-conversion-allowed', async () => {
+    return conversionCounter.canConvert();
+  });
+
+  // Start a conversion
+  ipcMain.handle('start-conversion', async (_event, options: {
+    inputPath: string;
+    outputFormat: string;
+    outputDir?: string;
+    options?: Record<string, string>;
+  }) => {
+    const check = conversionCounter.canConvert();
+    if (!check.allowed) {
+      return { success: false, error: check.reason };
+    }
+
+    const conversionId = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+    // Run conversion in background
+    converterManager.convert(conversionId, options, (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('conversion-progress', { conversionId, progress });
+      }
+    }).then((result) => {
+      if (result.success) {
+        conversionCounter.recordConversion();
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('conversion-complete', {
+          conversionId,
+          success: result.success,
+          outputPath: result.outputPath,
+          error: result.error,
+        });
+      }
+    });
+
+    return { success: true, conversionId };
+  });
+
+  // Cancel a conversion
+  ipcMain.handle('cancel-conversion', async (_event, conversionId: string) => {
+    converterManager.cancel(conversionId);
+    return { success: true };
+  });
+
+  // Get conversion stats
+  ipcMain.handle('get-conversion-stats', async () => {
+    return conversionCounter.getStats();
+  });
+
+  // Select file for conversion
+  ipcMain.handle('select-convert-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      title: 'Select File to Convert',
+      filters: [
+        { name: 'All Supported', extensions: ['mp4', 'mkv', 'webm', 'avi', 'mov', 'flv', 'wmv', 'mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'tiff', 'srt', 'vtt', 'ass', 'ssa', 'sbv', 'sub'] },
+        { name: 'Video', extensions: ['mp4', 'mkv', 'webm', 'avi', 'mov', 'flv', 'wmv'] },
+        { name: 'Audio', extensions: ['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a'] },
+        { name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp', 'avif', 'gif', 'bmp', 'tiff'] },
+        { name: 'Subtitle', extensions: ['srt', 'vtt', 'ass', 'ssa', 'sbv', 'sub'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      const filePath = result.filePaths[0];
+      const fs = await import('fs');
+      const stats = fs.statSync(filePath);
+      return {
+        success: true,
+        path: filePath,
+        name: filePath.split(/[/\\]/).pop() || 'file',
+        size: stats.size,
+      };
+    }
+    return { success: false };
+  });
+
+  // Select output directory for conversion
+  ipcMain.handle('select-output-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+      title: 'Select Output Folder',
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, path: result.filePaths[0] };
+    }
+    return { success: false };
+  });
+
+  // Open file in its containing folder
+  ipcMain.handle('open-file-in-folder', async (_event, filePath: string) => {
+    shell.showItemInFolder(filePath);
     return { success: true };
   });
 }
