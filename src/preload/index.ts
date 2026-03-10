@@ -138,6 +138,22 @@ const electronAPI = {
   savePlaybackPosition: (filePath: string, position: number) => ipcRenderer.invoke('save-playback-position', filePath, position),
   getPlayerPlaylist: () => ipcRenderer.invoke('get-player-playlist'),
 
+  // === BAN PREVENTION ===
+  getBanPreventionStatus: () => ipcRenderer.invoke('get-ban-prevention-status'),
+  getBanPreventionPlatformStats: (platform: string) => ipcRenderer.invoke('get-ban-prevention-platform-stats', platform),
+  checkBanPrevention: (platform: string) => ipcRenderer.invoke('check-ban-prevention', platform),
+  resetBanPreventionPlatform: (platform: string) => ipcRenderer.invoke('reset-ban-prevention-platform', platform),
+  resetBanPreventionAll: () => ipcRenderer.invoke('reset-ban-prevention-all'),
+  setBanPreventionEnabled: (enabled: boolean) => ipcRenderer.invoke('set-ban-prevention-enabled', enabled),
+  setRandomDelayEnabled: (enabled: boolean) => ipcRenderer.invoke('set-random-delay-enabled', enabled),
+  getBanPreventionSettings: () => ipcRenderer.invoke('get-ban-prevention-settings'),
+  resetCookielessMode: (platform: string) => ipcRenderer.invoke('reset-cookieless-mode', platform),
+  onBanPreventionWarning: (callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('ban-prevention-warning', handler);
+    return () => ipcRenderer.removeListener('ban-prevention-warning', handler);
+  },
+
   // === CONVERTER ===
   checkConversionAllowed: () => ipcRenderer.invoke('check-conversion-allowed'),
   startConversion: (options: { inputPath: string; outputFormat: string; outputDir?: string; options?: Record<string, string> }) => ipcRenderer.invoke('start-conversion', options),

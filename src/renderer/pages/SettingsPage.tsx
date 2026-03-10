@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, ExternalLink, Crown, Zap, Users } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Settings, FolderOpen, Palette, Globe, Shield, Info, CheckCircle, AlertCircle, Cookie, FileText, X, RefreshCw, Download, Activity, Wrench, Key, Cloud, ExternalLink, Crown, Zap, Users, ShieldAlert, Timer, Shuffle } from 'lucide-react';
 import { useSettingsStore } from '../store/settingsStore';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -158,6 +158,46 @@ export const SettingsPage: React.FC = () => {
     await api.setBrowserCookies(browser);
     setBrowserCookies(browser);
   };
+
+  // Ban Prevention state
+  const [banStatus, setBanStatus] = useState<{
+    platforms: Record<string, {
+      platform: string;
+      downloadsThisHour: number;
+      downloadsToday: number;
+      riskLevel: 'safe' | 'warning' | 'danger';
+      cookielessMode: boolean;
+      cooldownUntil: number;
+      totalDownloads: number;
+    }>;
+    globalRiskLevel: 'safe' | 'warning' | 'danger';
+    activeCooldowns: number;
+    cookielessPlatforms: string[];
+  } | null>(null);
+  const [banPreventionEnabled, setBanPreventionEnabled] = useState(true);
+  const [randomDelayEnabled, setRandomDelayEnabled] = useState(true);
+
+  const loadBanStatus = useCallback(async () => {
+    const status = await api.getBanPreventionStatus();
+    setBanStatus(status);
+    const bpSettings = await api.getBanPreventionSettings();
+    setBanPreventionEnabled(bpSettings.enabled);
+    setRandomDelayEnabled(bpSettings.randomDelayEnabled);
+  }, []);
+
+  useEffect(() => {
+    loadBanStatus();
+    const interval = setInterval(loadBanStatus, 5000); // Refresh every 5 seconds
+    return () => clearInterval(interval);
+  }, [loadBanStatus]);
+
+  // Listen for ban prevention warnings
+  useEffect(() => {
+    const cleanup = api.onBanPreventionWarning(() => {
+      loadBanStatus(); // Refresh status on warning
+    });
+    return cleanup;
+  }, [loadBanStatus]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -754,6 +794,162 @@ export const SettingsPage: React.FC = () => {
                   Update All
                 </button>
               </div>
+            </div>
+          </section>
+
+          {/* Ban Prevention / Account Protection */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <ShieldAlert size={16} className="text-primary" />
+              Account Protection
+              <span className="relative group ml-auto">
+                <Info size={14} className="text-muted-foreground cursor-help hover:text-primary transition-colors" />
+                <span className="absolute right-0 top-6 z-50 w-72 p-2.5 bg-card border border-border rounded-lg shadow-xl text-xs text-muted-foreground opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+                  Proactive ban prevention system. Tracks downloads per platform, warns before hitting risky thresholds, auto-switches to cookieless mode, adds random delays between requests, and enforces cooldowns to protect your accounts.
+                </span>
+              </span>
+            </h3>
+
+            {/* Toggle switches */}
+            <div className="space-y-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield size={14} className="text-muted-foreground" />
+                  <span className="text-sm text-foreground">Ban Prevention</span>
+                </div>
+                <button
+                  onClick={async () => {
+                    const newVal = !banPreventionEnabled;
+                    await api.setBanPreventionEnabled(newVal);
+                    setBanPreventionEnabled(newVal);
+                  }}
+                  className={cn(
+                    'w-10 h-5 rounded-full transition-colors relative',
+                    banPreventionEnabled ? 'bg-primary' : 'bg-secondary'
+                  )}
+                >
+                  <div className={cn(
+                    'w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform',
+                    banPreventionEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                  )} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shuffle size={14} className="text-muted-foreground" />
+                  <span className="text-sm text-foreground">Random Delays</span>
+                  <span className="text-xs text-muted-foreground">(human-like behavior)</span>
+                </div>
+                <button
+                  onClick={async () => {
+                    const newVal = !randomDelayEnabled;
+                    await api.setRandomDelayEnabled(newVal);
+                    setRandomDelayEnabled(newVal);
+                  }}
+                  className={cn(
+                    'w-10 h-5 rounded-full transition-colors relative',
+                    randomDelayEnabled ? 'bg-primary' : 'bg-secondary'
+                  )}
+                >
+                  <div className={cn(
+                    'w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform',
+                    randomDelayEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                  )} />
+                </button>
+              </div>
+            </div>
+
+            {/* Global risk indicator */}
+            {banStatus && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={cn(
+                    'w-2.5 h-2.5 rounded-full',
+                    banStatus.globalRiskLevel === 'safe' ? 'bg-green-500' :
+                    banStatus.globalRiskLevel === 'warning' ? 'bg-yellow-500 animate-pulse' :
+                    'bg-red-500 animate-pulse'
+                  )} />
+                  <span className={cn(
+                    'text-xs font-medium uppercase tracking-wider',
+                    banStatus.globalRiskLevel === 'safe' ? 'text-green-500' :
+                    banStatus.globalRiskLevel === 'warning' ? 'text-yellow-500' :
+                    'text-red-500'
+                  )}>
+                    {banStatus.globalRiskLevel === 'safe' ? 'All Clear' :
+                     banStatus.globalRiskLevel === 'warning' ? 'Approaching Limits' :
+                     'High Risk - Cookieless Mode Active'}
+                  </span>
+                  {banStatus.activeCooldowns > 0 && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Timer size={10} /> {banStatus.activeCooldowns} cooldown(s)
+                    </span>
+                  )}
+                </div>
+
+                {/* Per-platform stats */}
+                {Object.keys(banStatus.platforms).length > 0 ? (
+                  <div className="space-y-2">
+                    {Object.entries(banStatus.platforms).map(([name, stats]) => (
+                      <div key={name} className="flex items-center gap-3 p-2.5 bg-secondary/30 rounded-lg">
+                        <div className={cn(
+                          'w-2 h-2 rounded-full flex-shrink-0',
+                          stats.riskLevel === 'safe' ? 'bg-green-500' :
+                          stats.riskLevel === 'warning' ? 'bg-yellow-500' :
+                          'bg-red-500'
+                        )} />
+                        <span className="text-sm text-foreground capitalize w-20 flex-shrink-0">{name}</span>
+                        <div className="flex-1">
+                          {/* Progress bar */}
+                          <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all duration-500',
+                                stats.riskLevel === 'safe' ? 'bg-green-500' :
+                                stats.riskLevel === 'warning' ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              )}
+                              style={{ width: `${Math.min((stats.downloadsThisHour / 80) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground w-16 text-right">{stats.downloadsThisHour}/hr</span>
+                        <span className="text-xs text-muted-foreground w-16 text-right">{stats.downloadsToday} today</span>
+                        {stats.cookielessMode && (
+                          <span className="text-xs text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">cookieless</span>
+                        )}
+                        <button
+                          onClick={async () => {
+                            await api.resetBanPreventionPlatform(name);
+                            loadBanStatus();
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          title="Reset counters"
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No downloads tracked yet. Stats will appear as you download.</p>
+                )}
+              </div>
+            )}
+
+            {/* Reset all button */}
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <span className="text-xs text-muted-foreground">Reset all platform counters and cookieless modes</span>
+              <button
+                onClick={async () => {
+                  await api.resetBanPreventionAll();
+                  loadBanStatus();
+                }}
+                className="px-3 py-1.5 bg-secondary/50 border border-border rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw size={12} />
+                Reset All
+              </button>
             </div>
           </section>
 

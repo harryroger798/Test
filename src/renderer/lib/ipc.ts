@@ -111,6 +111,47 @@ export interface ElectronAPI {
   checkPlaylistAllowed: () => Promise<{ allowed: boolean }>;
   resetRateLimiter: () => Promise<{ success: boolean }>;
   onRateLimitWarning: (callback: (status: unknown) => void) => () => void;
+  // Ban Prevention
+  getBanPreventionStatus: () => Promise<{
+    platforms: Record<string, {
+      platform: string;
+      downloadsThisHour: number;
+      downloadsToday: number;
+      lastDownloadTime: number;
+      riskLevel: 'safe' | 'warning' | 'danger';
+      cookielessMode: boolean;
+      cooldownUntil: number;
+      totalDownloads: number;
+    }>;
+    globalRiskLevel: 'safe' | 'warning' | 'danger';
+    activeCooldowns: number;
+    cookielessPlatforms: string[];
+  }>;
+  getBanPreventionPlatformStats: (platform: string) => Promise<{
+    platform: string;
+    downloadsThisHour: number;
+    downloadsToday: number;
+    lastDownloadTime: number;
+    riskLevel: 'safe' | 'warning' | 'danger';
+    cookielessMode: boolean;
+    cooldownUntil: number;
+    totalDownloads: number;
+  }>;
+  checkBanPrevention: (platform: string) => Promise<{
+    allowed: boolean;
+    reason?: string;
+    waitMs: number;
+    riskLevel: 'safe' | 'warning' | 'danger';
+    cookielessRecommended: boolean;
+    cooldownRemaining: number;
+  }>;
+  resetBanPreventionPlatform: (platform: string) => Promise<{ success: boolean }>;
+  resetBanPreventionAll: () => Promise<{ success: boolean }>;
+  setBanPreventionEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  setRandomDelayEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  getBanPreventionSettings: () => Promise<{ enabled: boolean; randomDelayEnabled: boolean }>;
+  resetCookielessMode: (platform: string) => Promise<{ success: boolean }>;
+  onBanPreventionWarning: (callback: (data: unknown) => void) => () => void;
   // Player
   selectMediaFile: () => Promise<{ success: boolean; path?: string; name?: string; type?: 'video' | 'audio' }>;
   detectSubtitles: (filePath: string) => Promise<Array<{ path: string; label: string; lang: string }>>;
@@ -237,6 +278,37 @@ const mockAPI: ElectronAPI = {
   checkPlaylistAllowed: async () => ({ allowed: false }),
   resetRateLimiter: async () => ({ success: true }),
   onRateLimitWarning: () => () => {},
+  // Ban Prevention mocks
+  getBanPreventionStatus: async () => ({
+    platforms: {},
+    globalRiskLevel: 'safe' as const,
+    activeCooldowns: 0,
+    cookielessPlatforms: [],
+  }),
+  getBanPreventionPlatformStats: async () => ({
+    platform: 'unknown',
+    downloadsThisHour: 0,
+    downloadsToday: 0,
+    lastDownloadTime: 0,
+    riskLevel: 'safe' as const,
+    cookielessMode: false,
+    cooldownUntil: 0,
+    totalDownloads: 0,
+  }),
+  checkBanPrevention: async () => ({
+    allowed: true,
+    waitMs: 0,
+    riskLevel: 'safe' as const,
+    cookielessRecommended: false,
+    cooldownRemaining: 0,
+  }),
+  resetBanPreventionPlatform: async () => ({ success: true }),
+  resetBanPreventionAll: async () => ({ success: true }),
+  setBanPreventionEnabled: async () => ({ success: true }),
+  setRandomDelayEnabled: async () => ({ success: true }),
+  getBanPreventionSettings: async () => ({ enabled: true, randomDelayEnabled: true }),
+  resetCookielessMode: async () => ({ success: true }),
+  onBanPreventionWarning: () => () => {},
   // Player mocks
   selectMediaFile: async () => ({ success: false }),
   detectSubtitles: async () => [],

@@ -9,6 +9,7 @@ import { BinaryUpdater } from './binary-updater';
 import { HealthMonitor } from './health-monitor';
 import { LicenseManager } from './license-manager';
 import { RateLimiter } from './rate-limiter';
+import { BanPrevention } from './ban-prevention';
 import { ConverterManager } from './converter-manager';
 import { ConversionCounter } from './conversion-counter';
 
@@ -23,6 +24,7 @@ const binaryUpdater = new BinaryUpdater(binaryManager);
 const healthMonitor = new HealthMonitor(ytdlp, binaryManager, binaryUpdater);
 const licenseManager = new LicenseManager();
 const rateLimiter = new RateLimiter();
+const banPrevention = new BanPrevention();
 const converterManager = new ConverterManager();
 const conversionCounter = new ConversionCounter(licenseManager);
 
@@ -172,7 +174,7 @@ function setupIPC(): void {
     }
   });
 
-  // Start download (with tier gating + rate limiting)
+  // Start download (with tier gating + rate limiting + ban prevention)
   ipcMain.handle('start-download', async (_event, options: {
     url: string;
     formatId: string;
@@ -196,12 +198,41 @@ function setupIPC(): void {
         return { success: false, error: backoff.reason };
       }
 
+      // Ban Prevention: check platform-specific rate limits
+      const platform = ytdlp.detectPlatformFromUrl(options.url);
+      const banCheck = banPrevention.checkDownloadAllowed(platform);
+      if (!banCheck.allowed) {
+        return { success: false, error: banCheck.reason };
+      }
+
+      // Ban Prevention: apply random delay if needed (human-like behavior)
+      if (banCheck.waitMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, banCheck.waitMs));
+      }
+
+      // Ban Prevention: send warning to renderer if risk level elevated
+      if (banCheck.riskLevel !== 'safe') {
+        mainWindow?.webContents.send('ban-prevention-warning', {
+          platform,
+          level: banCheck.riskLevel,
+          cookielessRecommended: banCheck.cookielessRecommended,
+        });
+      }
+
       const proxySettings = settings.get('proxy') as { enabled: boolean; url: string } | undefined;
       const proxy = proxySettings?.enabled ? proxySettings.url : undefined;
       const cookiesPath = settings.get('cookiesPath') as string | undefined;
       const browserCookies = settings.get('browserCookies') as string | undefined;
+
+      // Ban Prevention: if cookieless mode is active, skip cookies entirely
+      const useCookieless = banPrevention.shouldUseCookieless(platform);
+      const effectiveCookiesPath = useCookieless ? undefined : (cookiesPath || undefined);
       // Use auto-detected browser cookies for YouTube if no explicit cookies configured
-      const effectiveBrowserCookies = browserCookies || ytdlp.getAutoBrowser() || undefined;
+      const effectiveBrowserCookies = useCookieless ? undefined : (browserCookies || ytdlp.getAutoBrowser() || undefined);
+
+      // Ban Prevention: record download attempt
+      banPrevention.recordDownload(platform);
+
       const downloadId = downloadManager.startDownload(
         options,
         proxy,
@@ -218,13 +249,14 @@ function setupIPC(): void {
           if (result.status === 'completed') {
             licenseManager.recordDownload();
             rateLimiter.reportSuccess();
+            banPrevention.recordSuccess(platform);
           } else if (result.status === 'error' && result.error && rateLimiter.isBanError(result.error)) {
             rateLimiter.reportBan(result.error);
             mainWindow?.webContents.send('rate-limit-warning', rateLimiter.getStatus());
           }
           mainWindow?.webContents.send('download-complete', result);
         },
-        cookiesPath || undefined,
+        effectiveCookiesPath,
         effectiveBrowserCookies
       );
       return { success: true, downloadId };
@@ -726,6 +758,51 @@ function setupIPC(): void {
     shell.showItemInFolder(filePath);
     return { success: true };
   });
+
+  // === BAN PREVENTION ===
+  ipcMain.handle('get-ban-prevention-status', async () => {
+    return banPrevention.getStatus();
+  });
+
+  ipcMain.handle('get-ban-prevention-platform-stats', async (_event, platform: string) => {
+    return banPrevention.getPlatformStats(platform);
+  });
+
+  ipcMain.handle('check-ban-prevention', async (_event, platform: string) => {
+    return banPrevention.checkDownloadAllowed(platform);
+  });
+
+  ipcMain.handle('reset-ban-prevention-platform', async (_event, platform: string) => {
+    banPrevention.resetPlatform(platform);
+    return { success: true };
+  });
+
+  ipcMain.handle('reset-ban-prevention-all', async () => {
+    banPrevention.resetAll();
+    return { success: true };
+  });
+
+  ipcMain.handle('set-ban-prevention-enabled', async (_event, enabled: boolean) => {
+    banPrevention.setEnabled(enabled);
+    return { success: true };
+  });
+
+  ipcMain.handle('set-random-delay-enabled', async (_event, enabled: boolean) => {
+    banPrevention.setRandomDelayEnabled(enabled);
+    return { success: true };
+  });
+
+  ipcMain.handle('get-ban-prevention-settings', async () => {
+    return {
+      enabled: banPrevention.isEnabled(),
+      randomDelayEnabled: banPrevention.isRandomDelayEnabled(),
+    };
+  });
+
+  ipcMain.handle('reset-cookieless-mode', async (_event, platform: string) => {
+    banPrevention.resetCookielessMode(platform);
+    return { success: true };
+  });
 }
 
 // ==================== PERFORMANCE: Deferred Initialization ====================
@@ -737,6 +814,9 @@ app.whenReady().then(async () => {
   // Phase 1: Show window ASAP (show: false + ready-to-show pattern already in createWindow)
   createWindow();
   setupIPC();
+
+  // Set main window reference for ban prevention warnings
+  banPrevention.setMainWindow(mainWindow);
 
   // Phase 2: Non-critical UI (tray icon) — defer slightly
   setTimeout(() => createTray(), 500);
