@@ -131,6 +131,11 @@ export default {
         return await handleAdminStats(env);
       }
 
+      if (path === '/admin/devices' && request.method === 'GET') {
+        if (!await verifyAdmin(request, env)) return errorResponse('Unauthorized', 401);
+        return await handleAdminDevices(request, env);
+      }
+
       // === HIDDEN ADMIN PANEL WEB UI ===
       if ((path === '/admin' || path === '/admin/') && request.method === 'GET') {
         return new Response(getAdminPanelHTML(), {
@@ -544,6 +549,10 @@ function getAdminPanelHTML(): string {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       <span>Generate Keys</span>
     </div>
+    <div class="nav-item" data-page="devices" onclick="switchPage('devices')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      <span>Devices</span>
+    </div>
     <div class="logout-btn" onclick="doLogout()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       <span>Logout</span>
@@ -581,6 +590,23 @@ function getAdminPanelHTML(): string {
           <tbody id="keys-body"></tbody>
         </table>
         <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+
+    <!-- DEVICES PAGE -->
+    <div id="page-devices" class="hidden">
+      <h2 class="page-title">Device Tracking</h2>
+      <div id="device-key-search" style="margin-bottom:1rem;display:flex;gap:0.5rem;align-items:center">
+        <input type="text" id="device-key-input" placeholder="Enter license key to view devices (or leave empty for all)" style="flex:1;padding:0.65rem 0.85rem;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.9rem;font-family:monospace;outline:none">
+        <button class="btn btn-primary" onclick="loadDevices()">Search</button>
+      </div>
+      <div id="device-key-info" class="hidden" style="margin-bottom:1rem"></div>
+      <div class="table-container">
+        <div class="table-header"><h3 id="devices-title">All Recent Activations</h3></div>
+        <table>
+          <thead><tr><th>Device ID</th><th>Device Name</th><th>License Key</th><th>Tier</th><th>Status</th><th>Activated</th><th>Last Seen</th></tr></thead>
+          <tbody id="devices-body"></tbody>
+        </table>
       </div>
     </div>
 
@@ -684,6 +710,7 @@ function switchPage(page) {
   document.getElementById('page-' + page).classList.remove('hidden');
   if (page === 'overview') loadOverview();
   else if (page === 'keys') loadKeys();
+  else if (page === 'devices') loadDevices();
 }
 
 // OVERVIEW
@@ -736,8 +763,16 @@ function renderKeyRowFull(k) {
   const status = k.revoked ? '<span class="badge badge-revoked">Revoked</span>' : '<span class="badge badge-active">Active</span>';
   const date = k.created_at ? new Date(k.created_at + 'Z').toLocaleDateString() : '-';
   const buyer = k.buyer_name || '-';
-  const actions = k.revoked ? '-' : \`<button class="btn btn-sm btn-danger" onclick="openRevokeModal('\${k.key}')">Revoke</button>\`;
+  const devicesBtn = \`<button class="btn btn-sm" style="background:var(--bg3);color:var(--blue);border:1px solid var(--blue);margin-right:0.35rem" onclick="viewKeyDevices('\${k.key}')">Devices</button>\`;
+  const revokeBtn = k.revoked ? '' : \`<button class="btn btn-sm btn-danger" onclick="openRevokeModal('\${k.key}')">Revoke</button>\`;
+  const actions = devicesBtn + revokeBtn;
   return \`<tr><td style="font-family:monospace;font-size:0.8rem">\${k.key}</td><td>\${tier}</td><td>\${status}</td><td>\${k.active_devices || 0}/\${k.max_devices}</td><td>\${buyer}</td><td>\${date}</td><td>\${actions}</td></tr>\`;
+}
+
+function viewKeyDevices(key) {
+  document.getElementById('device-key-input').value = key;
+  switchPage('devices');
+  loadDevices();
 }
 
 function setFilter(f) {
@@ -788,12 +823,110 @@ function showToast(msg, isError = false) {
   setTimeout(() => t.classList.add('hidden'), 3000);
 }
 
+// DEVICES
+async function loadDevices() {
+  const keyInput = document.getElementById('device-key-input').value.trim();
+  const infoEl = document.getElementById('device-key-info');
+  const titleEl = document.getElementById('devices-title');
+  try {
+    const url = keyInput ? '/admin/devices?key=' + encodeURIComponent(keyInput) : '/admin/devices';
+    const d = await apiFetch(url);
+    if (!d.success) { showToast(d.error || 'Failed to load devices', true); return; }
+    if (keyInput && d.license) {
+      const l = d.license;
+      const tierBadge = l.tier === 'pro' ? '<span class="badge badge-pro">PRO</span>' : '<span class="badge badge-family">FAMILY</span>';
+      const statusBadge = l.revoked ? '<span class="badge badge-revoked">Revoked</span>' : '<span class="badge badge-active">Active</span>';
+      infoEl.classList.remove('hidden');
+      infoEl.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1rem;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center">' +
+        '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Key</span><div style="font-family:monospace;font-size:0.9rem">' + keyInput + '</div></div>' +
+        '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Tier</span><div>' + tierBadge + '</div></div>' +
+        '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Status</span><div>' + statusBadge + '</div></div>' +
+        '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Devices</span><div style="font-size:1.1rem;font-weight:700;color:var(--blue)">' + d.activeDevices + '/' + l.maxDevices + '</div></div>' +
+        (l.buyerName ? '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Buyer</span><div>' + l.buyerName + '</div></div>' : '') +
+        (l.buyerContact ? '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Contact</span><div>' + l.buyerContact + '</div></div>' : '') +
+        '<div><span style="color:var(--muted);font-size:0.75rem;text-transform:uppercase">Created</span><div>' + (l.createdAt ? new Date(l.createdAt + 'Z').toLocaleDateString() : '-') + '</div></div>' +
+        '</div>';
+      titleEl.textContent = 'Devices for ' + keyInput;
+      const devices = d.devices || [];
+      document.getElementById('devices-body').innerHTML = devices.length === 0
+        ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No devices activated for this key</td></tr>'
+        : devices.map(dev => renderDeviceRow(dev, false)).join('');
+    } else {
+      infoEl.classList.add('hidden');
+      titleEl.textContent = 'All Recent Activations';
+      const devices = d.devices || [];
+      document.getElementById('devices-body').innerHTML = devices.length === 0
+        ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No device activations found</td></tr>'
+        : devices.map(dev => renderDeviceRow(dev, true)).join('');
+    }
+  } catch (e) { showToast('Failed to load devices', true); }
+}
+
+function renderDeviceRow(dev, showKey) {
+  const devId = (dev.device_id || '').substring(0, 12) + '...';
+  const devName = dev.device_name || '-';
+  const key = showKey ? '<span style="font-family:monospace;font-size:0.8rem">' + (dev.license_key || '-') + '</span>' : '-';
+  const tier = dev.tier === 'pro' ? '<span class="badge badge-pro">PRO</span>' : dev.tier === 'family' ? '<span class="badge badge-family">FAMILY</span>' : '-';
+  const active = dev.active === 1 ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-revoked">Inactive</span>';
+  const activated = dev.activated_at ? new Date(dev.activated_at + 'Z').toLocaleDateString() : '-';
+  const lastSeen = dev.last_validated ? new Date(dev.last_validated + 'Z').toLocaleDateString() : '-';
+  return '<tr><td title="' + (dev.device_id || '') + '" style="font-family:monospace;font-size:0.8rem;cursor:help">' + devId + '</td><td>' + devName + '</td><td>' + key + '</td><td>' + tier + '</td><td>' + active + '</td><td>' + activated + '</td><td>' + lastSeen + '</td></tr>';
+}
+
 // Enter key on login
 document.getElementById('login-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('login-email').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('login-password').focus(); });
 </script>
 </body>
 </html>`;
+}
+
+async function handleAdminDevices(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const key = url.searchParams.get('key') || '';
+
+  if (key) {
+    // Get devices for a specific key
+    const devices = await env.DB.prepare(
+      'SELECT * FROM activations WHERE license_key = ? ORDER BY activated_at DESC'
+    ).bind(key).all();
+
+    const license = await env.DB.prepare(
+      'SELECT * FROM license_keys WHERE key = ?'
+    ).bind(key).first() as { tier: string; max_devices: number; buyer_name: string; buyer_contact: string; notes: string; created_at: string; revoked: number } | null;
+
+    return jsonResponse({
+      success: true,
+      key,
+      license: license ? {
+        tier: license.tier,
+        maxDevices: license.max_devices,
+        buyerName: license.buyer_name,
+        buyerContact: license.buyer_contact,
+        notes: license.notes,
+        createdAt: license.created_at,
+        revoked: !!license.revoked,
+      } : null,
+      devices: devices.results,
+      totalDevices: devices.results.length,
+      activeDevices: devices.results.filter((d: Record<string, unknown>) => d.active === 1).length,
+    });
+  }
+
+  // Get all devices grouped summary
+  const allDevices = await env.DB.prepare(
+    `SELECT a.*, lk.tier, lk.max_devices, lk.buyer_name, lk.revoked as key_revoked
+     FROM activations a
+     JOIN license_keys lk ON a.license_key = lk.key
+     ORDER BY a.activated_at DESC
+     LIMIT 100`
+  ).all();
+
+  return jsonResponse({
+    success: true,
+    devices: allDevices.results,
+    total: allDevices.results.length,
+  });
 }
 
 async function handleAdminStats(env: Env): Promise<Response> {

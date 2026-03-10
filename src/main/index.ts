@@ -454,6 +454,13 @@ function setupIPC(): void {
     if (result.success) {
       // Update download manager concurrent limit based on tier
       downloadManager.setMaxConcurrent(licenseManager.getMaxConcurrent());
+      // Notify renderer of tier change so badge updates immediately
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('license-tier-changed', {
+          tier: licenseManager.getTier(),
+          activated: true,
+        });
+      }
     }
     return result;
   });
@@ -462,6 +469,13 @@ function setupIPC(): void {
   ipcMain.handle('deactivate-license', async () => {
     const result = await licenseManager.deactivate();
     downloadManager.setMaxConcurrent(licenseManager.getMaxConcurrent());
+    // Notify renderer of tier change so badge updates immediately
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('license-tier-changed', {
+        tier: licenseManager.getTier(),
+        activated: false,
+      });
+    }
     return result;
   });
 

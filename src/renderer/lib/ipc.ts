@@ -77,6 +77,7 @@ export interface ElectronAPI {
   onHealthReport: (callback: (report: unknown) => void) => () => void;
   onHealthHeal: (callback: (data: unknown) => void) => () => void;
   // License management
+  onLicenseTierChanged: (callback: (data: unknown) => void) => () => void;
   getLicenseState: () => Promise<{
     tier: 'free' | 'pro' | 'family';
     key: string;
@@ -185,6 +186,7 @@ const mockAPI: ElectronAPI = {
   onHealthReport: () => () => {},
   onHealthHeal: () => () => {},
   // License mocks
+  onLicenseTierChanged: () => () => {},
   getLicenseState: async () => ({
     tier: 'free' as const,
     key: '',

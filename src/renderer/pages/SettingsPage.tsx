@@ -95,6 +95,36 @@ export const SettingsPage: React.FC = () => {
     setLicenseLoading(false);
   };
 
+  const handleChangeLicense = async () => {
+    if (!licenseKey.trim()) return;
+    setLicenseLoading(true);
+    setLicenseMessage(null);
+    try {
+      // First deactivate the current key
+      await api.deactivateLicense();
+      // Then activate the new key
+      const result = await api.activateLicense(licenseKey.trim());
+      if (result.success) {
+        setLicenseMessage({ type: 'success', text: `License switched! New tier: ${(result.tier || 'pro').toUpperCase()}` });
+        const license = await api.getLicenseState();
+        setLicenseState(license);
+        const stats = await api.getDownloadStats();
+        setDownloadStats(stats);
+        setLicenseKey('');
+      } else {
+        setLicenseMessage({ type: 'error', text: result.error || 'Activation of new key failed' });
+        // Re-fetch state (now deactivated)
+        const license = await api.getLicenseState();
+        setLicenseState(license);
+        const stats = await api.getDownloadStats();
+        setDownloadStats(stats);
+      }
+    } catch {
+      setLicenseMessage({ type: 'error', text: 'Could not reach license server. Check your internet connection.' });
+    }
+    setLicenseLoading(false);
+  };
+
   const handleCobaltToggle = async (enabled: boolean) => {
     await api.setCobaltEnabled(enabled);
     setCobaltEnabled(enabled);
@@ -240,17 +270,49 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div>
-                <button
-                  onClick={handleDeactivateLicense}
-                  disabled={licenseLoading}
-                  className="px-4 py-2 bg-destructive/10 text-destructive rounded-xl text-sm font-medium hover:bg-destructive/20 transition-all"
-                >
-                  {licenseLoading ? 'Processing...' : 'Deactivate License'}
-                </button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Deactivating frees this device slot so you can activate on another device.
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDeactivateLicense}
+                    disabled={licenseLoading}
+                    className="px-4 py-2 bg-destructive/10 text-destructive rounded-xl text-sm font-medium hover:bg-destructive/20 transition-all"
+                  >
+                    {licenseLoading ? 'Processing...' : 'Remove License'}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Remove your current license key to deactivate this device. You can then activate a new or different license key anytime.
                 </p>
+
+                {/* Change key section */}
+                <div className="pt-3 border-t border-border">
+                  <label className="block text-xs text-muted-foreground mb-1.5">Switch to a Different Key</label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={licenseKey}
+                      onChange={(e) => setLicenseKey(e.target.value.toUpperCase())}
+                      placeholder="GT-XXXX-XXXX-XXXX-XXXX"
+                      className="flex-1 px-4 py-2.5 bg-secondary/50 border border-border rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all font-mono tracking-wider"
+                      maxLength={22}
+                    />
+                    <button
+                      onClick={handleChangeLicense}
+                      disabled={licenseLoading || !licenseKey.trim()}
+                      className={cn(
+                        'px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex-shrink-0',
+                        licenseLoading || !licenseKey.trim()
+                          ? 'bg-secondary/50 text-muted-foreground cursor-not-allowed'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      )}
+                    >
+                      {licenseLoading ? 'Switching...' : 'Switch Key'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    This will deactivate your current key and activate the new one in one step.
+                  </p>
+                </div>
               </div>
             )}
 

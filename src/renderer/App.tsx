@@ -90,6 +90,17 @@ const App: React.FC = () => {
     }).catch(() => {});
   }, []);
 
+  // Listen for license tier changes (from activation/deactivation in Settings)
+  useEffect(() => {
+    const cleanup = api.onLicenseTierChanged((data: unknown) => {
+      const d = data as { tier?: string; activated?: boolean };
+      if (d.tier) {
+        setLicenseTier(d.tier);
+      }
+    });
+    return cleanup;
+  }, []);
+
   // Listen for download completions and errors — feed notifications + cookie block
   useEffect(() => {
     const cleanup = api.onDownloadComplete((result: unknown) => {

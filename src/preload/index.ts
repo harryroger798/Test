@@ -110,6 +110,11 @@ const electronAPI = {
 
   // License management
   getLicenseState: () => ipcRenderer.invoke('get-license-state'),
+  onLicenseTierChanged: (callback: (data: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on('license-tier-changed', handler);
+    return () => ipcRenderer.removeListener('license-tier-changed', handler);
+  },
   getTierLimits: () => ipcRenderer.invoke('get-tier-limits'),
   activateLicense: (key: string) => ipcRenderer.invoke('activate-license', key),
   deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
