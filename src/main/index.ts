@@ -582,18 +582,32 @@ function setupIPC(): void {
     return [];
   });
 
-  // Get saved playback position
+  // Get saved playback position (stored in a separate JSON file)
   ipcMain.handle('get-playback-position', async (_event, filePath: string) => {
     try {
-      const pos = settings.get(`playback_${Buffer.from(filePath).toString('base64').substring(0, 40)}`) as number | undefined;
-      return pos || 0;
+      const fs = await import('fs');
+      const p = await import('path');
+      const posFile = p.join(app.getPath('userData'), 'playback-positions.json');
+      if (!fs.existsSync(posFile)) return 0;
+      const data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
+      const key = Buffer.from(filePath).toString('base64').substring(0, 40);
+      return data[key] || 0;
     } catch { return 0; }
   });
 
   // Save playback position
   ipcMain.handle('save-playback-position', async (_event, filePath: string, position: number) => {
     try {
-      settings.set(`playback_${Buffer.from(filePath).toString('base64').substring(0, 40)}`, position);
+      const fs = await import('fs');
+      const p = await import('path');
+      const posFile = p.join(app.getPath('userData'), 'playback-positions.json');
+      let data: Record<string, number> = {};
+      if (fs.existsSync(posFile)) {
+        data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
+      }
+      const key = Buffer.from(filePath).toString('base64').substring(0, 40);
+      data[key] = position;
+      fs.writeFileSync(posFile, JSON.stringify(data));
       return { success: true };
     } catch { return { success: false }; }
   });

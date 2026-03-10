@@ -6,6 +6,9 @@
  */
 import * as path from 'path';
 import * as fs from 'fs';
+
+// Sharp is dynamically imported at runtime (optional dependency for image conversion)
+// It's not listed in package.json to keep the bundle small — falls back to FFmpeg if unavailable
 import { spawn, ChildProcess } from 'child_process';
 import { app } from 'electron';
 
@@ -265,6 +268,7 @@ export class ConverterManager {
 
     try {
       // Dynamic import of sharp (may not be available)
+      // @ts-ignore — sharp is an optional runtime dependency
       const sharp = await import('sharp').catch(() => null);
       if (!sharp) {
         // Fallback: use FFmpeg for image conversion
@@ -298,7 +302,7 @@ export class ConverterManager {
           pipeline = pipeline.tiff();
           break;
         default:
-          pipeline = pipeline.toFormat(outputExt as keyof import('sharp').FormatEnum);
+          pipeline = pipeline.toFormat(outputExt as string);
       }
 
       onProgress(60);
