@@ -1,6 +1,6 @@
 {
   "name": "grabtube",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Multi-platform video & audio downloader supporting 1800+ websites",
   "main": "dist/main/index.js",
   "author": "GrabTube",
