@@ -208,8 +208,8 @@ export const ConvertPage: React.FC = () => {
       return;
     }
 
-    // Check file size limit
-    if (tierInfo && inputFile.size > tierInfo.maxSize * 1024 * 1024) {
+    // Check file size limit (skip if unlimited: maxSize === -1)
+    if (tierInfo && tierInfo.maxSize !== -1 && inputFile.size > tierInfo.maxSize * 1024 * 1024) {
       setJobs((prev) => [
         ...prev,
         {

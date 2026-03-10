@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, net } from 'electron';
 import * as path from 'path';
 import { BinaryManager } from './binary-manager';
 import { YtdlpManager } from './ytdlp-manager';
@@ -250,6 +250,21 @@ function setupIPC(): void {
             licenseManager.recordDownload();
             rateLimiter.reportSuccess();
             banPrevention.recordSuccess(platform);
+
+            // Save to download history for Player playlist
+            const outputFile = result.outputPath || options.outputPath;
+            const fileName = result.filename || options.filename || 'Unknown';
+            settings.addHistoryItem({
+              id: `dl_${Date.now()}`,
+              url: options.url,
+              title: fileName,
+              platform,
+              thumbnail: '',
+              downloadedAt: new Date().toISOString(),
+              filePath: outputFile ? path.join(outputFile, fileName) : '',
+              fileSize: result.filesize || '',
+              format: options.audioOnly ? (options.audioFormat || 'mp3') : (options.formatId || 'best'),
+            });
           } else if (result.status === 'error' && result.error && rateLimiter.isBanError(result.error)) {
             rateLimiter.reportBan(result.error);
             mainWindow?.webContents.send('rate-limit-warning', rateLimiter.getStatus());
@@ -646,16 +661,21 @@ function setupIPC(): void {
 
   // Get player playlist from download history
   ipcMain.handle('get-player-playlist', async () => {
-    const history = settings.get('downloadHistory') as Array<{ outputPath?: string; filename?: string; audioOnly?: boolean }> | undefined;
-    if (!history) return [];
+    const history = settings.get('downloadHistory');
+    if (!history || history.length === 0) return [];
     const fs = await import('fs');
+    const audioExts = ['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'wma', 'opus'];
     return history
-      .filter((item) => item.outputPath && fs.existsSync(item.outputPath))
-      .map((item) => ({
-        path: item.outputPath!,
-        name: item.filename || item.outputPath!.split(/[/\\]/).pop() || 'Unknown',
-        type: item.audioOnly ? 'audio' as const : 'video' as const,
-      }))
+      .filter((item) => item.filePath && fs.existsSync(item.filePath))
+      .map((item) => {
+        const ext = item.filePath.split('.').pop()?.toLowerCase() || '';
+        const isAudio = audioExts.includes(ext) || item.format === 'mp3' || item.format === 'flac' || item.format === 'wav' || item.format === 'ogg' || item.format === 'aac' || item.format === 'm4a';
+        return {
+          path: item.filePath,
+          name: item.title || item.filePath.split(/[/\\]/).pop() || 'Unknown',
+          type: isAudio ? 'audio' as const : 'video' as const,
+        };
+      })
       .slice(0, 50);
   });
 
@@ -809,8 +829,21 @@ function setupIPC(): void {
 // Prioritize window display first, then initialize background systems after a delay
 // to improve perceived startup time (Time-to-Interactive).
 
+// Register custom protocol for serving local media files to the renderer
+// This allows the Player to access local files safely via grabtube-media:// protocol
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'grabtube-media', privileges: { stream: true, bypassCSP: true, supportFetchAPI: true } },
+]);
+
 // App lifecycle
 app.whenReady().then(async () => {
+  // Register protocol handler for local media files
+  protocol.handle('grabtube-media', (request) => {
+    // URL format: grabtube-media:///C:/path/to/file.mp4 or grabtube-media:///home/user/file.mp4
+    const url = request.url.replace('grabtube-media://', 'file://');
+    return net.fetch(url);
+  });
+
   // Phase 1: Show window ASAP (show: false + ready-to-show pattern already in createWindow)
   createWindow();
   setupIPC();

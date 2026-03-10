@@ -304,8 +304,8 @@ export const SettingsPage: React.FC = () => {
                 {/* Upgrade CTA */}
                 <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl">
                   <p className="text-xs text-muted-foreground">
-                    <strong className="text-primary">Upgrade to Pro ($14.99)</strong> for unlimited downloads, 8K quality, batch/playlist support, and faster downloads.
-                    <strong className="text-primary"> Family ($29.99)</strong> includes all Pro features for up to 3 devices.
+                    <strong className="text-primary">Upgrade to Lifetime Pro ($49.99)</strong> for unlimited downloads, 8K quality, batch/playlist support, and faster downloads.
+                    <strong className="text-primary"> Family Plan ($99.99)</strong> includes all Pro features for up to 3 devices.
                   </p>
                 </div>
               </div>

@@ -144,7 +144,7 @@ export const PlayerPage: React.FC = () => {
   };
 
   const loadMedia = async (filePath: string, name: string, type: 'video' | 'audio') => {
-    setMediaSource(`file://${filePath}`);
+    setMediaSource(`grabtube-media://${filePath}`);
     setMediaName(name);
     setMediaType(type);
     setIsPlaying(false);
@@ -158,7 +158,7 @@ export const PlayerPage: React.FC = () => {
     if (subs && subs.length > 0) {
       setSubtitleTracks(subs.map((s: { path: string; label: string; lang: string }) => ({
         label: s.label,
-        src: `file://${s.path}`,
+        src: `grabtube-media://${s.path}`,
         language: s.lang,
       })));
     }
@@ -170,7 +170,7 @@ export const PlayerPage: React.FC = () => {
         ...prev,
         ...embedded.map((s: { path: string; label: string; lang: string }) => ({
           label: `[Embedded] ${s.label}`,
-          src: `file://${s.path}`,
+          src: `grabtube-media://${s.path}`,
           language: s.lang,
         })),
       ]);
