@@ -728,33 +728,52 @@ function setupIPC(): void {
   });
 }
 
+// ==================== PERFORMANCE: Deferred Initialization ====================
+// Prioritize window display first, then initialize background systems after a delay
+// to improve perceived startup time (Time-to-Interactive).
+
 // App lifecycle
 app.whenReady().then(async () => {
+  // Phase 1: Show window ASAP (show: false + ready-to-show pattern already in createWindow)
   createWindow();
-  createTray();
   setupIPC();
 
-  // Initialize automation systems (after window is ready)
-  if (mainWindow) {
-    appUpdater.init(mainWindow);
-    binaryUpdater.init(mainWindow);
-    healthMonitor.init(mainWindow);
-  }
+  // Phase 2: Non-critical UI (tray icon) — defer slightly
+  setTimeout(() => createTray(), 500);
 
-  // Pre-initialize YouTube.js engine (runs in background, doesn't block startup)
-  downloadManager.getYTJSEngine().init().then(() => {
-    console.log('[GrabTube] YouTube.js engine ready — primary YouTube download engine initialized.');
-  }).catch((err) => {
-    console.log('[GrabTube] YouTube.js engine init deferred:', err instanceof Error ? err.message : 'unknown error');
-  });
+  // Phase 3: Background systems — defer to avoid blocking renderer
+  setTimeout(() => {
+    if (mainWindow) {
+      appUpdater.init(mainWindow);
+      binaryUpdater.init(mainWindow);
+      healthMonitor.init(mainWindow);
+    }
+  }, 2000);
 
-  // Auto-start POT provider for YouTube bypass (runs in background)
-  const potStarted = await ytdlp.startPotProvider();
-  if (potStarted) {
-    console.log('[GrabTube] POT provider started — YouTube downloads work from any IP.');
-  } else {
-    console.log('[GrabTube] POT provider not available — YouTube may need proxy from datacenter IPs.');
-  }
+  // Phase 4: Heavy initialization — defer even further
+  setTimeout(() => {
+    // Pre-initialize YouTube.js engine (runs in background)
+    downloadManager.getYTJSEngine().init().then(() => {
+      console.log('[GrabTube] YouTube.js engine ready.');
+    }).catch((err) => {
+      console.log('[GrabTube] YouTube.js engine init deferred:', err instanceof Error ? err.message : 'unknown error');
+    });
+
+    // Auto-start POT provider for YouTube bypass
+    ytdlp.startPotProvider().then((potStarted) => {
+      if (potStarted) {
+        console.log('[GrabTube] POT provider started.');
+      }
+    });
+  }, 3000);
+
+  // ==================== PERFORMANCE: Periodic Memory Cleanup ====================
+  // Run garbage collection hints periodically to keep memory usage low
+  setInterval(() => {
+    if (global.gc) {
+      global.gc();
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
