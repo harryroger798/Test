@@ -95,10 +95,10 @@ export const UrlInput: React.FC = () => {
               {isLoading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  Converting...
+                  Grabbing...
                 </>
               ) : (
-                'Convert'
+                'Grab'
               )}
             </button>
           </div>
