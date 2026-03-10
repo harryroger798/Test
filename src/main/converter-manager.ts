@@ -48,6 +48,27 @@ export class ConverterManager {
         }
       }
     }
+
+    // If still fallback to 'ffmpeg', try common installation paths on Windows
+    if (this.ffmpegPath === 'ffmpeg' && process.platform === 'win32') {
+      const winPaths = [
+        path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages', 'Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe', 'ffmpeg-*', 'bin', 'ffmpeg.exe'),
+        path.join(process.env.ProgramFiles || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+        path.join(process.env.USERPROFILE || '', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+        'C:\\ffmpeg\\bin\\ffmpeg.exe',
+      ];
+      for (const p of winPaths) {
+        // Skip glob patterns
+        if (p.includes('*')) continue;
+        if (fs.existsSync(p)) {
+          this.ffmpegPath = p;
+          break;
+        }
+      }
+    }
+
+    console.log(`[GrabTube] Converter FFmpeg path: ${this.ffmpegPath}`);
   }
 
   /**

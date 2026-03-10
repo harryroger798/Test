@@ -1058,7 +1058,35 @@ export class YtdlpManager {
       };
     }
 
-    // Match merge/processing
+    // Match merge output: [Merger] Merging formats into "/path/to/final.mp4"
+    const mergerMatch = line.match(/\[Merger\]\s+Merging formats into\s+"(.+)"/);
+    if (mergerMatch) {
+      return {
+        downloadId,
+        status: 'processing',
+        percent: 100,
+        speed: '',
+        eta: '',
+        filesize: '',
+        filename: mergerMatch[1],
+      };
+    }
+
+    // Match ExtractAudio destination: [ExtractAudio] Destination: /path/to/file.mp3
+    const extractAudioMatch = line.match(/\[ExtractAudio\]\s+Destination:\s+(.+)/);
+    if (extractAudioMatch) {
+      return {
+        downloadId,
+        status: 'processing',
+        percent: 100,
+        speed: '',
+        eta: '',
+        filesize: '',
+        filename: extractAudioMatch[1],
+      };
+    }
+
+    // Match other processing steps (ffmpeg post-processing, etc.)
     if (line.includes('[Merger]') || line.includes('[ExtractAudio]') || line.includes('[ffmpeg]')) {
       return {
         downloadId,

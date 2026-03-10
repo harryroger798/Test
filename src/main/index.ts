@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, Tray, Menu, nativeImage, protocol, net } from 'electron';
 import { pathToFileURL } from 'url';
 import * as path from 'path';
+import * as fs from 'fs';
 import { BinaryManager } from './binary-manager';
 import { YtdlpManager } from './ytdlp-manager';
 import { DownloadManager } from './download-manager';
@@ -253,23 +254,73 @@ function setupIPC(): void {
             banPrevention.recordSuccess(platform);
 
             // Save to download history for Player playlist
-            // result.filename from yt-dlp may be a FULL path (from "[download] Destination: ...")
-            // or just a filename. Detect and handle both cases.
+            // result.filename may come from:
+            //   - [Merger] Merging formats into "/full/path/final.mp4" (BEST - final merged file)
+            //   - [ExtractAudio] Destination: /full/path/audio.mp3 (audio extraction)
+            //   - [download] Destination: /full/path/temp.f251.webm (TEMP - may be deleted after merge!)
+            //   - empty string (no filename captured at all)
             const rawFilename = result.filename || '';
             const outputDir = result.outputPath || options.outputPath;
             const isFullPath = rawFilename && (path.isAbsolute(rawFilename) || rawFilename.includes(path.sep));
             let resolvedFilePath: string;
             if (isFullPath) {
-              // yt-dlp reported the full destination path — use it directly
               resolvedFilePath = rawFilename;
             } else if (rawFilename) {
-              // Just a filename — join with the output directory
               resolvedFilePath = path.join(outputDir, rawFilename);
             } else {
-              // No filename reported — use options.filename as best guess
+              // No filename reported — construct from output template
               const fallbackName = options.filename || 'Unknown';
               resolvedFilePath = path.join(outputDir, fallbackName);
             }
+
+            // Verify the resolved file actually exists. If not, scan the output directory
+            // for the most recently created file matching the expected name pattern.
+            // This handles cases where yt-dlp captured a temp file path that was deleted after merge.
+            if (!fs.existsSync(resolvedFilePath)) {
+              // Try adding common extensions if the path has no extension
+              const ext = path.extname(resolvedFilePath);
+              if (!ext) {
+                const tryExts = options.audioOnly
+                  ? ['.mp3', '.m4a', '.opus', '.flac', '.wav', '.ogg']
+                  : ['.mp4', '.mkv', '.webm'];
+                for (const tryExt of tryExts) {
+                  if (fs.existsSync(resolvedFilePath + tryExt)) {
+                    resolvedFilePath = resolvedFilePath + tryExt;
+                    break;
+                  }
+                }
+              }
+
+              // If still not found, scan the output directory for the newest matching file
+              if (!fs.existsSync(resolvedFilePath)) {
+                try {
+                  const baseName = (options.filename || '').replace(/\.[^/.]+$/, '');
+                  if (baseName && fs.existsSync(outputDir)) {
+                    const files = fs.readdirSync(outputDir);
+                    let bestMatch = '';
+                    let bestMtime = 0;
+                    const now = Date.now();
+                    for (const file of files) {
+                      // Match files that start with the expected base name, created in last 5 minutes
+                      if (file.startsWith(baseName)) {
+                        const fullPath = path.join(outputDir, file);
+                        const stat = fs.statSync(fullPath);
+                        if (stat.isFile() && stat.mtimeMs > bestMtime && (now - stat.mtimeMs) < 300000) {
+                          bestMatch = fullPath;
+                          bestMtime = stat.mtimeMs;
+                        }
+                      }
+                    }
+                    if (bestMatch) {
+                      resolvedFilePath = bestMatch;
+                    }
+                  }
+                } catch {
+                  // Scan failed, use original path
+                }
+              }
+            }
+
             const displayName = resolvedFilePath.split(/[/\\]/).pop() || 'Unknown';
             settings.addHistoryItem({
               id: `dl_${Date.now()}`,
@@ -856,6 +907,8 @@ protocol.registerSchemesAsPrivileged([
 app.whenReady().then(async () => {
   // Register protocol handler for local media files
   // Handles URL-encoded paths (supports # ? & spaces and other special chars in filenames)
+  // CRITICAL: Must forward Range headers from the video element's request for streaming/seeking.
+  // Without Range support, HTML5 <video> can show first frame but fails to play/seek.
   protocol.handle('grabtube-media', (request) => {
     // URL format: grabtube-media:///C%3A/Users/.../file%23name.mp4
     // Remove protocol prefix to get the encoded path
@@ -868,7 +921,12 @@ app.whenReady().then(async () => {
       filePath = '/' + filePath;
     }
     // Convert to a proper file:// URL using Node's pathToFileURL (handles all special chars)
-    return net.fetch(pathToFileURL(filePath).href);
+    // Forward the original request headers (especially Range) so that video seeking works.
+    // HTML5 <video> sends Range: bytes=X-Y headers; net.fetch must receive them for 206 responses.
+    return net.fetch(pathToFileURL(filePath).href, {
+      method: request.method,
+      headers: request.headers,
+    });
   });
 
   // Phase 1: Show window ASAP (show: false + ready-to-show pattern already in createWindow)
