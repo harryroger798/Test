@@ -1,21 +1,30 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { Bell, Key, Crown, CheckCircle, AlertCircle, X, Download } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { SetupWizard } from './components/SetupWizard';
 import { CookieBlockModal } from './components/CookieBlockModal';
 import { FeatureTour } from './components/FeatureTour';
-import { HomePage } from './pages/HomePage';
-import { VideoPage } from './pages/VideoPage';
-import { AudioPage } from './pages/AudioPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { HelpPage } from './pages/HelpPage';
-import { PlayerPage } from './pages/PlayerPage';
-import { ConvertPage } from './pages/ConvertPage';
 import { useDownloadStore } from './store/downloadStore';
 import { useSettingsStore } from './store/settingsStore';
 import { cn } from './lib/utils';
 import { api } from './lib/ipc';
+
+// Lazy-load pages for faster initial render and code splitting
+const HomePage = lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
+const VideoPage = lazy(() => import('./pages/VideoPage').then(m => ({ default: m.VideoPage })));
+const AudioPage = lazy(() => import('./pages/AudioPage').then(m => ({ default: m.AudioPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const HelpPage = lazy(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
+const PlayerPage = lazy(() => import('./pages/PlayerPage').then(m => ({ default: m.PlayerPage })));
+const ConvertPage = lazy(() => import('./pages/ConvertPage').then(m => ({ default: m.ConvertPage })));
+
+// Loading fallback for lazy-loaded pages
+const PageLoader: React.FC = () => (
+  <div className="flex-1 flex items-center justify-center">
+    <div className="text-muted-foreground text-sm animate-pulse">Loading...</div>
+  </div>
+);
 
 interface AppNotification {
   id: string;
@@ -304,8 +313,10 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Page Content */}
-        {renderPage()}
+        {/* Page Content — Lazy loaded with Suspense */}
+        <Suspense fallback={<PageLoader />}>
+          {renderPage()}
+        </Suspense>
       </div>
 
       {/* Cookie Block Modal — shown when YouTube blocks a download */}
