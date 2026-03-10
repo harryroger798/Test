@@ -78,14 +78,8 @@ export class AppAutoUpdater {
       console.warn('[GrabTube] Auto-update error:', err.message);
     });
 
-    // IPC handlers for renderer
-    ipcMain.handle('check-for-updates', async () => {
-      return this.checkForUpdates();
-    });
-
-    ipcMain.handle('install-update', async () => {
-      autoUpdater.quitAndInstall(false, true);
-    });
+    // NOTE: IPC handlers 'check-for-updates' and 'install-update' are registered
+    // in setupIPC() in index.ts — do NOT register them here to avoid duplicate handler crash.
 
     // Check on startup (after 10 second delay to not slow down launch)
     setTimeout(() => {

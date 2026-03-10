@@ -408,10 +408,10 @@ function setupIPC(): void {
     return appUpdater.checkForUpdates();
   });
 
-  // Auto-update: install downloaded update
+  // Auto-update: install downloaded update (quits app and installs)
   ipcMain.handle('install-update', async () => {
-    // This will quit and install
-    return { success: true };
+    const { autoUpdater } = await import('electron-updater');
+    autoUpdater.quitAndInstall(false, true);
   });
 
   // Binary updater: force check all binaries
