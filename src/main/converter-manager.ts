@@ -10,7 +10,7 @@ import * as fs from 'fs';
 // Sharp is dynamically imported at runtime (optional dependency for image conversion)
 // It's not listed in package.json to keep the bundle small — falls back to FFmpeg if unavailable
 import { spawn, ChildProcess } from 'child_process';
-import { app } from 'electron';
+import { BinaryManager } from './binary-manager';
 
 export interface ConversionOptions {
   inputPath: string;
@@ -31,18 +31,21 @@ export class ConverterManager {
   private activeProcesses: Map<string, ChildProcess> = new Map();
   private ffmpegPath: string = 'ffmpeg';
 
-  constructor() {
-    // Try to find bundled ffmpeg
-    const possiblePaths = [
-      path.join(process.resourcesPath || '', 'bin', 'ffmpeg'),
-      path.join(process.resourcesPath || '', 'bin', 'ffmpeg.exe'),
-      path.join(app?.getPath?.('userData') || '', 'bin', 'ffmpeg'),
-      path.join(app?.getPath?.('userData') || '', 'bin', 'ffmpeg.exe'),
-    ];
-    for (const p of possiblePaths) {
-      if (fs.existsSync(p)) {
-        this.ffmpegPath = p;
-        break;
+  constructor(binaryManager?: BinaryManager) {
+    if (binaryManager) {
+      // Use the same path resolution as yt-dlp (checks bundled + platform-specific + system PATH)
+      this.ffmpegPath = binaryManager.getFfmpegPath();
+    } else {
+      // Fallback: try to find bundled ffmpeg
+      const possiblePaths = [
+        path.join(process.resourcesPath || '', 'bin', 'ffmpeg'),
+        path.join(process.resourcesPath || '', 'bin', 'ffmpeg.exe'),
+      ];
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          this.ffmpegPath = p;
+          break;
+        }
       }
     }
   }

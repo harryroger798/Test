@@ -143,8 +143,16 @@ export const PlayerPage: React.FC = () => {
     }
   };
 
+  // Convert a local file path to a properly encoded grabtube-media:// URL
+  // Handles special chars like #, ?, &, spaces that break URLs
+  const toMediaUrl = (fp: string): string => {
+    const normalized = fp.replace(/\\/g, '/');
+    const encoded = normalized.split('/').map(s => encodeURIComponent(s)).join('/');
+    return `grabtube-media:///${encoded}`;
+  };
+
   const loadMedia = async (filePath: string, name: string, type: 'video' | 'audio') => {
-    setMediaSource(`grabtube-media://${filePath}`);
+    setMediaSource(toMediaUrl(filePath));
     setMediaName(name);
     setMediaType(type);
     setIsPlaying(false);
@@ -158,7 +166,7 @@ export const PlayerPage: React.FC = () => {
     if (subs && subs.length > 0) {
       setSubtitleTracks(subs.map((s: { path: string; label: string; lang: string }) => ({
         label: s.label,
-        src: `grabtube-media://${s.path}`,
+        src: toMediaUrl(s.path),
         language: s.lang,
       })));
     }
@@ -170,7 +178,7 @@ export const PlayerPage: React.FC = () => {
         ...prev,
         ...embedded.map((s: { path: string; label: string; lang: string }) => ({
           label: `[Embedded] ${s.label}`,
-          src: `grabtube-media://${s.path}`,
+          src: toMediaUrl(s.path),
           language: s.lang,
         })),
       ]);
