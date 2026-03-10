@@ -112,6 +112,21 @@ const App: React.FC = () => {
     return cleanup;
   }, []);
 
+  // Listen for ban prevention warnings — feed into notifications
+  useEffect(() => {
+    const cleanup = api.onBanPreventionWarning((data: unknown) => {
+      const d = data as { platform?: string; level?: string; message?: string; cookielessActivated?: boolean };
+      if (d.level === 'danger') {
+        addNotification('error', 'Account Protection Alert',
+          d.message || `High download rate on ${d.platform || 'unknown'}. Auto-switching to cookieless mode to protect your account.`);
+      } else if (d.level === 'warning') {
+        addNotification('info', 'Download Rate Warning',
+          d.message || `Approaching safe download limit on ${d.platform || 'unknown'}. Consider slowing down.`);
+      }
+    });
+    return cleanup;
+  }, [addNotification]);
+
   // Listen for download completions and errors — feed notifications + cookie block
   useEffect(() => {
     const cleanup = api.onDownloadComplete((result: unknown) => {
