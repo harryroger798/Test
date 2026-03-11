@@ -110,6 +110,13 @@ export const PlayerPage: React.FC = () => {
     }
   }, [isPlaying, mediaType]);
 
+  // Close any open menus — called from click handlers that use stopPropagation
+  // (video, play overlay, controls bar) so the container's onClick never fires.
+  const dismissMenus = useCallback(() => {
+    if (showSpeedMenu) setShowSpeedMenu(false);
+    if (showSubtitleMenu) setShowSubtitleMenu(false);
+  }, [showSpeedMenu, showSubtitleMenu]);
+
   useEffect(() => {
     resetControlsTimer();
     return () => {
@@ -475,7 +482,7 @@ export const PlayerPage: React.FC = () => {
             onEnded={handleEnded}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
-            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            onClick={(e) => { e.stopPropagation(); dismissMenus(); togglePlay(); }}
             onDoubleClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
           >
             {subtitleTracks.map((track, i) => (
@@ -515,11 +522,11 @@ export const PlayerPage: React.FC = () => {
             {/* Semi-transparent backdrop — click toggles play */}
             <div
               className="absolute inset-0 z-10 bg-black/20 transition-opacity"
-              onClick={togglePlay}
+              onClick={(e) => { e.stopPropagation(); dismissMenus(); togglePlay(); }}
             />
             {/* Center play circle — click toggles play */}
             <button
-              onClick={togglePlay}
+              onClick={(e) => { e.stopPropagation(); dismissMenus(); togglePlay(); }}
               className="absolute z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
             >
               <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
@@ -543,7 +550,7 @@ export const PlayerPage: React.FC = () => {
           'absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); dismissMenus(); }}
         onMouseEnter={handleControlsMouseEnter}
         onMouseLeave={handleControlsMouseLeave}
       >
