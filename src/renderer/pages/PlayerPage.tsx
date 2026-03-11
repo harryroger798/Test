@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Maximize, Minimize, PictureInPicture, Subtitles,
-  RotateCcw, RotateCw, List, FileText, ChevronDown
+  RotateCcw, RotateCw, List, FolderOpen, ChevronDown, Repeat, Repeat1
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -24,8 +24,10 @@ export const PlayerPage: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const controlsBarRef = useRef<HTMLDivElement>(null);
 
   const [mediaSource, setMediaSource] = useState<string>('');
+  const [mediaFilePath, setMediaFilePath] = useState<string>('');
   const [mediaType, setMediaType] = useState<'video' | 'audio' | ''>('');
   const [mediaName, setMediaName] = useState<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -44,6 +46,9 @@ export const PlayerPage: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [resumePosition, setResumePosition] = useState<number>(0);
+  const [isLooping, setIsLooping] = useState(false);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hoverX, setHoverX] = useState(0);
   const controlsTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
@@ -78,10 +83,28 @@ export const PlayerPage: React.FC = () => {
     return () => clearInterval(interval);
   }, [mediaSource, getActiveMedia]);
 
-  // Auto-hide controls
+  // Auto-hide controls — hides after 3s of idle when video is playing.
+  // Controls reappear on any mouse move over the player container.
+  // When mouse is over the controls bar itself, the timer is paused.
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
+    if (isPlaying && mediaType === 'video') {
+      controlsTimeout.current = setTimeout(() => setShowControls(false), 3000);
+    }
+  }, [isPlaying, mediaType]);
+
+  // Pause the hide timer when hovering directly over controls bar
+  const handleControlsMouseEnter = useCallback(() => {
+    if (controlsTimeout.current) {
+      clearTimeout(controlsTimeout.current);
+      controlsTimeout.current = null;
+    }
+    setShowControls(true);
+  }, []);
+
+  // Resume the hide timer when mouse leaves controls bar
+  const handleControlsMouseLeave = useCallback(() => {
     if (isPlaying && mediaType === 'video') {
       controlsTimeout.current = setTimeout(() => setShowControls(false), 3000);
     }
@@ -130,6 +153,9 @@ export const PlayerPage: React.FC = () => {
         case 'f':
           toggleFullscreen();
           break;
+        case 'l':
+          toggleLoop();
+          break;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -152,6 +178,13 @@ export const PlayerPage: React.FC = () => {
     }
   };
 
+  // Open the currently playing file in its containing folder
+  const openInFolder = () => {
+    if (mediaFilePath) {
+      api.openFileLocation(mediaFilePath);
+    }
+  };
+
   // Convert a local file path to a properly encoded grabtube-media:// URL
   // Handles special chars like #, ?, &, spaces that break URLs
   const toMediaUrl = (fp: string): string => {
@@ -162,6 +195,7 @@ export const PlayerPage: React.FC = () => {
 
   const loadMedia = async (filePath: string, name: string, type: 'video' | 'audio') => {
     setMediaSource(toMediaUrl(filePath));
+    setMediaFilePath(filePath);
     setMediaName(name);
     setMediaType(type);
     setIsPlaying(false);
@@ -230,6 +264,18 @@ export const PlayerPage: React.FC = () => {
     seek(pos * duration);
   };
 
+  const handleProgressHover = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressRef.current || duration <= 0) return;
+    const rect = progressRef.current.getBoundingClientRect();
+    const pos = (e.clientX - rect.left) / rect.width;
+    setHoverTime(Math.max(0, Math.min(pos * duration, duration)));
+    setHoverX(e.clientX - rect.left);
+  };
+
+  const handleProgressLeave = () => {
+    setHoverTime(null);
+  };
+
   const changeVolume = (val: number) => {
     setVolume(val);
     setIsMuted(val === 0);
@@ -277,6 +323,13 @@ export const PlayerPage: React.FC = () => {
     }
   };
 
+  const toggleLoop = () => {
+    const media = getActiveMedia();
+    const newLoop = !isLooping;
+    setIsLooping(newLoop);
+    if (media) media.loop = newLoop;
+  };
+
   const handleTimeUpdate = () => {
     const media = getActiveMedia();
     if (media) {
@@ -288,6 +341,7 @@ export const PlayerPage: React.FC = () => {
     const media = getActiveMedia();
     if (media) {
       setDuration(media.duration);
+      media.loop = isLooping;
       if (resumePosition > 0 && resumePosition < media.duration - 5) {
         media.currentTime = resumePosition;
         setResumePosition(0);
@@ -297,8 +351,8 @@ export const PlayerPage: React.FC = () => {
 
   const handleEnded = () => {
     setIsPlaying(false);
-    // Auto-play next in playlist
-    if (currentIndex >= 0 && currentIndex < playlist.length - 1) {
+    // Auto-play next in playlist (only if not looping — loop is handled by media.loop)
+    if (!isLooping && currentIndex >= 0 && currentIndex < playlist.length - 1) {
       loadFromPlaylist(currentIndex + 1);
     }
   };
@@ -463,17 +517,30 @@ export const PlayerPage: React.FC = () => {
         )}
       </div>
 
-      {/* Controls Bar */}
+      {/* Controls Bar — auto-hides after 3s idle, reappears on mouse move, stays while hovering controls */}
       <div
+        ref={controlsBarRef}
         className={cn(
           'transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
+        onMouseEnter={handleControlsMouseEnter}
+        onMouseLeave={handleControlsMouseLeave}
       >
-        {/* Title */}
+        {/* Title & Open File / Open Folder */}
         <div className="flex items-center justify-between mb-2">
           <p className="text-white text-sm font-medium truncate max-w-[60%]">{mediaName}</p>
           <div className="flex items-center gap-2">
+            {mediaFilePath && (
+              <button
+                onClick={openInFolder}
+                className="text-white/60 hover:text-white text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors flex items-center gap-1"
+                title="Open file location"
+              >
+                <FolderOpen size={12} />
+                Open Folder
+              </button>
+            )}
             <button
               onClick={openFile}
               className="text-white/60 hover:text-white text-xs px-2 py-1 rounded hover:bg-white/10 transition-colors"
@@ -483,11 +550,13 @@ export const PlayerPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Progress Bar */}
+        {/* Progress Bar with hover time preview */}
         <div
           ref={progressRef}
-          className="w-full h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group hover:h-2.5 transition-all"
+          className="w-full h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group hover:h-2.5 transition-all relative"
           onClick={handleProgressClick}
+          onMouseMove={handleProgressHover}
+          onMouseLeave={handleProgressLeave}
         >
           <div
             className="h-full bg-primary rounded-full relative transition-all"
@@ -495,6 +564,15 @@ export const PlayerPage: React.FC = () => {
           >
             <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
+          {/* Hover time tooltip */}
+          {hoverTime !== null && (
+            <div
+              className="absolute -top-8 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none transform -translate-x-1/2"
+              style={{ left: hoverX }}
+            >
+              {formatTime(hoverTime)}
+            </div>
+          )}
         </div>
 
         {/* Control Buttons */}
@@ -521,7 +599,7 @@ export const PlayerPage: React.FC = () => {
 
           <div className="flex items-center gap-1">
             {/* Volume */}
-            <button onClick={toggleMute} className="text-white/70 hover:text-white transition-colors p-1.5">
+            <button onClick={toggleMute} className="text-white/70 hover:text-white transition-colors p-1.5" title="Mute (M)">
               {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
             <input
@@ -539,6 +617,7 @@ export const PlayerPage: React.FC = () => {
               <button
                 onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(!showSpeedMenu); }}
                 className="text-white/70 hover:text-white transition-colors px-2 py-1 text-xs rounded hover:bg-white/10 flex items-center gap-1"
+                title="Playback speed"
               >
                 {playbackRate}x <ChevronDown size={12} />
               </button>
@@ -560,45 +639,65 @@ export const PlayerPage: React.FC = () => {
               )}
             </div>
 
-            {/* Subtitles */}
-            {subtitleTracks.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowSubtitleMenu(!showSubtitleMenu); }}
-                  className={cn(
-                    'transition-colors p-1.5',
-                    activeSubtitle >= 0 ? 'text-primary' : 'text-white/70 hover:text-white'
-                  )}
-                >
-                  <Subtitles size={18} />
-                </button>
-                {showSubtitleMenu && (
-                  <div className="absolute bottom-full right-0 mb-2 bg-card border border-border rounded-lg shadow-xl py-1 min-w-[140px] z-50" onClick={(e) => e.stopPropagation()}>
+            {/* Subtitles — always visible, disabled style when no tracks */}
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (subtitleTracks.length > 0) {
+                    setShowSubtitleMenu(!showSubtitleMenu);
+                  }
+                }}
+                className={cn(
+                  'transition-colors p-1.5',
+                  subtitleTracks.length === 0
+                    ? 'text-white/30 cursor-default'
+                    : activeSubtitle >= 0
+                      ? 'text-primary'
+                      : 'text-white/70 hover:text-white'
+                )}
+                title={subtitleTracks.length === 0 ? 'No subtitles available' : 'Subtitles'}
+              >
+                <Subtitles size={18} />
+              </button>
+              {showSubtitleMenu && subtitleTracks.length > 0 && (
+                <div className="absolute bottom-full right-0 mb-2 bg-card border border-border rounded-lg shadow-xl py-1 min-w-[140px] z-50" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => { setActiveSubtitle(-1); setShowSubtitleMenu(false); }}
+                    className={cn(
+                      'w-full text-left px-3 py-1.5 text-xs hover:bg-secondary/50 transition-colors',
+                      activeSubtitle === -1 ? 'text-primary font-medium' : 'text-foreground'
+                    )}
+                  >
+                    Off
+                  </button>
+                  {subtitleTracks.map((track, i) => (
                     <button
-                      onClick={() => { setActiveSubtitle(-1); setShowSubtitleMenu(false); }}
+                      key={i}
+                      onClick={() => { setActiveSubtitle(i); setShowSubtitleMenu(false); }}
                       className={cn(
                         'w-full text-left px-3 py-1.5 text-xs hover:bg-secondary/50 transition-colors',
-                        activeSubtitle === -1 ? 'text-primary font-medium' : 'text-foreground'
+                        i === activeSubtitle ? 'text-primary font-medium' : 'text-foreground'
                       )}
                     >
-                      Off
+                      {track.label}
                     </button>
-                    {subtitleTracks.map((track, i) => (
-                      <button
-                        key={i}
-                        onClick={() => { setActiveSubtitle(i); setShowSubtitleMenu(false); }}
-                        className={cn(
-                          'w-full text-left px-3 py-1.5 text-xs hover:bg-secondary/50 transition-colors',
-                          i === activeSubtitle ? 'text-primary font-medium' : 'text-foreground'
-                        )}
-                      >
-                        {track.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Loop/Repeat */}
+            <button
+              onClick={toggleLoop}
+              className={cn(
+                'transition-colors p-1.5',
+                isLooping ? 'text-primary' : 'text-white/70 hover:text-white'
+              )}
+              title={isLooping ? 'Loop: On (L)' : 'Loop: Off (L)'}
+            >
+              {isLooping ? <Repeat1 size={18} /> : <Repeat size={18} />}
+            </button>
 
             {/* Playlist */}
             {playlist.length > 0 && (
@@ -618,7 +717,7 @@ export const PlayerPage: React.FC = () => {
             )}
 
             {/* Fullscreen */}
-            <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors p-1.5">
+            <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors p-1.5" title="Fullscreen (F)">
               {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
             </button>
           </div>
