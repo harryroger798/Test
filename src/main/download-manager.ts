@@ -246,10 +246,12 @@ export class DownloadManager {
    * Determine if a failed download should be retried with cookies.
    */
   private shouldRetryWithCookies(platform: string, error?: string): boolean {
-    const cookiePlatforms = ['instagram', 'reddit', 'facebook', 'twitter', 'linkedin'];
-    if (!cookiePlatforms.includes(platform)) return false;
-    if (!error) return true; // Unknown error, try cookies
-    const authErrors = ['authentication', 'login', 'sign in', 'cookies', 'forbidden', '403', '401', 'private'];
+    // All platforms can benefit from cookie retry on auth errors (covers 1800+ yt-dlp sites)
+    // Some platforms always need cookies; for others, only retry on auth-related errors
+    const alwaysCookiePlatforms = ['instagram', 'linkedin', 'nicovideo', 'weibo', 'crunchyroll', 'funimation'];
+    if (alwaysCookiePlatforms.includes(platform)) return true;
+    if (!error) return false; // Unknown error on non-cookie platforms, don't retry blindly
+    const authErrors = ['authentication', 'login', 'sign in', 'cookies', 'forbidden', '403', '401', 'private', 'not available', 'geo', 'restricted', 'blocked', 'captcha'];
     return authErrors.some((keyword) => error.toLowerCase().includes(keyword));
   }
 

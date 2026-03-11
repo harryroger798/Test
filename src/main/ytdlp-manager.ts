@@ -64,6 +64,7 @@ interface PlatformBypassConfig {
 }
 
 const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
+  // ─── Tier 1: Major platforms with specific anti-detection needs ───
   youtube: {
     impersonate: 'chrome',
     extraArgs: ['-4'],
@@ -87,22 +88,146 @@ const PLATFORM_BYPASS_CONFIG: Record<string, PlatformBypassConfig> = {
     requiresCookies: false,
     cookiesHint: 'Public Facebook videos work with impersonation. Private videos need cookies.',
   },
-  reddit: {
-    requiresCookies: false,
-    cookiesHint: 'Reddit works from home IPs. May need cookies on datacenter/cloud IPs.',
-  },
   twitter: {
+    impersonate: 'chrome',
     requiresCookies: false,
     cookiesHint: 'Public video tweets work without auth. NSFW/sensitive content needs cookies.',
   },
+  // ─── Tier 2: Popular platforms with light anti-detection ───
+  reddit: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+    cookiesHint: 'Reddit works from home IPs. May need cookies on datacenter/cloud IPs.',
+  },
   linkedin: {
+    impersonate: 'chrome',
     requiresCookies: true,
     cookiesHint: 'LinkedIn always requires login cookies.',
   },
+  vimeo: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+    cookiesHint: 'Public Vimeo videos work without auth. Private/password-protected videos need cookies.',
+  },
+  twitch: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+    cookiesHint: 'Twitch VODs and clips work without auth. Subscriber-only content needs cookies.',
+  },
+  dailymotion: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
   bilibili: {
+    impersonate: 'chrome',
     extraArgs: ['--geo-bypass-country', 'CN'],
     requiresCookies: false,
     cookiesHint: 'Bilibili may need a Chinese proxy for geo-restricted content.',
+  },
+  soundcloud: {
+    requiresCookies: false,
+  },
+  pinterest: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  // ─── Tier 3: Niche but popular platforms ───
+  rumble: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  bandcamp: {
+    requiresCookies: false,
+  },
+  bitchute: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  archive: {
+    requiresCookies: false,
+  },
+  odnoklassniki: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  rutube: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  nicovideo: {
+    impersonate: 'chrome',
+    requiresCookies: true,
+    cookiesHint: 'Niconico requires login cookies for most content.',
+  },
+  pornhub: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  xvideos: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  naver: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  vlive: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  weibo: {
+    impersonate: 'chrome',
+    requiresCookies: true,
+    cookiesHint: 'Weibo requires login cookies.',
+  },
+  iqiyi: {
+    impersonate: 'chrome',
+    extraArgs: ['--geo-bypass-country', 'CN'],
+    requiresCookies: false,
+  },
+  youku: {
+    impersonate: 'chrome',
+    extraArgs: ['--geo-bypass-country', 'CN'],
+    requiresCookies: false,
+  },
+  kakao: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  lbry: {
+    requiresCookies: false,
+  },
+  peertube: {
+    requiresCookies: false,
+  },
+  dropbox: {
+    requiresCookies: false,
+  },
+  mixcloud: {
+    requiresCookies: false,
+  },
+  streamable: {
+    requiresCookies: false,
+  },
+  mediafire: {
+    requiresCookies: false,
+  },
+  ted: {
+    requiresCookies: false,
+  },
+  imdb: {
+    impersonate: 'chrome',
+    requiresCookies: false,
+  },
+  crunchyroll: {
+    impersonate: 'chrome',
+    requiresCookies: true,
+    cookiesHint: 'Crunchyroll requires login cookies for premium content.',
+  },
+  funimation: {
+    impersonate: 'chrome',
+    requiresCookies: true,
+    cookiesHint: 'Funimation requires login cookies.',
   },
 };
 
@@ -267,23 +392,56 @@ export class YtdlpManager {
    * Detect platform from URL string.
    */
   detectPlatformFromUrl(url: string): string {
-    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
-    if (url.includes('tiktok.com')) return 'tiktok';
-    if (url.includes('instagram.com')) return 'instagram';
-    if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
-    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'facebook';
-    if (url.includes('reddit.com')) return 'reddit';
-    if (url.includes('vimeo.com')) return 'vimeo';
-    if (url.includes('twitch.tv')) return 'twitch';
-    if (url.includes('dailymotion.com')) return 'dailymotion';
-    if (url.includes('soundcloud.com')) return 'soundcloud';
-    if (url.includes('bilibili.com')) return 'bilibili';
-    if (url.includes('pinterest.com')) return 'pinterest';
-    if (url.includes('linkedin.com')) return 'linkedin';
-    if (url.includes('rumble.com')) return 'rumble';
-    if (url.includes('bandcamp.com')) return 'bandcamp';
-    if (url.includes('bitchute.com')) return 'bitchute';
-    if (url.includes('archive.org')) return 'archive';
+    const lowered = url.toLowerCase();
+    // Tier 1: Major platforms
+    if (lowered.includes('youtube.com') || lowered.includes('youtu.be')) return 'youtube';
+    if (lowered.includes('tiktok.com')) return 'tiktok';
+    if (lowered.includes('instagram.com')) return 'instagram';
+    if (lowered.includes('twitter.com') || lowered.includes('x.com')) return 'twitter';
+    if (lowered.includes('facebook.com') || lowered.includes('fb.watch')) return 'facebook';
+    // Tier 2: Popular platforms
+    if (lowered.includes('reddit.com')) return 'reddit';
+    if (lowered.includes('vimeo.com')) return 'vimeo';
+    if (lowered.includes('twitch.tv')) return 'twitch';
+    if (lowered.includes('dailymotion.com')) return 'dailymotion';
+    if (lowered.includes('soundcloud.com')) return 'soundcloud';
+    if (lowered.includes('bilibili.com')) return 'bilibili';
+    if (lowered.includes('pinterest.com') || lowered.includes('pin.it')) return 'pinterest';
+    if (lowered.includes('linkedin.com')) return 'linkedin';
+    // Tier 3: Niche but popular
+    if (lowered.includes('rumble.com')) return 'rumble';
+    if (lowered.includes('bandcamp.com')) return 'bandcamp';
+    if (lowered.includes('bitchute.com')) return 'bitchute';
+    if (lowered.includes('archive.org')) return 'archive';
+    if (lowered.includes('ok.ru') || lowered.includes('odnoklassniki.ru')) return 'odnoklassniki';
+    if (lowered.includes('rutube.ru')) return 'rutube';
+    if (lowered.includes('nicovideo.jp') || lowered.includes('nico.ms')) return 'nicovideo';
+    if (lowered.includes('pornhub.com')) return 'pornhub';
+    if (lowered.includes('xvideos.com')) return 'xvideos';
+    if (lowered.includes('naver.com') || lowered.includes('tv.naver.com')) return 'naver';
+    if (lowered.includes('vlive.tv')) return 'vlive';
+    if (lowered.includes('weibo.com')) return 'weibo';
+    if (lowered.includes('iqiyi.com')) return 'iqiyi';
+    if (lowered.includes('youku.com')) return 'youku';
+    if (lowered.includes('kakao.com') || lowered.includes('kakaotv.daum.net')) return 'kakao';
+    if (lowered.includes('lbry.tv') || lowered.includes('odysee.com')) return 'lbry';
+    if (lowered.includes('peertube')) return 'peertube';
+    if (lowered.includes('dropbox.com')) return 'dropbox';
+    if (lowered.includes('mixcloud.com')) return 'mixcloud';
+    if (lowered.includes('streamable.com')) return 'streamable';
+    if (lowered.includes('mediafire.com')) return 'mediafire';
+    if (lowered.includes('ted.com')) return 'ted';
+    if (lowered.includes('imdb.com')) return 'imdb';
+    if (lowered.includes('crunchyroll.com')) return 'crunchyroll';
+    if (lowered.includes('funimation.com')) return 'funimation';
+    if (lowered.includes('tumblr.com')) return 'tumblr';
+    if (lowered.includes('flickr.com')) return 'flickr';
+    if (lowered.includes('9gag.com')) return '9gag';
+    if (lowered.includes('spotify.com')) return 'spotify';
+    if (lowered.includes('aparat.com')) return 'aparat';
+    if (lowered.includes('vidio.com')) return 'vidio';
+    if (lowered.includes('hotstar.com') || lowered.includes('disney')) return 'hotstar';
+    if (lowered.includes('vk.com') || lowered.includes('vk.video')) return 'vk';
     return 'unknown';
   }
 
@@ -468,6 +626,10 @@ export class YtdlpManager {
 
     if (config?.impersonate) {
       args.push('--impersonate', config.impersonate);
+    } else if (!config) {
+      // Default anti-detection for unknown platforms (covers 1800+ yt-dlp extractors)
+      // Browser impersonation helps avoid bot detection on sites not in our explicit config
+      args.push('--impersonate', 'chrome');
     }
 
     if (config?.extraArgs) {
