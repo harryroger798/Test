@@ -625,6 +625,7 @@
             url: $url.value.trim(),
             format_id: selectedQuality.format_id,
             quality: selectedQuality.label,
+            title: videoData ? videoData.title : '',
           }),
         });
 
@@ -686,11 +687,11 @@
             $progressPct.textContent = '100%';
             $progressStatus.textContent = 'Complete!';
 
-            // Trigger file download
+            // Trigger file download with proper filename
             if (data.download_url) {
               const a = document.createElement('a');
               a.href = data.download_url;
-              a.download = '';
+              a.download = data.filename || ((videoData ? videoData.title : 'video') + '.' + (data.ext || 'mp4'));
               document.body.appendChild(a);
               a.click();
               document.body.removeChild(a);
