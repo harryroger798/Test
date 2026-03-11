@@ -460,8 +460,8 @@ export const PlayerPage: React.FC = () => {
         if (showPlaylist && !(e.target as HTMLElement).closest('.playlist-panel')) setShowPlaylist(false);
       }}
     >
-      {/* Media Element */}
-      <div className="flex-1 flex items-center justify-center overflow-hidden relative">
+      {/* Media Element — fills entire player area; controls overlay on top */}
+      <div className="flex-1 flex items-center justify-center overflow-hidden relative min-h-0">
         {mediaType === 'video' ? (
           <video
             ref={videoRef}
@@ -508,7 +508,7 @@ export const PlayerPage: React.FC = () => {
         {mediaType === 'video' && !isPlaying && showControls && (
           <button
             onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity"
+            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 transition-opacity"
           >
             <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
               <Play size={32} className="text-white ml-1" />
@@ -517,14 +517,15 @@ export const PlayerPage: React.FC = () => {
         )}
       </div>
 
-      {/* Controls Bar — auto-hides after 3s idle, reappears on mouse move, stays while hovering controls.
-          relative z-10 ensures the controls bar is always above the center play overlay
-          (which is position:absolute inside the media area). Without this, the overlay
-          can capture clicks intended for volume/seek/speed/fullscreen buttons. */}
+      {/* Controls Bar — absolutely positioned at the bottom of the player, overlaying the video.
+          This is the standard video player pattern (YouTube, VLC, etc.).
+          Previous versions placed this as a flex sibling BELOW the video area, which caused
+          the controls to be pushed off-screen when the video filled the flex-1 space.
+          z-20 ensures controls stack above the center play overlay (z-10). */}
       <div
         ref={controlsBarRef}
         className={cn(
-          'relative z-10 transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
+          'absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
         onMouseEnter={handleControlsMouseEnter}
