@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Try GrabTube Online — Free Video Downloader</title>
+  <meta name="description" content="Download videos from YouTube, TikTok, Instagram & more directly in your browser. Free, no signup required. Try GrabTube now!" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="canonical" href="https://www.grabtube.org/try/" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #030712;
+      --bg-card: #111827;
+      --bg-input: #1f2937;
+      --border: #374151;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --green: #22c55e;
+      --green-hover: #16a34a;
+      --green-glow: rgba(34, 197, 94, 0.15);
+      --red: #ef4444;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(3, 7, 18, 0.95);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .logo-link { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .logo-link img { width: 36px; height: 36px; border-radius: 8px; }
+    .logo-link span { font-size: 20px; font-weight: 700; }
+    .logo-link .badge { font-size: 11px; background: var(--green); color: #000; padding: 2px 8px; border-radius: 20px; font-weight: 600; margin-left: 4px; }
+
+    .header-actions { display: flex; gap: 12px; align-items: center; }
+    .btn-outline {
+      padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); background: transparent; cursor: pointer; font-size: 14px;
+      text-decoration: none; transition: all 0.2s;
+    }
+    .btn-outline:hover { border-color: var(--green); color: var(--green); }
+
+    .btn-primary {
+      padding: 8px 20px; border: none; border-radius: 8px;
+      background: var(--green); color: #000; cursor: pointer; font-size: 14px;
+      font-weight: 600; text-decoration: none; transition: all 0.2s;
+    }
+    .btn-primary:hover { background: var(--green-hover); }
+
+    /* Main */
+    .main { max-width: 800px; margin: 0 auto; padding: 40px 20px 80px; }
+
+    .hero-title {
+      text-align: center; font-size: 36px; font-weight: 800;
+      margin-bottom: 8px; line-height: 1.2;
+    }
+    .hero-title .accent { color: var(--green); }
+
+    .hero-sub {
+      text-align: center; color: var(--text-muted); font-size: 16px;
+      margin-bottom: 32px;
+    }
+
+    /* URL Input */
+    .input-wrapper {
+      display: flex; gap: 12px; margin-bottom: 16px;
+    }
+    .url-input {
+      flex: 1; padding: 14px 16px; border-radius: var(--radius);
+      background: var(--bg-input); border: 1px solid var(--border);
+      color: var(--text); font-size: 16px; outline: none; transition: border-color 0.2s;
+    }
+    .url-input:focus { border-color: var(--green); }
+    .url-input::placeholder { color: var(--text-muted); }
+
+    .fetch-btn {
+      padding: 14px 28px; border: none; border-radius: var(--radius);
+      background: var(--green); color: #000; font-size: 16px; font-weight: 700;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .fetch-btn:hover:not(:disabled) { background: var(--green-hover); transform: translateY(-1px); }
+    .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Status bar */
+    .status-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; font-size: 13px; color: var(--text-muted);
+    }
+    .remaining-badge {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg-input); padding: 6px 12px; border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+    .remaining-badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .remaining-badge.warn .dot { background: var(--yellow); }
+    .remaining-badge.empty .dot { background: var(--red); }
+
+    .platforms { display: flex; gap: 6px; flex-wrap: wrap; }
+    .platforms span {
+      background: var(--bg-input); padding: 4px 10px; border-radius: 6px;
+      font-size: 12px; border: 1px solid var(--border);
+    }
+
+    /* Video Card */
+    .video-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 24px;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .video-card .thumb-wrap {
+      position: relative; aspect-ratio: 16/9; overflow: hidden; background: #000;
+    }
+    .video-card .thumb-wrap img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .video-card .duration-badge {
+      position: absolute; bottom: 8px; right: 8px;
+      background: rgba(0,0,0,0.85); padding: 2px 8px; border-radius: 4px;
+      font-size: 13px; font-weight: 600;
+    }
+
+    .video-card .info {
+      padding: 16px;
+    }
+    .video-card .title {
+      font-size: 18px; font-weight: 700; margin-bottom: 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .video-card .channel {
+      color: var(--text-muted); font-size: 14px; margin-bottom: 12px;
+    }
+    .video-card .platform-tag {
+      display: inline-block; background: var(--green-glow); color: var(--green);
+      padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+
+    /* Quality Selector */
+    .quality-section { margin-bottom: 20px; }
+    .quality-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: var(--text-muted); }
+
+    .quality-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px;
+    }
+    .quality-btn {
+      padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px;
+      background: var(--bg-input); color: var(--text); cursor: pointer;
+      text-align: left; transition: all 0.2s; font-size: 14px;
+    }
+    .quality-btn:hover { border-color: var(--green); }
+    .quality-btn.selected { border-color: var(--green); background: var(--green-glow); }
+    .quality-btn .label { font-weight: 700; }
+    .quality-btn .size { color: var(--text-muted); font-size: 12px; }
+
+    /* Download Button */
+    .download-section { margin-top: 16px; }
+
+    .download-btn {
+      width: 100%; padding: 16px; border: none; border-radius: var(--radius);
+      background: var(--green); color: #000; font-size: 18px; font-weight: 800;
+      cursor: pointer; transition: all 0.2s; display: flex; align-items: center;
+      justify-content: center; gap: 8px;
+    }
+    .download-btn:hover:not(:disabled) { background: var(--green-hover); transform: translateY(-1px); box-shadow: 0 4px 20px var(--green-glow); }
+    .download-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Progress */
+    .progress-section {
+      margin-top: 16px; animation: fadeIn 0.3s ease;
+    }
+    .progress-bar-bg {
+      width: 100%; height: 8px; background: var(--bg-input); border-radius: 4px;
+      overflow: hidden; margin-bottom: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%; background: var(--green); border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .progress-text {
+      display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted);
+    }
+
+    /* Cooldown */
+    .cooldown-notice {
+      text-align: center; padding: 12px; background: rgba(234, 179, 8, 0.1);
+      border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 10px;
+      color: var(--yellow); font-size: 14px; margin-top: 16px;
+    }
+
+    /* Error */
+    .error-msg {
+      padding: 12px 16px; background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px;
+      color: var(--red); font-size: 14px; margin-bottom: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* CTA */
+    .cta-card {
+      background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(59,130,246,0.1));
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 32px; text-align: center; margin-top: 40px;
+    }
+    .cta-card h2 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+    .cta-card p { color: var(--text-muted); margin-bottom: 20px; font-size: 15px; }
+    .cta-features {
+      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;
+    }
+    .cta-features .feat {
+      display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-muted);
+    }
+    .cta-features .feat .check { color: var(--green); font-weight: 700; }
+
+    .cta-btn {
+      display: inline-block; padding: 14px 32px; background: var(--green);
+      color: #000; border-radius: var(--radius); font-weight: 800; font-size: 16px;
+      text-decoration: none; transition: all 0.2s;
+    }
+    .cta-btn:hover { background: var(--green-hover); transform: translateY(-2px); box-shadow: 0 4px 20px var(--green-glow); }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 18px; height: 18px;
+      border: 2px solid rgba(0,0,0,0.3); border-top-color: #000;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .spinner-white {
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 24px; border-top: 1px solid var(--border);
+      color: var(--text-muted); font-size: 13px;
+    }
+    .footer a { color: var(--green); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero-title { font-size: 26px; }
+      .input-wrapper { flex-direction: column; }
+      .fetch-btn { width: 100%; }
+      .quality-grid { grid-template-columns: 1fr 1fr; }
+      .cta-features { flex-direction: column; align-items: center; }
+      .header-actions .btn-outline { display: none; }
+    }
+
+    /* Limit reached overlay */
+    .limit-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.8);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+      animation: fadeIn 0.3s ease;
+    }
+    .limit-modal {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      padding: 40px; max-width: 480px; text-align: center;
+    }
+    .limit-modal h2 { font-size: 24px; margin-bottom: 12px; }
+    .limit-modal p { color: var(--text-muted); margin-bottom: 24px; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <a href="/" class="logo-link">
+      <img src="/logo.png" alt="GrabTube" />
+      <span>GrabTube</span>
+      <span class="badge">Web</span>
+    </a>
+    <div class="header-actions">
+      <a href="/#features" class="btn-outline">Features</a>
+      <a href="/#download" class="btn-primary">Download App</a>
+    </div>
+  </header>
+
+  <main class="main">
+    <h1 class="hero-title">
+      Try <span class="accent">GrabTube</span> Online
+    </h1>
+    <p class="hero-sub">
+      Paste any video URL to download — free, no signup required
+    </p>
+
+    <!-- URL Input -->
+    <div class="input-wrapper">
+      <input type="url" class="url-input" id="urlInput"
+             placeholder="Paste a YouTube, TikTok, Instagram, or Twitter URL..."
+             autocomplete="off" />
+      <button class="fetch-btn" id="fetchBtn" onclick="handleFetch()">
+        Fetch
+      </button>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="remaining-badge" id="remainingBadge">
+        <span class="dot"></span>
+        <span id="remainingText">5 downloads remaining today</span>
+      </div>
+      <div class="platforms">
+        <span>YouTube</span>
+        <span>TikTok</span>
+        <span>Instagram</span>
+        <span>Twitter</span>
+      </div>
+    </div>
+
+    <!-- Error Message -->
+    <div class="error-msg hidden" id="errorMsg"></div>
+
+    <!-- Video Card -->
+    <div class="video-card hidden" id="videoCard">
+      <div class="thumb-wrap">
+        <img id="thumbnail" src="" alt="Video thumbnail" />
+        <span class="duration-badge" id="duration"></span>
+      </div>
+      <div class="info">
+        <div class="title" id="videoTitle"></div>
+        <div class="channel" id="videoChannel"></div>
+        <span class="platform-tag" id="videoPlatform"></span>
+      </div>
+
+      <!-- Quality Selector -->
+      <div class="quality-section" style="padding: 0 16px 16px;">
+        <h3>Select Quality</h3>
+        <div class="quality-grid" id="qualityGrid"></div>
+      </div>
+
+      <!-- Download Button -->
+      <div class="download-section" style="padding: 0 16px 16px;">
+        <button class="download-btn" id="downloadBtn" onclick="handleDownload()" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </button>
+
+        <!-- Progress -->
+        <div class="progress-section hidden" id="progressSection">
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progressFill" style="width: 0%"></div>
+          </div>
+          <div class="progress-text">
+            <span id="progressPct">0%</span>
+            <span id="progressStatus">Starting...</span>
+          </div>
+        </div>
+
+        <!-- Cooldown -->
+        <div class="cooldown-notice hidden" id="cooldownNotice">
+          Please wait <span id="cooldownTime">30</span>s before your next download
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-card">
+      <h2>Want More?</h2>
+      <p>The desktop app gives you unlimited power with zero restrictions</p>
+      <div class="cta-features">
+        <div class="feat"><span class="check">&#10003;</span> Unlimited downloads</div>
+        <div class="feat"><span class="check">&#10003;</span> Up to 8K quality</div>
+        <div class="feat"><span class="check">&#10003;</span> Built-in player</div>
+        <div class="feat"><span class="check">&#10003;</span> Format converter</div>
+        <div class="feat"><span class="check">&#10003;</span> Batch downloads</div>
+      </div>
+      <a href="/#download" class="cta-btn">Download GrabTube Desktop — Free</a>
+    </div>
+  </main>
+
+  <!-- Limit Reached Modal -->
+  <div class="limit-overlay hidden" id="limitOverlay">
+    <div class="limit-modal">
+      <h2>Daily Limit Reached</h2>
+      <p>You've used all 5 free downloads for today. Get the desktop app for unlimited downloads!</p>
+      <a href="/#download" class="cta-btn" style="margin-right:12px;">Get Desktop App</a>
+      <button class="btn-outline" onclick="document.getElementById('limitOverlay').classList.add('hidden')" style="margin-top:12px;">Close</button>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <p>&copy; <span id="footerYear"></span> <a href="/">GrabTube</a> &mdash; Free Video Downloader for 1800+ Sites</p>
+    <p style="margin-top:4px;">Web portal: 5 free downloads/day &middot; Max 1080p &middot; <a href="/#download">Get Desktop App</a> for unlimited</p>
+  </footer>
+
+  <script>
+    // ─── Config ───
+    const API_BASE = 'https://grabtube-web-api.grabtube-app.workers.dev';
+    const MAX_DAILY = 5;
+    const COOLDOWN_SECONDS = 30;
+
+    // ─── State ───
+    let videoData = null;
+    let selectedQuality = null;
+    let currentJobId = null;
+    let pollInterval = null;
+    let cooldownTimer = null;
+    let remaining = MAX_DAILY;
+
+    // ─── DOM refs ───
+    const $url = document.getElementById('urlInput');
+    const $fetchBtn = document.getElementById('fetchBtn');
+    const $error = document.getElementById('errorMsg');
+    const $card = document.getElementById('videoCard');
+    const $thumb = document.getElementById('thumbnail');
+    const $duration = document.getElementById('duration');
+    const $title = document.getElementById('videoTitle');
+    const $channel = document.getElementById('videoChannel');
+    const $platform = document.getElementById('videoPlatform');
+    const $qualityGrid = document.getElementById('qualityGrid');
+    const $dlBtn = document.getElementById('downloadBtn');
+    const $progress = document.getElementById('progressSection');
+    const $progressFill = document.getElementById('progressFill');
+    const $progressPct = document.getElementById('progressPct');
+    const $progressStatus = document.getElementById('progressStatus');
+    const $cooldown = document.getElementById('cooldownNotice');
+    const $cooldownTime = document.getElementById('cooldownTime');
+    const $remainingText = document.getElementById('remainingText');
+    const $remainingBadge = document.getElementById('remainingBadge');
+    const $limitOverlay = document.getElementById('limitOverlay');
+
+    // Dynamic year in footer
+    document.getElementById('footerYear').textContent = new Date().getFullYear();
+
+    // ─── Init ───
+    (function init() {
+      // Load remaining count from localStorage
+      const stored = localStorage.getItem('gt_web_remaining');
+      const storedDate = localStorage.getItem('gt_web_date');
+      const today = new Date().toISOString().split('T')[0];
+
+      if (storedDate === today && stored !== null) {
+        remaining = parseInt(stored);
+      } else {
+        remaining = MAX_DAILY;
+        localStorage.setItem('gt_web_remaining', remaining);
+        localStorage.setItem('gt_web_date', today);
+      }
+
+      updateRemainingUI();
+
+      // Check cooldown
+      const lastDl = parseInt(localStorage.getItem('gt_web_lastdl') || '0');
+      const elapsed = (Date.now() - lastDl) / 1000;
+      if (elapsed < COOLDOWN_SECONDS) {
+        startCooldown(Math.ceil(COOLDOWN_SECONDS - elapsed));
+      }
+
+      // Enter key to fetch
+      $url.addEventListener('keydown', e => { if (e.key === 'Enter') handleFetch(); });
+    })();
+
+    function updateRemainingUI() {
+      $remainingText.textContent = `${remaining} download${remaining !== 1 ? 's' : ''} remaining today`;
+      $remainingBadge.className = 'remaining-badge' + (remaining <= 2 ? (remaining === 0 ? ' empty' : ' warn') : '');
+    }
+
+    function showError(msg) {
+      $error.textContent = msg;
+      $error.classList.remove('hidden');
+      setTimeout(() => $error.classList.add('hidden'), 8000);
+    }
+
+    function hideError() {
+      $error.classList.add('hidden');
+    }
+
+    function formatDuration(secs) {
+      if (!secs) return '';
+      const m = Math.floor(secs / 60);
+      const s = Math.floor(secs % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function formatSize(bytes) {
+      if (!bytes) return '';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    // ─── Fetch Video Info ───
+    async function handleFetch() {
+      hideError();
+      const url = $url.value.trim();
+
+      if (!url) {
+        showError('Please paste a video URL');
+        return;
+      }
+
+      // Reset state
+      videoData = null;
+      selectedQuality = null;
+      currentJobId = null;
+      $card.classList.add('hidden');
+      $progress.classList.add('hidden');
+
+      // Show loading
+      $fetchBtn.disabled = true;
+      $fetchBtn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Could not fetch video info');
+        }
+
+        videoData = data;
+
+        // Update remaining from server
+        if (data.remaining_downloads !== undefined) {
+          remaining = data.remaining_downloads;
+          localStorage.setItem('gt_web_remaining', remaining);
+          updateRemainingUI();
+        }
+
+        // Populate video card
+        $thumb.src = data.thumbnail || '';
+        $thumb.style.display = data.thumbnail ? 'block' : 'none';
+        $duration.textContent = formatDuration(data.duration);
+        $title.textContent = data.title || 'Unknown title';
+        $channel.textContent = data.uploader || '';
+        $platform.textContent = data.platform || '';
+
+        // Populate quality options
+        $qualityGrid.innerHTML = '';
+        if (data.qualities && data.qualities.length > 0) {
+          data.qualities.forEach((q, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'quality-btn' + (i === 0 ? ' selected' : '');
+            btn.innerHTML = `<div class="label">${q.label}</div>` +
+              (q.estimated_size ? `<div class="size">~${formatSize(q.estimated_size)}</div>` : `<div class="size">${q.type}</div>`);
+            btn.onclick = () => selectQuality(i, btn);
+            $qualityGrid.appendChild(btn);
+          });
+          selectedQuality = data.qualities[0];
+          $dlBtn.disabled = false;
+        } else {
+          $qualityGrid.innerHTML = '<div style="color:var(--text-muted);padding:8px;">No downloadable formats found</div>';
+          $dlBtn.disabled = true;
+        }
+
+        $card.classList.remove('hidden');
+      } catch (err) {
+        showError(err.message || 'Failed to fetch video info. Please check the URL and try again.');
+      } finally {
+        $fetchBtn.disabled = false;
+        $fetchBtn.textContent = 'Fetch';
+      }
+    }
+
+    function selectQuality(index, btnEl) {
+      document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('selected'));
+      btnEl.classList.add('selected');
+      selectedQuality = videoData.qualities[index];
+      $dlBtn.disabled = false;
+    }
+
+    // ─── Start Download ───
+    async function handleDownload() {
+      hideError();
+
+      if (!videoData || !selectedQuality) {
+        showError('Please fetch a video and select quality first');
+        return;
+      }
+
+      if (remaining <= 0) {
+        $limitOverlay.classList.remove('hidden');
+        return;
+      }
+
+      // Check cooldown
+      const lastDl = parseInt(localStorage.getItem('gt_web_lastdl') || '0');
+      const elapsed = (Date.now() - lastDl) / 1000;
+      if (elapsed < COOLDOWN_SECONDS) {
+        showError(`Please wait ${Math.ceil(COOLDOWN_SECONDS - elapsed)} seconds before your next download`);
+        return;
+      }
+
+      $dlBtn.disabled = true;
+      $dlBtn.innerHTML = '<span class="spinner"></span> Starting download...';
+      $progress.classList.remove('hidden');
+      $progressFill.style.width = '0%';
+      $progressPct.textContent = '0%';
+      $progressStatus.textContent = 'Starting...';
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/download`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: $url.value.trim(),
+            format_id: selectedQuality.format_id,
+            quality: selectedQuality.label,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          if (res.status === 429) {
+            if (data.remaining === 0) {
+              $limitOverlay.classList.remove('hidden');
+            } else if (data.cooldown_remaining) {
+              startCooldown(data.cooldown_remaining);
+            }
+            throw new Error(data.error || 'Rate limit exceeded');
+          }
+          throw new Error(data.error || 'Download failed to start');
+        }
+
+        currentJobId = data.job_id;
+
+        // Update remaining
+        if (data.remaining !== undefined) {
+          remaining = data.remaining;
+          localStorage.setItem('gt_web_remaining', remaining);
+          updateRemainingUI();
+        }
+
+        // Start polling
+        startPolling(data.job_id);
+
+      } catch (err) {
+        showError(err.message);
+        resetDownloadUI();
+      }
+    }
+
+    function startPolling(jobId) {
+      if (pollInterval) clearInterval(pollInterval);
+
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/v1/status/${jobId}`);
+          const data = await res.json();
+
+          if (data.status === 'downloading') {
+            const pct = data.progress || 0;
+            $progressFill.style.width = pct + '%';
+            $progressPct.textContent = pct + '%';
+            $progressStatus.textContent = 'Downloading...';
+            $dlBtn.innerHTML = `<span class="spinner"></span> Downloading ${pct}%`;
+          }
+          else if (data.status === 'starting') {
+            $progressStatus.textContent = 'Preparing...';
+            $dlBtn.innerHTML = '<span class="spinner"></span> Preparing...';
+          }
+          else if (data.status === 'ready') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            $progressFill.style.width = '100%';
+            $progressPct.textContent = '100%';
+            $progressStatus.textContent = 'Complete!';
+
+            // Trigger file download
+            if (data.download_url) {
+              const a = document.createElement('a');
+              a.href = data.download_url;
+              a.download = '';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }
+
+            // Start cooldown
+            localStorage.setItem('gt_web_lastdl', Date.now().toString());
+            startCooldown(COOLDOWN_SECONDS);
+
+            setTimeout(() => resetDownloadUI(), 3000);
+          }
+          else if (data.status === 'failed') {
+            clearInterval(pollInterval);
+            pollInterval = null;
+            showError(data.error || 'Download failed. Try again or use the desktop app.');
+            resetDownloadUI();
+          }
+        } catch (err) {
+          // Network error — keep trying
+        }
+      }, 2000);
+    }
+
+    function startCooldown(seconds) {
+      if (cooldownTimer) clearInterval(cooldownTimer);
+      let left = seconds;
+      $cooldown.classList.remove('hidden');
+      $cooldownTime.textContent = left;
+
+      cooldownTimer = setInterval(() => {
+        left--;
+        $cooldownTime.textContent = left;
+        if (left <= 0) {
+          clearInterval(cooldownTimer);
+          cooldownTimer = null;
+          $cooldown.classList.add('hidden');
+        }
+      }, 1000);
+    }
+
+    function resetDownloadUI() {
+      $dlBtn.disabled = false;
+      $dlBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download`;
+      $progress.classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
