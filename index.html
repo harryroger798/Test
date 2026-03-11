@@ -166,5 +166,277 @@
     <!-- Skip to main content link for accessibility (keyboard navigation) -->
     <a href="#main-content" class="skip-to-content" aria-label="Skip to main content">Skip to main content</a>
     <div id="root"></div>
+
+    <!-- Try It Free Inline Section — injected after React mount -->
+    <style>
+      #try-inline-section {
+        display: none; /* shown after injection into React DOM */
+        background: linear-gradient(180deg, rgba(34,197,94,0.06) 0%, transparent 100%);
+        border-top: 1px solid rgba(34,197,94,0.1);
+        border-bottom: 1px solid rgba(34,197,94,0.1);
+        padding: 64px 20px;
+        position: relative;
+        overflow: hidden;
+      }
+      #try-inline-section::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 600px;
+        height: 600px;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%);
+        pointer-events: none;
+      }
+      .try-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+        text-align: center;
+      }
+      .try-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 16px;
+        border-radius: 9999px;
+        background: rgba(34,197,94,0.12);
+        border: 1px solid rgba(34,197,94,0.2);
+        color: #86efac;
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        letter-spacing: 0.02em;
+      }
+      .try-badge .pulse-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: tryPulse 2s ease-in-out infinite;
+      }
+      @keyframes tryPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.8); }
+      }
+      .try-heading {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 36px;
+        font-weight: 800;
+        color: #fff;
+        margin-bottom: 10px;
+        line-height: 1.2;
+      }
+      .try-heading .accent { color: #22c55e; }
+      .try-subtext {
+        color: #9ca3af;
+        font-size: 16px;
+        margin-bottom: 32px;
+        line-height: 1.6;
+      }
+      .try-input-row {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .try-url-input {
+        flex: 1;
+        padding: 16px 20px;
+        border-radius: 14px;
+        background: #111827;
+        border: 1px solid #374151;
+        color: #f9fafb;
+        font-size: 16px;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        font-family: inherit;
+      }
+      .try-url-input:focus {
+        border-color: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34,197,94,0.15);
+      }
+      .try-url-input::placeholder { color: #6b7280; }
+      .try-grab-btn {
+        padding: 16px 36px;
+        border: none;
+        border-radius: 14px;
+        background: #22c55e;
+        color: #000;
+        font-size: 17px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.2s;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: 0.02em;
+      }
+      .try-grab-btn:hover {
+        background: #16a34a;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(34,197,94,0.25);
+      }
+      .try-grab-btn svg { width: 20px; height: 20px; }
+      .try-platforms {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .try-platforms span {
+        background: #1f2937;
+        padding: 5px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #9ca3af;
+        border: 1px solid #374151;
+        font-weight: 500;
+      }
+      .try-note {
+        color: #6b7280;
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .try-note a {
+        color: #22c55e;
+        text-decoration: none;
+      }
+      .try-note a:hover { text-decoration: underline; }
+      @media (max-width: 640px) {
+        #try-inline-section { padding: 48px 16px; }
+        .try-heading { font-size: 26px; }
+        .try-input-row { flex-direction: column; }
+        .try-grab-btn { width: 100%; justify-content: center; }
+      }
+    </style>
+
+    <div id="try-inline-section">
+      <div class="try-inner">
+        <div class="try-badge">
+          <span class="pulse-dot"></span>
+          Try It Free — No Download Required
+        </div>
+        <h2 class="try-heading">
+          Grab Any Video <span class="accent">Right Now</span>
+        </h2>
+        <p class="try-subtext">
+          Paste any video URL below and download instantly — no app install, no signup, completely free.
+        </p>
+        <div class="try-input-row">
+          <input type="url" class="try-url-input" id="tryUrlInput"
+                 placeholder="Paste a YouTube, TikTok, Instagram, or Twitter URL..."
+                 autocomplete="off" />
+          <button class="try-grab-btn" id="tryGrabBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Grab
+          </button>
+        </div>
+        <div class="try-platforms">
+          <span>YouTube</span>
+          <span>TikTok</span>
+          <span>Instagram</span>
+          <span>Twitter/X</span>
+          <span>Facebook</span>
+          <span>Vimeo</span>
+          <span>1800+ more</span>
+        </div>
+        <p class="try-note">
+          5 free downloads/day &middot; Up to 1080p &middot; Want unlimited? <a href="#download">Get the Desktop App</a>
+        </p>
+      </div>
+    </div>
+
+    <script>
+      // Inject the "Try It Free" section into the React-rendered page
+      // after the supported platforms marquee section
+      (function injectTrySection() {
+        const trySection = document.getElementById('try-inline-section');
+        if (!trySection) return;
+
+        function inject() {
+          const main = document.querySelector('main');
+          if (!main) return false;
+
+          // Find all sections inside main
+          const sections = main.querySelectorAll('section');
+          // The marquee section (supported platforms) is typically the 2nd section
+          let targetSection = null;
+          for (const sec of sections) {
+            const ariaLabel = sec.getAttribute('aria-label');
+            if (ariaLabel && ariaLabel.includes('Supported platforms')) {
+              targetSection = sec;
+              break;
+            }
+          }
+
+          if (!targetSection) {
+            // Fallback: inject after the first section (hero)
+            targetSection = sections[0];
+          }
+
+          if (targetSection) {
+            // Insert after the target section
+            targetSection.parentNode.insertBefore(trySection, targetSection.nextSibling);
+            trySection.style.display = 'block';
+
+            // Also add "Try Online" link to the navbar
+            const nav = document.querySelector('nav');
+            if (nav) {
+              const links = nav.querySelectorAll('a');
+              const lastLink = links[links.length - 1];
+              if (lastLink && !document.querySelector('a[href="#try-inline-section"]')) {
+                const tryLink = document.createElement('a');
+                tryLink.href = '#try-inline-section';
+                tryLink.textContent = 'Try Online';
+                tryLink.className = lastLink.className;
+                tryLink.style.color = '#22c55e';
+                lastLink.parentNode.insertBefore(tryLink, lastLink);
+              }
+            }
+            return true;
+          }
+          return false;
+        }
+
+        // Try immediately, then with MutationObserver for React hydration
+        if (!inject()) {
+          const observer = new MutationObserver(() => {
+            if (inject()) observer.disconnect();
+          });
+          observer.observe(document.getElementById('root'), { childList: true, subtree: true });
+
+          // Safety timeout
+          setTimeout(() => {
+            observer.disconnect();
+            inject();
+          }, 5000);
+        }
+
+        // Handle Grab button click — redirect to /try?url=...
+        document.getElementById('tryGrabBtn').addEventListener('click', function() {
+          const url = document.getElementById('tryUrlInput').value.trim();
+          if (url) {
+            window.location.href = '/try/?url=' + encodeURIComponent(url);
+          } else {
+            window.location.href = '/try/';
+          }
+        });
+
+        // Handle Enter key
+        document.getElementById('tryUrlInput').addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            document.getElementById('tryGrabBtn').click();
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

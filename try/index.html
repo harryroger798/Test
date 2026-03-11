@@ -473,6 +473,15 @@
 
       // Enter key to fetch
       $url.addEventListener('keydown', e => { if (e.key === 'Enter') handleFetch(); });
+
+      // Auto-fill URL from query parameter and auto-fetch
+      const params = new URLSearchParams(window.location.search);
+      const prefillUrl = params.get('url');
+      if (prefillUrl) {
+        $url.value = prefillUrl;
+        // Small delay to let page render, then auto-fetch
+        setTimeout(() => handleFetch(), 300);
+      }
     })();
 
     function updateRemainingUI() {
