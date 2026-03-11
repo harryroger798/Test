@@ -697,29 +697,22 @@
             $progressPct.textContent = '100%';
             $progressStatus.textContent = 'Complete!';
 
-            // Trigger file download via fetch+blob (cross-origin <a download> doesn't work)
+            // Trigger file download via hidden iframe to avoid navigation
             if (data.download_url) {
               const dlUrl = data.download_url.startsWith('http') ? data.download_url : API_BASE + data.download_url;
               const fname = data.filename || ((videoData ? videoData.title : 'video') + '.' + (data.ext || 'mp4'));
               $progressStatus.textContent = 'Saving file...';
-              try {
-                const fileResp = await fetch(dlUrl);
-                if (!fileResp.ok) throw new Error('File download failed');
-                const blob = await fileResp.blob();
-                const blobUrl = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = fname;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(blobUrl);
+
+              // Use hidden iframe — Content-Disposition: attachment forces download
+              // without navigating the page or requiring CORS fetch
+              const iframe = document.createElement('iframe');
+              iframe.style.display = 'none';
+              iframe.src = dlUrl;
+              document.body.appendChild(iframe);
+              setTimeout(() => {
+                document.body.removeChild(iframe);
                 $progressStatus.textContent = 'Saved!';
-              } catch (dlErr) {
-                // Fallback: open URL directly (will still download via Content-Disposition)
-                window.open(dlUrl, '_blank');
-                $progressStatus.textContent = 'Complete!';
-              }
+              }, 5000);
             }
 
             // Start cooldown
