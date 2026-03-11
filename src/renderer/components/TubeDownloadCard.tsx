@@ -83,7 +83,7 @@ export const TubeDownloadCard: React.FC<TubeDownloadCardProps> = ({
                     'h-full rounded-full transition-all duration-500 ease-out',
                     item.status === 'processing'
                       ? 'bg-yellow-500 animate-pulse-download'
-                      : 'animate-progress-shimmer'
+                      : 'bg-primary animate-progress-shimmer'
                   )}
                   style={{ width: `${Math.min(item.progress, 100)}%` }}
                 />

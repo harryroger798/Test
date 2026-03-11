@@ -239,7 +239,10 @@ export const PlayerPage: React.FC = () => {
     }
   };
 
-  const togglePlay = () => {
+  const togglePlay = (e?: React.MouseEvent) => {
+    // Stop propagation to prevent click from reaching the progress bar
+    // or other controls when clicking the video or center play overlay
+    if (e) e.stopPropagation();
     const media = getActiveMedia();
     if (!media) return;
     if (media.paused) {
@@ -472,8 +475,8 @@ export const PlayerPage: React.FC = () => {
             onEnded={handleEnded}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
-            onClick={togglePlay}
-            onDoubleClick={toggleFullscreen}
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            onDoubleClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
           >
             {subtitleTracks.map((track, i) => (
               <track
@@ -504,16 +507,26 @@ export const PlayerPage: React.FC = () => {
           </div>
         )}
 
-        {/* Center play button overlay for video */}
+        {/* Center play button overlay for video — split into non-interactive
+            backdrop and interactive center button so that clicks near the bottom
+            of the video don't accidentally trigger the progress bar seek. */}
         {mediaType === 'video' && !isPlaying && showControls && (
-          <button
-            onClick={togglePlay}
-            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 transition-opacity"
-          >
-            <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Play size={32} className="text-white ml-1" />
-            </div>
-          </button>
+          <>
+            {/* Semi-transparent backdrop — click toggles play */}
+            <div
+              className="absolute inset-0 z-10 bg-black/20 transition-opacity"
+              onClick={togglePlay}
+            />
+            {/* Center play circle — click toggles play */}
+            <button
+              onClick={togglePlay}
+              className="absolute z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            >
+              <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 transition-colors">
+                <Play size={32} className="text-white ml-1" />
+              </div>
+            </button>
+          </>
         )}
       </div>
 
@@ -521,13 +534,16 @@ export const PlayerPage: React.FC = () => {
           This is the standard video player pattern (YouTube, VLC, etc.).
           Previous versions placed this as a flex sibling BELOW the video area, which caused
           the controls to be pushed off-screen when the video filled the flex-1 space.
-          z-20 ensures controls stack above the center play overlay (z-10). */}
+          z-20 ensures controls stack above the center play overlay (z-10).
+          onClick stopPropagation prevents controls clicks from bubbling to the
+          container and accidentally triggering play/pause or other handlers. */}
       <div
         ref={controlsBarRef}
         className={cn(
           'absolute bottom-0 left-0 right-0 z-20 transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
+        onClick={(e) => e.stopPropagation()}
         onMouseEnter={handleControlsMouseEnter}
         onMouseLeave={handleControlsMouseLeave}
       >
