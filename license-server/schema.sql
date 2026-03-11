@@ -33,7 +33,16 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   expires_at TEXT NOT NULL
 );
 
+-- Rate limiting table (v1.0.39)
+CREATE TABLE IF NOT EXISTS rate_limits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip_hash TEXT NOT NULL,                    -- SHA256 hash of client IP (privacy-friendly)
+  endpoint TEXT NOT NULL DEFAULT 'public',  -- 'public' or 'admin_login'
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_activations_key ON activations(license_key);
 CREATE INDEX IF NOT EXISTS idx_activations_device ON activations(device_id);
 CREATE INDEX IF NOT EXISTS idx_license_keys_key ON license_keys(key);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_ip ON rate_limits(ip_hash, endpoint, created_at);
