@@ -406,8 +406,26 @@ function setupIPC(): void {
     return app.getPath('downloads');
   });
 
-  // Open file in explorer
+  // Open file in explorer — with fallback for directory paths and missing files.
+  // shell.showItemInFolder requires the path to exist; if it doesn't, nothing happens
+  // (no error, no visible action). The fallback tries to open the parent directory.
   ipcMain.handle('open-file-location', async (_event, filePath: string) => {
+    if (!filePath) return { success: false, error: 'No file path provided' };
+
+    // If the path exists (file or directory), show it directly
+    if (fs.existsSync(filePath)) {
+      shell.showItemInFolder(filePath);
+      return { success: true };
+    }
+
+    // File doesn't exist — try opening the parent directory instead
+    const dir = path.dirname(filePath);
+    if (fs.existsSync(dir)) {
+      shell.openPath(dir);
+      return { success: true };
+    }
+
+    // Nothing exists — last resort, try showing the original path anyway
     shell.showItemInFolder(filePath);
     return { success: true };
   });

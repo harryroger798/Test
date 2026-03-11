@@ -517,11 +517,14 @@ export const PlayerPage: React.FC = () => {
         )}
       </div>
 
-      {/* Controls Bar — auto-hides after 3s idle, reappears on mouse move, stays while hovering controls */}
+      {/* Controls Bar — auto-hides after 3s idle, reappears on mouse move, stays while hovering controls.
+          relative z-10 ensures the controls bar is always above the center play overlay
+          (which is position:absolute inside the media area). Without this, the overlay
+          can capture clicks intended for volume/seek/speed/fullscreen buttons. */}
       <div
         ref={controlsBarRef}
         className={cn(
-          'transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
+          'relative z-10 transition-opacity duration-300 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-4 pb-4 pt-8',
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         )}
         onMouseEnter={handleControlsMouseEnter}

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Globe, Zap, Shield } from 'lucide-react';
 import { UrlInput } from '../components/UrlInput';
 import { VideoCard } from '../components/VideoCard';
@@ -18,47 +18,13 @@ export const HomePage: React.FC = () => {
     videoInfo,
     downloads,
     cancelDownload,
-    updateDownload,
-    addToHistory,
     fetchVideoInfo,
   } = useDownloadStore();
 
-  // Listen for download progress & completion
-  useEffect(() => {
-    const unsubProgress = api.onDownloadProgress((progress: unknown) => {
-      const p = progress as { downloadId: string; status: string; percent: number; speed: string; eta: string; filesize: string; filename: string };
-      updateDownload(p.downloadId, {
-        status: p.status as 'downloading' | 'processing',
-        progress: p.percent,
-        speed: p.speed,
-        eta: p.eta,
-        filesize: p.filesize,
-        filename: p.filename || undefined,
-      });
-    });
-
-    const unsubComplete = api.onDownloadComplete((result: unknown) => {
-      const r = result as { id: string; status: string; error?: string; filePath?: string };
-      updateDownload(r.id, {
-        status: r.status as 'completed' | 'error',
-        error: r.error,
-        progress: r.status === 'completed' ? 100 : undefined,
-        completedAt: new Date().toISOString(),
-      });
-
-      if (r.status === 'completed') {
-        const download = downloads.find((d) => d.id === r.id);
-        if (download) {
-          addToHistory({ ...download, status: 'completed', completedAt: new Date().toISOString() });
-        }
-      }
-    });
-
-    return () => {
-      unsubProgress();
-      unsubComplete();
-    };
-  }, [updateDownload, addToHistory, downloads]);
+  // NOTE: Download progress & completion events are handled SOLELY in App.tsx.
+  // Previously, this component had its own onDownloadProgress/onDownloadComplete
+  // listeners, which caused duplicate event handling and race conditions where
+  // the resolvedFilePath update from App.tsx could be overwritten.
 
   const activeDownloads = downloads.filter(
     (d) => d.status === 'downloading' || d.status === 'queued' || d.status === 'processing' || d.status === 'completed' || d.status === 'error'

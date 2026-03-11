@@ -158,7 +158,10 @@ const App: React.FC = () => {
     return cleanup;
   }, []);
 
-  // Listen for download completions and errors — update store + notifications + cookie block
+  // Listen for download completions and errors — update store + notifications + cookie block.
+  // This is the SOLE handler for download-complete events. Do NOT add duplicate listeners
+  // in page components (HomePage, VideoPage, etc.) — they cause race conditions where
+  // the resolvedFilePath update gets overwritten by a stale update.
   useEffect(() => {
     const cleanup = api.onDownloadComplete((result: unknown) => {
       const r = result as {
@@ -171,20 +174,26 @@ const App: React.FC = () => {
       };
       // Update the download item in the store
       if (r.id) {
-        const { updateDownload, addToHistory, downloads } = useDownloadStore.getState();
+        const { updateDownload, addToHistory } = useDownloadStore.getState();
         if (r.status === 'completed') {
           // Update outputPath to the actual resolved file path so "Open Folder" opens the correct location.
           // Without this, outputPath stays as the download DIRECTORY and shell.showItemInFolder
           // opens the parent folder instead of highlighting the downloaded file.
-          const completedUpdate: Partial<DownloadItem> = { status: 'completed', progress: 100 };
+          const completedUpdate: Partial<DownloadItem> = {
+            status: 'completed',
+            progress: 100,
+            completedAt: new Date().toISOString(),
+          };
           if (r.resolvedFilePath) {
             completedUpdate.outputPath = r.resolvedFilePath;
           }
           updateDownload(r.id, completedUpdate);
-          // Add to renderer-side history
-          const item = downloads.find(d => d.id === r.id);
+          // Add to renderer-side history — read from store AFTER the update so we get
+          // the resolved outputPath (not the stale directory path from the closure).
+          const { downloads: currentDownloads } = useDownloadStore.getState();
+          const item = currentDownloads.find(d => d.id === r.id);
           if (item) {
-            addToHistory({ ...item, status: 'completed', progress: 100, completedAt: new Date().toISOString() });
+            addToHistory({ ...item, completedAt: new Date().toISOString() });
           }
         } else if (r.status === 'error') {
           updateDownload(r.id, { status: 'error', error: r.error });
