@@ -48,7 +48,14 @@ export const PlayerPage: React.FC = () => {
 
   const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4];
 
-  const activeMedia = mediaType === 'audio' ? audioRef.current : videoRef.current;
+  // IMPORTANT: Read refs lazily via a getter function, NOT at render time.
+  // At render time, refs from newly-mounted elements are still null (assigned after DOM commit).
+  // If we read videoRef.current during render, event handlers capture a stale null reference
+  // and togglePlay / handleTimeUpdate / handleLoadedMetadata all silently no-op.
+  const getActiveMedia = useCallback(
+    () => (mediaType === 'audio' ? audioRef.current : videoRef.current),
+    [mediaType]
+  );
 
   // Load saved playback position
   useEffect(() => {
@@ -61,14 +68,15 @@ export const PlayerPage: React.FC = () => {
 
   // Save playback position periodically
   useEffect(() => {
-    if (!mediaSource || !activeMedia) return;
+    if (!mediaSource) return;
     const interval = setInterval(() => {
-      if (activeMedia.currentTime > 0 && !activeMedia.paused) {
-        api.savePlaybackPosition(mediaSource, activeMedia.currentTime).catch(() => {});
+      const media = getActiveMedia();
+      if (media && media.currentTime > 0 && !media.paused) {
+        api.savePlaybackPosition(mediaSource, media.currentTime).catch(() => {});
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [mediaSource, activeMedia]);
+  }, [mediaSource, getActiveMedia]);
 
   // Auto-hide controls
   const resetControlsTimer = useCallback(() => {
@@ -89,7 +97,8 @@ export const PlayerPage: React.FC = () => {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!activeMedia) return;
+      const media = getActiveMedia();
+      if (!media) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
@@ -101,11 +110,11 @@ export const PlayerPage: React.FC = () => {
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          seek(activeMedia.currentTime - 10);
+          seek(media.currentTime - 10);
           break;
         case 'ArrowRight':
           e.preventDefault();
-          seek(activeMedia.currentTime + 10);
+          seek(media.currentTime + 10);
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -197,23 +206,25 @@ export const PlayerPage: React.FC = () => {
   };
 
   const togglePlay = () => {
-    if (!activeMedia) return;
-    if (activeMedia.paused) {
-      activeMedia.play();
+    const media = getActiveMedia();
+    if (!media) return;
+    if (media.paused) {
+      media.play().catch(() => {});
       setIsPlaying(true);
     } else {
-      activeMedia.pause();
+      media.pause();
       setIsPlaying(false);
     }
   };
 
   const seek = (time: number) => {
-    if (!activeMedia) return;
-    activeMedia.currentTime = Math.max(0, Math.min(time, duration));
+    const media = getActiveMedia();
+    if (!media) return;
+    media.currentTime = Math.max(0, Math.min(time, duration));
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!progressRef.current || !activeMedia) return;
+    if (!progressRef.current || !getActiveMedia()) return;
     const rect = progressRef.current.getBoundingClientRect();
     const pos = (e.clientX - rect.left) / rect.width;
     seek(pos * duration);
@@ -222,22 +233,25 @@ export const PlayerPage: React.FC = () => {
   const changeVolume = (val: number) => {
     setVolume(val);
     setIsMuted(val === 0);
-    if (activeMedia) {
-      activeMedia.volume = val;
-      activeMedia.muted = val === 0;
+    const media = getActiveMedia();
+    if (media) {
+      media.volume = val;
+      media.muted = val === 0;
     }
   };
 
   const toggleMute = () => {
-    if (!activeMedia) return;
+    const media = getActiveMedia();
+    if (!media) return;
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    activeMedia.muted = newMuted;
+    media.muted = newMuted;
   };
 
   const changeSpeed = (rate: number) => {
     setPlaybackRate(rate);
-    if (activeMedia) activeMedia.playbackRate = rate;
+    const media = getActiveMedia();
+    if (media) media.playbackRate = rate;
     setShowSpeedMenu(false);
   };
 
@@ -264,16 +278,18 @@ export const PlayerPage: React.FC = () => {
   };
 
   const handleTimeUpdate = () => {
-    if (activeMedia) {
-      setCurrentTime(activeMedia.currentTime);
+    const media = getActiveMedia();
+    if (media) {
+      setCurrentTime(media.currentTime);
     }
   };
 
   const handleLoadedMetadata = () => {
-    if (activeMedia) {
-      setDuration(activeMedia.duration);
-      if (resumePosition > 0 && resumePosition < activeMedia.duration - 5) {
-        activeMedia.currentTime = resumePosition;
+    const media = getActiveMedia();
+    if (media) {
+      setDuration(media.duration);
+      if (resumePosition > 0 && resumePosition < media.duration - 5) {
+        media.currentTime = resumePosition;
         setResumePosition(0);
       }
     }

@@ -352,7 +352,13 @@ function setupIPC(): void {
             rateLimiter.reportBan(result.error);
             mainWindow?.webContents.send('rate-limit-warning', rateLimiter.getStatus());
           }
-          mainWindow?.webContents.send('download-complete', result);
+          // Include resolvedFilePath so the renderer can update outputPath for "Open Folder"
+          // Without this, outputPath stays as the download DIRECTORY and shell.showItemInFolder
+          // opens the parent of the directory instead of highlighting the actual file.
+          mainWindow?.webContents.send('download-complete', {
+            ...result,
+            resolvedFilePath: result.status === 'completed' ? resolvedFilePath : undefined,
+          });
         },
         effectiveCookiesPath,
         effectiveBrowserCookies

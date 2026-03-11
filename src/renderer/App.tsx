@@ -167,12 +167,20 @@ const App: React.FC = () => {
         error?: string;
         title?: string;
         filename?: string;
+        resolvedFilePath?: string;
       };
       // Update the download item in the store
       if (r.id) {
         const { updateDownload, addToHistory, downloads } = useDownloadStore.getState();
         if (r.status === 'completed') {
-          updateDownload(r.id, { status: 'completed', progress: 100 });
+          // Update outputPath to the actual resolved file path so "Open Folder" opens the correct location.
+          // Without this, outputPath stays as the download DIRECTORY and shell.showItemInFolder
+          // opens the parent folder instead of highlighting the downloaded file.
+          const completedUpdate: Partial<DownloadItem> = { status: 'completed', progress: 100 };
+          if (r.resolvedFilePath) {
+            completedUpdate.outputPath = r.resolvedFilePath;
+          }
+          updateDownload(r.id, completedUpdate);
           // Add to renderer-side history
           const item = downloads.find(d => d.id === r.id);
           if (item) {
