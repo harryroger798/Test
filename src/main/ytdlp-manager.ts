@@ -1015,8 +1015,8 @@ export class YtdlpManager {
     });
 
     proc.stderr.on('data', (data) => {
-      // Split stderr on newlines — yt-dlp sends [Merger], [ExtractAudio], [download] Destination
-      // to stderr as info messages. We must parse these for filenames too.
+      // Split stderr on newlines — ffmpeg output, yt-dlp errors, and sometimes
+      // info messages come through stderr.
       const text = stderrRemainder + data.toString();
       const lines = text.split(/\r?\n/);
       stderrRemainder = lines.pop() || '';
@@ -1033,8 +1033,13 @@ export class YtdlpManager {
           continue;
         }
 
-        // Not a recognized progress line — treat as potential error info
-        if (!trimmed.startsWith('WARNING')) {
+        // Skip informational lines that are NOT actual errors:
+        // - WARNING messages (suppressed by --no-warnings but just in case)
+        // - yt-dlp info messages: [youtube], [info], [download], [generic], etc.
+        // - ffmpeg output: ffmpeg version, Input #0, Stream #0, Duration, etc.
+        // - Deleting original file messages
+        // Only treat lines starting with ERROR: as actual errors
+        if (trimmed.startsWith('ERROR:') || trimmed.startsWith('error:')) {
           onProgress({
             downloadId,
             status: 'error',
@@ -1046,6 +1051,28 @@ export class YtdlpManager {
             error: trimmed,
           });
         }
+        // All other stderr lines are informational — just log them
+      }
+    });
+
+    // CRITICAL: Flush remainder buffers when streams end.
+    // If yt-dlp's last output line doesn't end with \n, it stays in the remainder
+    // and is never processed. This commonly happens with [Merger] lines — the final
+    // filename is lost, causing history to save a wrong (temp file) path.
+    proc.stdout.on('end', () => {
+      if (stdoutRemainder.trim()) {
+        const progress = this.parseProgress(stdoutRemainder.trim(), downloadId);
+        if (progress) onProgress(progress);
+        stdoutRemainder = '';
+      }
+    });
+
+    proc.stderr.on('end', () => {
+      if (stderrRemainder.trim()) {
+        const trimmed = stderrRemainder.trim();
+        const progress = this.parseProgress(trimmed, downloadId);
+        if (progress) onProgress(progress);
+        stderrRemainder = '';
       }
     });
 
