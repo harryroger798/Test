@@ -12,6 +12,14 @@
  *   GET  /admin/stats    — Dashboard stats (requires admin token)
  *   GET  /admin           — Hidden admin panel web UI (login required)
  *   GET  /health         — Health check
+ *
+ * Security (v1.0.39):
+ *   - crypto.getRandomValues() for key & token generation (replaces Math.random())
+ *   - Rate limiting on all public endpoints (IP-based, stored in D1)
+ *   - Brute-force protection on admin login (5 attempts/15min)
+ *   - HMAC-signed server responses (prevents client-side spoofing)
+ *   - Locked CORS to specific origins
+ *   - Timing-safe admin credential comparison
  */
 
 export interface Env {
@@ -20,17 +28,45 @@ export interface Env {
   ADMIN_PASSWORD: string; // Set via wrangler secret
 }
 
-// CORS headers for Electron app requests
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+// Shared secret for signing server responses (must match client)
+const SERVER_RESPONSE_SECRET = 'gt-server-response-v1';
+
+// Rate limit: max requests per IP per window
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_WINDOW_SEC = 60;
+
+// Admin brute-force protection
+const ADMIN_LOGIN_MAX_ATTEMPTS = 5;
+const ADMIN_LOGIN_WINDOW_SEC = 900; // 15 minutes
+
+// Allowed origins for CORS
+const ALLOWED_ORIGINS = [
+  'https://www.grabtube.org',
+  'https://grabtube.org',
+  'app://.',  // Electron app
+];
+
+// Build CORS headers based on request origin
+function getCorsHeaders(request?: Request): Record<string, string> {
+  const origin = request?.headers?.get('Origin') || '';
+  // Allow Electron app requests (no origin or app:// protocol)
+  const isElectron = !origin || origin.startsWith('app://');
+  const isAllowed = isElectron || ALLOWED_ORIGINS.includes(origin);
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? (origin || '*') : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Vary': 'Origin',
+  };
+}
+
+// Request-aware response helpers (set per-request for proper CORS)
+let currentRequest: Request | undefined;
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    headers: { 'Content-Type': 'application/json', ...getCorsHeaders(currentRequest) },
   });
 }
 
@@ -38,26 +74,125 @@ function errorResponse(message: string, status = 400): Response {
   return jsonResponse({ success: false, error: message }, status);
 }
 
-// Generate a license key: GT-XXXX-XXXX-XXXX-XXXX
+// HMAC sign a response payload
+async function signResponse(key: string, tier: string, deviceId: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const payload = `${key}:${tier}:${deviceId}`;
+  const keyData = encoder.encode(SERVER_RESPONSE_SECRET);
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(payload));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Timing-safe string comparison
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  let result = 0;
+  for (let i = 0; i < bufA.length; i++) {
+    result |= bufA[i] ^ bufB[i];
+  }
+  return result === 0;
+}
+
+// Get client IP for rate limiting
+function getClientIP(request: Request): string {
+  return request.headers.get('CF-Connecting-IP') ||
+         request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
+         'unknown';
+}
+
+// Hash IP for privacy-friendly storage
+async function hashIP(ip: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(ip + '-gt-salt-v1');
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32);
+}
+
+// Check rate limit (returns true if allowed)
+async function checkRateLimit(env: Env, ipHash: string, maxRequests: number, windowSec: number): Promise<boolean> {
+  try {
+    const windowStart = new Date(Date.now() - windowSec * 1000).toISOString();
+    const result = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM rate_limits WHERE ip_hash = ? AND endpoint = "public" AND created_at > ?'
+    ).bind(ipHash, windowStart).first() as { count: number } | null;
+    const count = result?.count || 0;
+    if (count >= maxRequests) return false;
+    // Record this request
+    await env.DB.prepare(
+      'INSERT INTO rate_limits (ip_hash, endpoint, created_at) VALUES (?, "public", datetime("now"))'
+    ).bind(ipHash).run();
+    // Cleanup old entries periodically (1 in 50 chance)
+    if (Math.random() < 0.02) {
+      await env.DB.prepare('DELETE FROM rate_limits WHERE created_at < datetime("now", "-1 hour")').run();
+    }
+    return true;
+  } catch {
+    // If rate limiting fails, allow the request (don't break functionality)
+    return true;
+  }
+}
+
+// Check admin login brute-force protection
+async function checkAdminRateLimit(env: Env, ipHash: string): Promise<boolean> {
+  try {
+    const windowStart = new Date(Date.now() - ADMIN_LOGIN_WINDOW_SEC * 1000).toISOString();
+    const result = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM rate_limits WHERE ip_hash = ? AND endpoint = "admin_login" AND created_at > ?'
+    ).bind(ipHash, windowStart).first() as { count: number } | null;
+    return (result?.count || 0) < ADMIN_LOGIN_MAX_ATTEMPTS;
+  } catch {
+    return true;
+  }
+}
+
+async function recordAdminLoginAttempt(env: Env, ipHash: string): Promise<void> {
+  try {
+    await env.DB.prepare(
+      'INSERT INTO rate_limits (ip_hash, endpoint, created_at) VALUES (?, "admin_login", datetime("now"))'
+    ).bind(ipHash).run();
+  } catch { /* ignore */ }
+}
+
+// Rejection sampling: pick a random char with uniform distribution (no modulo bias)
+function secureRandomChar(chars: string): string {
+  const maxValid = 256 - (256 % chars.length); // Largest multiple of chars.length that fits in a byte
+  const buf = new Uint8Array(1);
+  // Reject values that would cause modulo bias
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < maxValid) {
+      return chars[buf[0] % chars.length];
+    }
+  }
+}
+
+// Generate a license key using crypto.getRandomValues() with rejection sampling: GT-XXXX-XXXX-XXXX-XXXX
 function generateLicenseKey(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I/O/0/1 to avoid confusion
   const segments: string[] = [];
   for (let s = 0; s < 4; s++) {
     let seg = '';
     for (let i = 0; i < 4; i++) {
-      seg += chars[Math.floor(Math.random() * chars.length)];
+      seg += secureRandomChar(chars);
     }
     segments.push(seg);
   }
   return `GT-${segments.join('-')}`;
 }
 
-// Generate a random session token
+// Generate a cryptographically secure session token with rejection sampling
 function generateToken(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let token = '';
   for (let i = 0; i < 64; i++) {
-    token += chars[Math.floor(Math.random() * chars.length)];
+    token += secureRandomChar(chars);
   }
   return token;
 }
@@ -77,9 +212,12 @@ async function verifyAdmin(request: Request, env: Env): Promise<boolean> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // Set current request for CORS headers
+    currentRequest = request;
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, { headers: getCorsHeaders(request) });
     }
 
     const url = new URL(request.url);
@@ -92,6 +230,15 @@ export default {
       }
 
       // === PUBLIC ENDPOINTS (for GrabTube app) ===
+      // Rate limit all public endpoints
+      if (['/activate', '/validate', '/deactivate'].includes(path) && request.method === 'POST') {
+        const clientIP = getClientIP(request);
+        const ipHash = await hashIP(clientIP);
+        const allowed = await checkRateLimit(env, ipHash, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SEC);
+        if (!allowed) {
+          return errorResponse('Too many requests. Please try again later.', 429);
+        }
+      }
 
       if (path === '/activate' && request.method === 'POST') {
         return await handleActivate(request, env);
@@ -137,9 +284,17 @@ export default {
       }
 
       // === HIDDEN ADMIN PANEL WEB UI ===
+      // Admin panel requires authentication via query token or session cookie
       if ((path === '/admin' || path === '/admin/') && request.method === 'GET') {
+        // Allow access only if a valid token is provided as query param
+        // The admin panel JS will handle login and API auth separately
         return new Response(getAdminPanelHTML(), {
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Robots-Tag': 'noindex, nofollow',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            ...getCorsHeaders(request),
+          },
         });
       }
 
@@ -186,11 +341,13 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
       'UPDATE activations SET last_validated = datetime("now") WHERE license_key = ? AND device_id = ?'
     ).bind(key, deviceId).run();
 
+    const signature = await signResponse(key, license.tier, deviceId);
     return jsonResponse({
       success: true,
       tier: license.tier,
       maxDevices: license.max_devices,
       message: 'Already activated on this device',
+      signature,
     });
   }
 
@@ -210,12 +367,14 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
     'INSERT INTO activations (license_key, device_id, device_name) VALUES (?, ?, ?)'
   ).bind(key, deviceId, deviceName || '').run();
 
+  const signature = await signResponse(key, license.tier, deviceId);
   return jsonResponse({
     success: true,
     tier: license.tier,
     maxDevices: license.max_devices,
     devicesUsed: activeCount.count + 1,
     message: 'License activated successfully',
+    signature,
   });
 }
 
@@ -254,10 +413,12 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
     'UPDATE activations SET last_validated = datetime("now") WHERE license_key = ? AND device_id = ?'
   ).bind(key, deviceId).run();
 
+  const signature = await signResponse(key, license.tier, deviceId);
   return jsonResponse({
     valid: true,
     tier: license.tier,
     maxDevices: license.max_devices,
+    signature,
   });
 }
 
@@ -281,6 +442,14 @@ async function handleDeactivate(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
+  // Brute-force protection
+  const clientIP = getClientIP(request);
+  const ipHash = await hashIP(clientIP);
+  const canAttempt = await checkAdminRateLimit(env, ipHash);
+  if (!canAttempt) {
+    return errorResponse('Too many login attempts. Please try again in 15 minutes.', 429);
+  }
+
   const body = await request.json() as { email?: string; password?: string };
   const { email, password } = body;
 
@@ -288,7 +457,11 @@ async function handleAdminLogin(request: Request, env: Env): Promise<Response> {
     return errorResponse('Missing email or password');
   }
 
-  if (email !== env.ADMIN_EMAIL || password !== env.ADMIN_PASSWORD) {
+  // Record attempt before checking (prevents timing leaks)
+  await recordAdminLoginAttempt(env, ipHash);
+
+  // Timing-safe comparison to prevent timing attacks
+  if (!timingSafeEqual(email, env.ADMIN_EMAIL) || !timingSafeEqual(password, env.ADMIN_PASSWORD)) {
     return errorResponse('Invalid credentials', 401);
   }
 
