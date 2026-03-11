@@ -397,7 +397,8 @@
                 tryLink.href = '#try-inline-section';
                 tryLink.textContent = 'Try Online';
                 tryLink.className = lastLink.className;
-                tryLink.style.color = '#22c55e';
+                // Override to bordered outline style so text is visible
+                tryLink.style.cssText = 'background: transparent !important; color: #22c55e !important; border: 2px solid #22c55e !important; font-weight: 600 !important;';
                 lastLink.parentNode.insertBefore(tryLink, lastLink);
               }
             }
