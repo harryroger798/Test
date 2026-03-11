@@ -247,6 +247,10 @@ function setupIPC(): void {
           }
         },
         (result) => {
+          // Track resolved file path for "Open Folder" feature — hoisted outside the
+          // completed block so the download-complete event can include it.
+          let resolvedFilePath: string | undefined;
+
           // Record download for daily counter on success
           if (result.status === 'completed') {
             licenseManager.recordDownload();
@@ -262,7 +266,6 @@ function setupIPC(): void {
             const rawFilename = result.filename || '';
             const outputDir = result.outputPath || options.outputPath;
             const isFullPath = rawFilename && (path.isAbsolute(rawFilename) || rawFilename.includes(path.sep));
-            let resolvedFilePath: string;
             if (isFullPath) {
               resolvedFilePath = rawFilename;
             } else if (rawFilename) {
