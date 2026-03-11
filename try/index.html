@@ -421,6 +421,7 @@
     let pollInterval = null;
     let cooldownTimer = null;
     let remaining = MAX_DAILY;
+    let downloadHandled = false; // one-shot guard to prevent duplicate downloads
 
     // ─── DOM refs ───
     const $url = document.getElementById('urlInput');
@@ -574,9 +575,15 @@
           updateRemainingUI();
         }
 
-        // Populate video card
-        $thumb.src = data.thumbnail || '';
-        $thumb.style.display = data.thumbnail ? 'block' : 'none';
+        // Populate video card — proxy thumbnails through Worker to avoid CORS blocking
+        if (data.thumbnail) {
+          $thumb.src = API_BASE + '/v1/thumb?url=' + encodeURIComponent(data.thumbnail);
+          $thumb.style.display = 'block';
+          $thumb.onerror = function() { this.style.display = 'none'; };
+        } else {
+          $thumb.src = '';
+          $thumb.style.display = 'none';
+        }
         $duration.textContent = formatDuration(data.duration);
         $title.textContent = data.title || 'Unknown title';
         $channel.textContent = data.uploader || '';
@@ -682,6 +689,7 @@
 
         // EC2 job polling flow (all platforms including YouTube via WARP)
         currentJobId = data.job_id;
+        downloadHandled = false; // reset guard for new download
         startPolling(data.job_id);
 
       } catch (err) {
@@ -694,6 +702,7 @@
       if (pollInterval) clearInterval(pollInterval);
 
       pollInterval = setInterval(async () => {
+        if (downloadHandled) return; // guard: don't poll if already handled
         try {
           const res = await fetch(`${API_BASE}/v1/status/${jobId}`);
           const data = await res.json();
@@ -710,6 +719,8 @@
             $dlBtn.innerHTML = '<span class="spinner"></span> Preparing...';
           }
           else if (data.status === 'ready') {
+            if (downloadHandled) return; // prevent duplicate download
+            downloadHandled = true; // claim the lock
             clearInterval(pollInterval);
             pollInterval = null;
             $progressFill.style.width = '100%';
