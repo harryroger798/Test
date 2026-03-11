@@ -565,7 +565,31 @@
 
         // Populate quality options
         $qualityGrid.innerHTML = '';
-        if (data.qualities && data.qualities.length > 0) {
+        if (data.downloads_available === false) {
+          // YouTube metadata-only mode - innertube blocked, oEmbed fallback
+          $qualityGrid.innerHTML = `
+            <div style="text-align:center;padding:16px 8px;">
+              <div style="color:var(--primary);font-weight:600;margin-bottom:8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Video Found!
+              </div>
+              <p style="color:var(--text-muted);font-size:0.9rem;margin:0 0 12px;">
+                ${data.message || 'YouTube web downloads require the desktop app.'}
+              </p>
+              <a href="/#download" 
+                 style="display:inline-block;background:var(--primary);color:#000;padding:10px 24px;border-radius:8px;font-weight:600;text-decoration:none;transition:opacity 0.2s;"
+                 onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download GrabTube Desktop (Free)
+              </a>
+              <p style="color:var(--text-muted);font-size:0.78rem;margin:10px 0 0;">
+                Unlimited YouTube downloads with the desktop app
+              </p>
+            </div>`;
+          $dlBtn.disabled = true;
+          $dlBtn.style.display = 'none';
+        } else if (data.qualities && data.qualities.length > 0) {
+          $dlBtn.style.display = '';
           data.qualities.forEach((q, i) => {
             const btn = document.createElement('button');
             btn.className = 'quality-btn' + (i === 0 ? ' selected' : '');
@@ -577,6 +601,7 @@
           selectedQuality = data.qualities[0];
           $dlBtn.disabled = false;
         } else {
+          $dlBtn.style.display = '';
           $qualityGrid.innerHTML = '<div style="color:var(--text-muted);padding:8px;">No downloadable formats found</div>';
           $dlBtn.disabled = true;
         }
@@ -652,8 +677,6 @@
           throw new Error(data.error || 'Download failed to start');
         }
 
-        currentJobId = data.job_id;
-
         // Update remaining
         if (data.remaining !== undefined) {
           remaining = data.remaining;
@@ -661,7 +684,45 @@
           updateRemainingUI();
         }
 
-        // Start polling
+        // Direct YouTube download: stream URL already available from /v1/info
+        if (data.status === 'direct' && selectedQuality.url) {
+          $progressFill.style.width = '100%';
+          $progressPct.textContent = '100%';
+          $progressStatus.textContent = 'Preparing download...';
+          $dlBtn.innerHTML = '<span class="spinner"></span> Downloading...';
+
+          // Build filename from video title
+          const safeTitle = (videoData.title || 'video').replace(/[<>:"/\\|?*]/g, '_').slice(0, 200);
+          let ext = 'mp4';
+          if (selectedQuality.mime_type) {
+            if (selectedQuality.mime_type.includes('webm')) ext = 'webm';
+            else if (selectedQuality.mime_type.includes('mp4')) ext = 'mp4';
+            else if (selectedQuality.mime_type.includes('audio/mp4')) ext = 'm4a';
+          }
+          if (selectedQuality.type === 'audio-only') ext = 'm4a';
+
+          // Open download URL directly - browser will download from YouTube CDN
+          const a = document.createElement('a');
+          a.href = selectedQuality.url;
+          a.download = safeTitle + '.' + ext;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+
+          $progressStatus.textContent = 'Download started! Check your browser downloads.';
+
+          // Start cooldown
+          localStorage.setItem('gt_web_lastdl', Date.now().toString());
+          startCooldown(COOLDOWN_SECONDS);
+
+          setTimeout(() => resetDownloadUI(), 3000);
+          return;
+        }
+
+        // Non-YouTube: EC2 job polling flow
+        currentJobId = data.job_id;
         startPolling(data.job_id);
 
       } catch (err) {
