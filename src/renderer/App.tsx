@@ -5,7 +5,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { SetupWizard } from './components/SetupWizard';
 import { CookieBlockModal } from './components/CookieBlockModal';
 import { FeatureTour } from './components/FeatureTour';
-import { useDownloadStore } from './store/downloadStore';
+import { useDownloadStore, DownloadItem } from './store/downloadStore';
 import { useSettingsStore } from './store/settingsStore';
 import { cn } from './lib/utils';
 import { api } from './lib/ipc';
@@ -127,13 +127,67 @@ const App: React.FC = () => {
     return cleanup;
   }, [addNotification]);
 
-  // Listen for download completions and errors — feed notifications + cookie block
+  // Listen for download progress — update download cards in real-time
+  useEffect(() => {
+    const cleanup = api.onDownloadProgress((progress: unknown) => {
+      const p = progress as {
+        downloadId?: string;
+        status?: string;
+        percent?: number;
+        speed?: string;
+        eta?: string;
+        filesize?: string;
+        filename?: string;
+        error?: string;
+      };
+      if (!p.downloadId) return;
+      const { updateDownload } = useDownloadStore.getState();
+      const update: Partial<DownloadItem> = {};
+      if (p.percent !== undefined) update.progress = p.percent;
+      if (p.speed) update.speed = p.speed;
+      if (p.eta) update.eta = p.eta;
+      if (p.filesize) update.filesize = p.filesize;
+      if (p.filename) update.filename = p.filename;
+      // Map status: only update to error if it's a real error (has error text)
+      if (p.status === 'processing') update.status = 'processing';
+      else if (p.status === 'error' && p.error) update.status = 'error';
+      else if (p.status === 'downloading') update.status = 'downloading';
+      if (p.error) update.error = p.error;
+      updateDownload(p.downloadId, update);
+    });
+    return cleanup;
+  }, []);
+
+  // Listen for download completions and errors — update store + notifications + cookie block
   useEffect(() => {
     const cleanup = api.onDownloadComplete((result: unknown) => {
-      const r = result as { success?: boolean; error?: string; title?: string; filename?: string };
-      if (r.success) {
+      const r = result as {
+        id?: string;
+        status?: string;
+        error?: string;
+        title?: string;
+        filename?: string;
+      };
+      // Update the download item in the store
+      if (r.id) {
+        const { updateDownload, addToHistory, downloads } = useDownloadStore.getState();
+        if (r.status === 'completed') {
+          updateDownload(r.id, { status: 'completed', progress: 100 });
+          // Add to renderer-side history
+          const item = downloads.find(d => d.id === r.id);
+          if (item) {
+            addToHistory({ ...item, status: 'completed', progress: 100, completedAt: new Date().toISOString() });
+          }
+        } else if (r.status === 'error') {
+          updateDownload(r.id, { status: 'error', error: r.error });
+        } else if (r.status === 'cancelled') {
+          updateDownload(r.id, { status: 'cancelled' });
+        }
+      }
+      // Notifications
+      if (r.status === 'completed') {
         addNotification('success', 'Download Complete', r.title || r.filename || 'File downloaded successfully');
-      } else if (r.error) {
+      } else if (r.status === 'error' && r.error) {
         addNotification('error', 'Download Failed', r.error);
         const errorLower = r.error.toLowerCase();
         if (
