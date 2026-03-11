@@ -62,14 +62,10 @@ export const PlayerPage: React.FC = () => {
     [mediaType]
   );
 
-  // Load saved playback position
-  useEffect(() => {
-    if (mediaSource) {
-      api.getPlaybackPosition(mediaSource).then((pos) => {
-        if (pos > 0) setResumePosition(pos);
-      }).catch(() => {});
-    }
-  }, [mediaSource]);
+  // NOTE: Saved playback position is loaded inside loadMedia() using the
+  // mediaSource URL key (same key used by the periodic save below).
+  // A previous version had a duplicate useEffect here that read with a
+  // different key (raw file path), which never matched the save key.
 
   // Save playback position periodically
   useEffect(() => {
@@ -234,8 +230,10 @@ export const PlayerPage: React.FC = () => {
       ]);
     }
 
-    // Load saved position
-    const pos = await api.getPlaybackPosition(filePath).catch(() => 0);
+    // Load saved playback position — use the mediaSource URL key so it
+    // matches the key used by the periodic save below.
+    const mediaUrl = toMediaUrl(filePath);
+    const pos = await api.getPlaybackPosition(mediaUrl).catch(() => 0);
     if (pos > 0) setResumePosition(pos);
   };
 
@@ -352,15 +350,25 @@ export const PlayerPage: React.FC = () => {
     if (media) {
       setDuration(media.duration);
       media.loop = isLooping;
-      if (resumePosition > 0 && resumePosition < media.duration - 5) {
+      // Resume from last position — but NOT if the saved position is within
+      // the last 10% of the video OR within the last 30 seconds (whichever
+      // is smaller).  This prevents resuming near the end of a previously-
+      // watched video, which makes it look like the video "auto-seeks".
+      const threshold = Math.min(media.duration * 0.1, 30);
+      if (resumePosition > 0 && resumePosition < media.duration - threshold) {
         media.currentTime = resumePosition;
-        setResumePosition(0);
       }
+      setResumePosition(0);
     }
   };
 
   const handleEnded = () => {
     setIsPlaying(false);
+    // Clear saved playback position so the video starts from the beginning
+    // next time it's opened (instead of resuming near the end).
+    if (mediaSource) {
+      api.savePlaybackPosition(mediaSource, 0).catch(() => {});
+    }
     // Auto-play next in playlist (only if not looping — loop is handled by media.loop)
     if (!isLooping && currentIndex >= 0 && currentIndex < playlist.length - 1) {
       loadFromPlaylist(currentIndex + 1);
