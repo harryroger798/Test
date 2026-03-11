@@ -697,10 +697,11 @@
             $progressPct.textContent = '100%';
             $progressStatus.textContent = 'Complete!';
 
-            // Trigger file download with proper filename
+            // Trigger file download — URL is relative to Worker API (HTTPS)
             if (data.download_url) {
+              const dlUrl = data.download_url.startsWith('http') ? data.download_url : API_BASE + data.download_url;
               const a = document.createElement('a');
-              a.href = data.download_url;
+              a.href = dlUrl;
               a.download = data.filename || ((videoData ? videoData.title : 'video') + '.' + (data.ext || 'mp4'));
               document.body.appendChild(a);
               a.click();
