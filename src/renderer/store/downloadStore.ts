@@ -151,11 +151,29 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     })),
 
   // History
-  history: JSON.parse(localStorage.getItem('grabtube-history') || '[]'),
+  history: (() => {
+    try {
+      const raw = localStorage.getItem('grabtube-history');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      // Validate each item has required fields to handle schema changes
+      return parsed.filter((item: unknown): item is DownloadItem => {
+        const d = item as Record<string, unknown>;
+        return typeof d?.id === 'string' && typeof d?.url === 'string' && typeof d?.status === 'string';
+      });
+    } catch {
+      return [];
+    }
+  })(),
   addToHistory: (item) =>
     set((state) => {
       const newHistory = [item, ...state.history].slice(0, 100);
-      localStorage.setItem('grabtube-history', JSON.stringify(newHistory));
+      try {
+        localStorage.setItem('grabtube-history', JSON.stringify(newHistory));
+      } catch (e) {
+        console.warn('Failed to persist history to localStorage:', e);
+      }
       return { history: newHistory };
     }),
   clearHistory: () => {
@@ -206,7 +224,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         url: state.url,
         formatId: state.selectedFormat,
         outputPath,
-        filename: `${state.videoInfo.title}.%(ext)s`,
+        filename: `${state.videoInfo.title.replace(/[/\\:*?"<>|]/g, '_').replace(/\.\./g, '_').replace(/[\x00-\x1f]/g, '').trim().slice(0, 200)}.%(ext)s`,
         audioOnly: state.audioOnly,
         audioFormat: state.audioOnly ? state.audioFormat : undefined,
         embedSubs: state.embedSubs,

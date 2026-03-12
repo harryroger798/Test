@@ -39,8 +39,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       }
     } catch {
       setError('Verification failed. Please ensure you are logged in to YouTube in at least one browser.');
+    } finally {
+      setVerifying(false);
     }
-    setVerifying(false);
   };
 
   const handleSkip = async () => {

@@ -93,33 +93,35 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   setDownloadPath: (path) => {
-    set({ downloadPath: path });
     get().updateSettings({ downloadPath: path });
   },
 
   setTheme: (theme) => {
-    set({ theme });
     get().updateSettings({ theme });
     // Apply theme to DOM
     if (theme === 'light') {
       document.documentElement.classList.add('light');
-    } else {
+      document.documentElement.classList.remove('dark');
+    } else if (theme === 'dark') {
       document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+    } else {
+      // system: respect OS preference
+      document.documentElement.classList.remove('light', 'dark');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.classList.add(prefersDark ? 'dark' : 'light');
     }
   },
 
   setProxy: (proxy) => {
-    set({ proxy });
     get().updateSettings({ proxy });
   },
 
   setCookiesPath: (path) => {
-    set({ cookiesPath: path });
     get().updateSettings({ cookiesPath: path });
   },
 
   setBrowserCookies: (browser) => {
-    set({ browserCookies: browser });
     get().updateSettings({ browserCookies: browser });
   },
 }));

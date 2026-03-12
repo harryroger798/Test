@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
   Maximize, Minimize, PictureInPicture, Subtitles,
-  RotateCcw, RotateCw, List, FolderOpen, ChevronDown, Repeat, Repeat1
+  RotateCw, List, FolderOpen, ChevronDown, Repeat, Repeat1
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { api } from '../lib/ipc';
@@ -163,7 +163,7 @@ export const PlayerPage: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  }, [getActiveMedia, volume, isPlaying, mediaType, isLooping, duration]);
 
   // Fullscreen change listener
   useEffect(() => {
@@ -421,7 +421,7 @@ export const PlayerPage: React.FC = () => {
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {playlist.slice(0, 10).map((item, i) => (
                   <button
-                    key={i}
+                    key={`${item.path}-${i}`}
                     onClick={() => {
                       setCurrentIndex(i);
                       loadMedia(item.path, item.name, item.type);
@@ -495,7 +495,7 @@ export const PlayerPage: React.FC = () => {
           >
             {subtitleTracks.map((track, i) => (
               <track
-                key={i}
+                key={`${track.language}-${track.label}-${i}`}
                 kind="subtitles"
                 label={track.label}
                 srcLang={track.language}
@@ -708,7 +708,7 @@ export const PlayerPage: React.FC = () => {
                   </button>
                   {subtitleTracks.map((track, i) => (
                     <button
-                      key={i}
+                      key={`sub-${track.language}-${i}`}
                       onClick={() => { setActiveSubtitle(i); setShowSubtitleMenu(false); }}
                       className={cn(
                         'w-full text-left px-3 py-1.5 text-xs hover:bg-secondary/50 transition-colors',
@@ -769,7 +769,7 @@ export const PlayerPage: React.FC = () => {
           <div className="py-1">
             {playlist.map((item, i) => (
               <button
-                key={i}
+                key={`${item.path}-${i}`}
                 onClick={() => loadFromPlaylist(i)}
                 className={cn(
                   'w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-secondary/50 transition-colors',

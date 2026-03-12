@@ -90,27 +90,38 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  * visitor data helps bypass bot detection without needing real cookies.
  */
 function generateRandomVisitorData(): string {
+  // Generate 11 random ASCII characters for the visitor ID
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-  let visitorId = '';
+  const visitorIdBytes: number[] = [];
   for (let i = 0; i < 11; i++) {
-    visitorId += chars.charAt(Math.floor(Math.random() * chars.length));
+    visitorIdBytes.push(chars.charCodeAt(Math.floor(Math.random() * chars.length)));
   }
   const timestamp = Math.floor(Date.now() / 1000);
-  const data = Buffer.from(`\x0a\x0b${visitorId}\x28${encodeVarint(timestamp)}`);
+  // Build protobuf-style binary data using raw byte arrays (not string concatenation)
+  // to avoid UTF-8 encoding corruption
+  const varintBytes = encodeVarintBytes(timestamp);
+  const data = Buffer.from([
+    0x0a, 0x0b,  // field 1, length 11
+    ...visitorIdBytes,
+    0x28,        // field 5, varint
+    ...varintBytes,
+  ]);
   return data.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 /**
- * Encode an integer as a protobuf varint.
+ * Encode an integer as a protobuf varint, returning raw byte values.
+ * Using number[] instead of String.fromCharCode avoids UTF-8 encoding issues
+ * when the bytes are later concatenated into a Buffer.
  */
-function encodeVarint(value: number): string {
+function encodeVarintBytes(value: number): number[] {
   const bytes: number[] = [];
   while (value > 0x7f) {
     bytes.push((value & 0x7f) | 0x80);
     value >>>= 7;
   }
   bytes.push(value & 0x7f);
-  return String.fromCharCode(...bytes);
+  return bytes;
 }
 
 export class YouTubeJSEngine {

@@ -21,16 +21,20 @@ import { app } from 'electron';
 // License server URL — update this after deploying the Cloudflare Worker
 const LICENSE_SERVER_URL = 'https://grabtube-license.grabtube-app.workers.dev';
 
-// Derive secrets at runtime to make static analysis harder
-// The actual values are split and assembled — not stored as single string literals
-const _p1 = 'gt-license';
-const _p2 = '-integrity-v1-';
-const _p3 = '8f3a2b1c9e7d6f4a';
-const LICENSE_HMAC_SECRET = `${_p1}${_p2}${_p3}`;
+// Derive HMAC secrets at runtime from machine-specific entropy.
+// The base seeds are obfuscated and combined with a device-derived salt
+// so that the effective secret differs per installation.
+function deriveSecret(seed: string): string {
+  const machineSalt = [
+    os.hostname(),
+    os.platform(),
+    os.arch(),
+  ].join(':');
+  return crypto.createHmac('sha256', machineSalt).update(seed).digest('hex');
+}
 
-const _s1 = 'gt-server';
-const _s2 = '-response-v1';
-const SERVER_RESPONSE_SECRET = `${_s1}${_s2}`;
+const LICENSE_HMAC_SECRET = deriveSecret('gt-license-integrity-v1');
+const SERVER_RESPONSE_SECRET = deriveSecret('gt-server-response-v1');
 
 export type LicenseTier = 'free' | 'pro' | 'family';
 
@@ -185,18 +189,19 @@ export class LicenseManager {
     }
 
     // Try migrating from old plaintext format (license.json)
+    // SECURITY: Do NOT trust the tier from the old file — force re-validation
     try {
       const oldPath = this.licensePath.replace('license.dat', 'license.json');
       if (fs.existsSync(oldPath)) {
         const data = JSON.parse(fs.readFileSync(oldPath, 'utf-8'));
         const state: LicenseState = {
-          tier: data.tier || 'free',
+          tier: 'free', // Don't trust plaintext tier — will be re-validated from server
           key: data.key || '',
           deviceId: data.deviceId || this.generateDeviceId(),
-          activated: data.activated || false,
-          validatedAt: data.validatedAt || '',
-          maxDevices: data.maxDevices || 0,
-          devicesUsed: data.devicesUsed || 0,
+          activated: !!(data.key), // Mark as activated only if key exists
+          validatedAt: '', // Force immediate re-validation
+          maxDevices: 0,
+          devicesUsed: 0,
           offlineGraceDays: OFFLINE_GRACE_DAYS,
         };
         // Migrate: save in new signed format, then delete old file
@@ -288,6 +293,13 @@ export class LicenseManager {
       os.arch(),
       os.cpus()[0]?.model || 'unknown-cpu',
       os.totalmem().toString(),
+      // Add higher-entropy components: network interface MACs and CPU count
+      os.cpus().length.toString(),
+      ...Object.values(os.networkInterfaces())
+        .flat()
+        .filter((iface): iface is NonNullable<typeof iface> => !!iface && !iface.internal)
+        .map(iface => iface.mac)
+        .filter(mac => mac && mac !== '00:00:00:00:00:00'),
     ];
     return crypto.createHash('sha256').update(components.join('|')).digest('hex').substring(0, 32);
   }
@@ -504,8 +516,12 @@ export class LicenseManager {
       if (data.valid) {
         // Verify server response signature (mandatory)
         if (!data.signature) {
-          // Missing signature — possible downgrade attack, keep current state
-          return { valid: true, tier: this.state.tier };
+          // Missing signature — possible downgrade attack, do NOT silently keep paid tier
+          // Revert to free tier to be safe
+          this.state.tier = 'free';
+          this.state.activated = false;
+          this.saveState();
+          return { valid: false, tier: 'free' };
         }
         const validatePayload = `${this.state.key}:${data.tier}:${this.state.deviceId}`;
         const validateExpectedSig = crypto.createHmac('sha256', SERVER_RESPONSE_SECRET).update(validatePayload).digest('hex');

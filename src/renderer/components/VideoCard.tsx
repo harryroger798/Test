@@ -10,10 +10,10 @@ interface VideoCardProps {
 
 export const VideoCard: React.FC<VideoCardProps> = ({ info }) => {
   const handleOpenOriginal = () => {
+    const url = info.webpage_url;
+    if (!url || !/^https?:\/\//i.test(url)) return;
     if (window.electronAPI) {
-      window.electronAPI.openExternal(info.webpage_url);
-    } else {
-      window.open(info.webpage_url, '_blank');
+      window.electronAPI.openExternal(url);
     }
   };
 

@@ -72,7 +72,13 @@ export class SettingsManager {
     try {
       if (fs.existsSync(this.settingsPath)) {
         const data = fs.readFileSync(this.settingsPath, 'utf-8');
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        // Deep merge nested objects so partial saved values don't lose defaults
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          proxy: { ...DEFAULT_SETTINGS.proxy, ...(parsed.proxy || {}) },
+        };
       }
     } catch {
       // Return defaults on error
@@ -106,7 +112,31 @@ export class SettingsManager {
   }
 
   setAll(newSettings: Record<string, unknown>): void {
-    this.settings = { ...this.settings, ...newSettings } as AppSettings;
+    // Only merge known keys from AppSettings to prevent arbitrary property injection
+    const safeKeys: Array<keyof AppSettings> = [
+      'downloadPath', 'theme', 'proxy', 'maxConcurrentDownloads',
+      'embedThumbnail', 'embedSubtitles', 'defaultVideoFormat',
+      'defaultAudioFormat', 'clipboardMonitoring', 'notifications',
+      'cookiesPath', 'browserCookies', 'setupComplete', 'featureTourComplete',
+    ];
+    const merged = { ...this.settings };
+    for (const key of safeKeys) {
+      if (key in newSettings) {
+        // Deep-validate the proxy object to prevent injection
+        if (key === 'proxy' && typeof newSettings[key] === 'object' && newSettings[key] !== null) {
+          const p = newSettings[key] as Record<string, unknown>;
+          const validTypes = ['http', 'https', 'socks5'];
+          merged.proxy = {
+            enabled: Boolean(p.enabled),
+            url: typeof p.url === 'string' ? p.url : '',
+            type: validTypes.includes(p.type as string) ? p.type as 'http' | 'https' | 'socks5' : 'http',
+          };
+        } else {
+          (merged as Record<string, unknown>)[key] = newSettings[key];
+        }
+      }
+    }
+    this.settings = merged;
     this.save();
   }
 

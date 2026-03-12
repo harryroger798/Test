@@ -349,8 +349,8 @@ export class DownloadManager {
   }
 
   private processQueue(): void {
-    const totalActive = this.activeDownloads.size;
-    while (this.queue.length > 0 && totalActive < this.maxConcurrent) {
+    // Check activeDownloads.size on each iteration (not a snapshot) to respect concurrency limit
+    while (this.queue.length > 0 && this.activeDownloads.size < this.maxConcurrent) {
       const next = this.queue.shift();
       if (next) {
         const item: DownloadItem = {
@@ -371,15 +371,18 @@ export class DownloadManager {
   }
 
   cancelDownload(downloadId: string): void {
+    // Remove from queue first (before checking active) to prevent race
+    this.queue = this.queue.filter((q) => q.id !== downloadId);
+
     const download = this.activeDownloads.get(downloadId);
     if (download) {
       download.item.status = 'cancelled';
-      download.process.kill('SIGTERM');
+      // Delete from map BEFORE killing to prevent the 'close' handler from
+      // double-processing (the close handler checks activeDownloads.has)
       this.activeDownloads.delete(downloadId);
+      download.process.kill('SIGTERM');
       this.processQueue();
     }
-    // Also remove from queue
-    this.queue = this.queue.filter((q) => q.id !== downloadId);
   }
 
   cancelAll(): void {

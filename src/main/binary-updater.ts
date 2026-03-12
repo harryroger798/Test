@@ -161,18 +161,24 @@ export class BinaryUpdater {
         this.sendStatus(config.name, 'downloading', undefined, latestVersion, percent);
       });
 
-      // Replace the binary
+      // Replace the binary atomically: write to temp in same dir, then rename
       const binaryPath = config.getBinaryPath();
       if (binaryPath && binaryPath !== 'yt-dlp' && binaryPath !== 'ffmpeg') {
         // Backup old binary
         const backupPath = binaryPath + '.backup';
+        // Atomic staging path — same directory so rename() is atomic on same filesystem
+        const stagingPath = binaryPath + '.new';
         if (fs.existsSync(binaryPath)) {
           fs.copyFileSync(binaryPath, backupPath);
         }
 
         try {
-          fs.copyFileSync(tmpPath, binaryPath);
-          fs.chmodSync(binaryPath, 0o755);
+          // Stage: copy downloaded file next to target
+          fs.copyFileSync(tmpPath, stagingPath);
+          fs.chmodSync(stagingPath, 0o755);
+
+          // Atomic replace: rename is atomic on same filesystem
+          fs.renameSync(stagingPath, binaryPath);
 
           // Save version info
           this.saveVersionInfo(config.name, latestVersion);
@@ -185,6 +191,10 @@ export class BinaryUpdater {
             fs.unlinkSync(backupPath);
           }
         } catch (err) {
+          // Clean up staging file if it exists
+          if (fs.existsSync(stagingPath)) {
+            try { fs.unlinkSync(stagingPath); } catch { /* ignore */ }
+          }
           // Restore from backup
           if (fs.existsSync(backupPath)) {
             fs.copyFileSync(backupPath, binaryPath);
@@ -210,38 +220,58 @@ export class BinaryUpdater {
   /**
    * Fetch latest release info from GitHub API.
    */
+  /**
+   * Maximum number of HTTP redirects to follow (prevents infinite redirect loops).
+   */
+  private static readonly MAX_REDIRECTS = 5;
+
   private getLatestRelease(repo: string): Promise<ReleaseInfo | null> {
     return new Promise((resolve) => {
-      const options = {
-        hostname: 'api.github.com',
-        path: `/repos/${repo}/releases/latest`,
-        headers: { 'User-Agent': 'GrabTube/1.0.0' },
-      };
-
-      https.get(options, (res) => {
-        if (res.statusCode === 302 || res.statusCode === 301) {
-          // Follow redirect
-          const redirectUrl = res.headers.location;
-          if (redirectUrl) {
-            https.get(redirectUrl, { headers: { 'User-Agent': 'GrabTube/1.0.0' } }, (res2) => {
-              let data = '';
-              res2.on('data', (chunk) => { data += chunk; });
-              res2.on('end', () => {
-                try { resolve(JSON.parse(data)); } catch { resolve(null); }
-              });
-            }).on('error', () => resolve(null));
-          } else {
-            resolve(null);
-          }
+      const fetchWithRedirects = (url: string, redirectCount: number) => {
+        if (redirectCount > BinaryUpdater.MAX_REDIRECTS) {
+          console.warn('[GrabTube] Too many redirects fetching release info');
+          resolve(null);
           return;
         }
+        https.get(url, { headers: { 'User-Agent': 'GrabTube/1.0.0' } }, (res) => {
+          if (res.statusCode === 302 || res.statusCode === 301) {
+            const redirectUrl = res.headers.location;
+            if (redirectUrl) {
+              // Validate redirect stays on GitHub
+              try {
+                const parsed = new URL(redirectUrl);
+                if (!parsed.hostname.endsWith('github.com') && !parsed.hostname.endsWith('githubusercontent.com')) {
+                  console.warn('[GrabTube] Blocked redirect to non-GitHub host:', parsed.hostname);
+                  resolve(null);
+                  return;
+                }
+              } catch {
+                resolve(null);
+                return;
+              }
+              fetchWithRedirects(redirectUrl, redirectCount + 1);
+            } else {
+              resolve(null);
+            }
+            return;
+          }
 
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try { resolve(JSON.parse(data)); } catch { resolve(null); }
-        });
-      }).on('error', () => resolve(null));
+          // Handle rate limiting
+          if (res.statusCode === 403 || res.statusCode === 429) {
+            console.warn('[GrabTube] GitHub API rate limited');
+            resolve(null);
+            return;
+          }
+
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try { resolve(JSON.parse(data)); } catch { resolve(null); }
+          });
+        }).on('error', () => resolve(null));
+      };
+
+      fetchWithRedirects(`https://api.github.com/repos/${repo}/releases/latest`, 0);
     });
   }
 
@@ -254,10 +284,31 @@ export class BinaryUpdater {
     onProgress?: (percent: number) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      let redirectCount = 0;
       const makeRequest = (requestUrl: string) => {
+        if (redirectCount > BinaryUpdater.MAX_REDIRECTS) {
+          reject(new Error('Too many redirects'));
+          return;
+        }
+        // Validate URL before following
+        try {
+          const parsed = new URL(requestUrl);
+          if (!['https:', 'http:'].includes(parsed.protocol)) {
+            reject(new Error(`Blocked non-HTTP redirect: ${parsed.protocol}`));
+            return;
+          }
+          if (!parsed.hostname.endsWith('github.com') && !parsed.hostname.endsWith('githubusercontent.com') && !parsed.hostname.endsWith('github-releases.githubusercontent.com')) {
+            reject(new Error(`Blocked redirect to untrusted host: ${parsed.hostname}`));
+            return;
+          }
+        } catch {
+          reject(new Error('Invalid redirect URL'));
+          return;
+        }
         const protocol = requestUrl.startsWith('https') ? https : http;
         protocol.get(requestUrl, { headers: { 'User-Agent': 'GrabTube/1.0.0' } }, (res) => {
           if (res.statusCode === 302 || res.statusCode === 301) {
+            redirectCount++;
             const redirect = res.headers.location;
             if (redirect) {
               makeRequest(redirect);
@@ -283,13 +334,18 @@ export class BinaryUpdater {
             }
           });
 
+          res.on('error', (err) => {
+            file.destroy();
+            try { fs.unlinkSync(destPath); } catch { /* ignore */ }
+            reject(err);
+          });
           res.pipe(file);
           file.on('finish', () => {
             file.close();
             resolve();
           });
           file.on('error', (err) => {
-            fs.unlinkSync(destPath);
+            try { fs.unlinkSync(destPath); } catch { /* ignore */ }
             reject(err);
           });
         }).on('error', reject);
@@ -351,9 +407,9 @@ export class BinaryUpdater {
    * Returns: -1 if a < b, 0 if a == b, 1 if a > b
    */
   private compareVersions(a: string, b: string): number {
-    // Handle date-based versions like "2026.03.03"
-    const aParts = a.split(/[.\-]/).map(Number);
-    const bParts = b.split(/[.\-]/).map(Number);
+    // Handle date-based versions like "2026.03.03" and nightly suffixes
+    const aParts = a.split(/[.\-]/).map(s => { const n = parseInt(s, 10); return isNaN(n) ? 0 : n; });
+    const bParts = b.split(/[.\-]/).map(s => { const n = parseInt(s, 10); return isNaN(n) ? 0 : n; });
     const len = Math.max(aParts.length, bParts.length);
     for (let i = 0; i < len; i++) {
       const aVal = aParts[i] || 0;

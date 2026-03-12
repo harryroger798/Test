@@ -100,10 +100,10 @@ export const SettingsPage: React.FC = () => {
     setLicenseLoading(true);
     setLicenseMessage(null);
     try {
-      // First deactivate the current key
-      await api.deactivateLicense();
-      // Then activate the new key
-      const result = await api.activateLicense(licenseKey.trim());
+      // Activate the new key FIRST to verify it's valid
+      // Only deactivate the old key after the new one is confirmed working
+      const newKey = licenseKey.trim();
+      const result = await api.activateLicense(newKey);
       if (result.success) {
         setLicenseMessage({ type: 'success', text: `License switched! New tier: ${(result.tier || 'pro').toUpperCase()}` });
         const license = await api.getLicenseState();
@@ -112,8 +112,8 @@ export const SettingsPage: React.FC = () => {
         setDownloadStats(stats);
         setLicenseKey('');
       } else {
-        setLicenseMessage({ type: 'error', text: result.error || 'Activation of new key failed' });
-        // Re-fetch state (now deactivated)
+        setLicenseMessage({ type: 'error', text: result.error || 'Activation of new key failed. Your current key is still active.' });
+        // Re-fetch state (old key still active since we didn't deactivate it)
         const license = await api.getLicenseState();
         setLicenseState(license);
         const stats = await api.getDownloadStats();
@@ -243,7 +243,7 @@ export const SettingsPage: React.FC = () => {
               </div>
               {licenseState.activated && (
                 <span className="text-xs text-muted-foreground">
-                  Key: {licenseState.key.substring(0, 7)}...{licenseState.key.slice(-4)} | Devices: {licenseState.devicesUsed}/{licenseState.maxDevices}
+                  Key: {licenseState.key.substring(0, 4)}****{licenseState.key.slice(-2)} | Devices: {licenseState.devicesUsed}/{licenseState.maxDevices}
                 </span>
               )}
             </div>

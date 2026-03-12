@@ -7,6 +7,8 @@ export const HistoryPage: React.FC = () => {
   const { history, clearHistory, setUrl, setCurrentPage, fetchVideoInfo } = useDownloadStore();
 
   const handleRedownload = (url: string) => {
+    if (!url || typeof url !== 'string') return;
+    try { new URL(url); } catch { return; }
     setUrl(url);
     setCurrentPage('home');
     fetchVideoInfo(url);
@@ -85,9 +87,8 @@ export const HistoryPage: React.FC = () => {
                     onClick={() => {
                       if (window.electronAPI) {
                         window.electronAPI.openExternal(item.url);
-                      } else {
-                        window.open(item.url, '_blank');
                       }
+                      // No fallback to window.open — Electron context only
                     }}
                     className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
                     title="Open original URL"
