@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS license_keys (
   tier TEXT NOT NULL DEFAULT 'pro',          -- 'pro' or 'family'
   max_devices INTEGER NOT NULL DEFAULT 1,     -- pro=1, family=3
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT DEFAULT NULL,              -- NULL=lifetime, ISO 8601 UTC for time-limited keys
   revoked INTEGER NOT NULL DEFAULT 0,         -- 0=active, 1=revoked
   buyer_name TEXT DEFAULT '',                 -- optional: WhatsApp name / reference
   buyer_contact TEXT DEFAULT '',              -- optional: phone / email for your records
@@ -44,11 +45,13 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 -- Giveaway redemptions table (v1.0.40)
 CREATE TABLE IF NOT EXISTS giveaway_redemptions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  giveaway_key TEXT NOT NULL,                -- references license_keys.key
+  giveaway_key TEXT NOT NULL,                -- the master giveaway identifier (env.GIVEAWAY_KEY)
+  issued_key TEXT NOT NULL,                  -- unique per-user license key generated at redemption
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   ip_hash TEXT,                              -- SHA256 hash of client IP (abuse prevention)
   redeemed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,                  -- ISO 8601 UTC expiration (3 months from redemption)
   UNIQUE(giveaway_key, email)               -- 1 email = 1 redemption enforced at DB level
 );
 

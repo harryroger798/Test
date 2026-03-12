@@ -44,6 +44,19 @@ const ADMIN_LOGIN_WINDOW_SEC = 900; // 15 minutes
 // Giveaway constants
 const GIVEAWAY_MAX_REDEMPTIONS = 1000;
 const GIVEAWAY_NOTIFICATION_EMAIL = 'harryroger798@gmail.com';
+const GIVEAWAY_EXPIRY_MONTHS = 3; // Giveaway activations expire after 3 months
+const GIVEAWAY_MAX_IP_REDEMPTIONS = 5; // Max redemptions per IP address (abuse prevention)
+
+// Fix #1: Safe addMonths that clamps to end of month (avoids Jan 31 + 3 = May 1 bug)
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  const dayOfMonth = result.getDate();
+  result.setMonth(result.getMonth() + months);
+  if (result.getDate() !== dayOfMonth) {
+    result.setDate(0); // Clamp to last day of target month
+  }
+  return result;
+}
 
 // Allowed origins for CORS
 const ALLOWED_ORIGINS = [
@@ -347,7 +360,12 @@ export default {
 // === HANDLER IMPLEMENTATIONS ===
 
 async function handleActivate(request: Request, env: Env): Promise<Response> {
-  const body = await request.json() as { key?: string; deviceId?: string; deviceName?: string };
+  let body: { key?: string; deviceId?: string; deviceName?: string };
+  try {
+    body = await request.json() as { key?: string; deviceId?: string; deviceName?: string };
+  } catch {
+    return errorResponse('Invalid request body', 400);
+  }
   const { key, deviceId, deviceName } = body;
 
   if (!key || !deviceId) {
@@ -372,10 +390,22 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
     'SELECT * FROM activations WHERE license_key = ? AND device_id = ? AND active = 1'
   ).bind(key, deviceId).first();
 
+  // Fix #4: Check license-level expiration (set at redemption time for giveaway keys)
+  const licenseRow = license as { tier: string; max_devices: number; revoked: number; expires_at?: string };
+  if (licenseRow.expires_at) {
+    const expiresAt = new Date(licenseRow.expires_at);
+    if (new Date() > expiresAt) {
+      return errorResponse(
+        'Your 3-month free Pro trial has expired. Please purchase a license to continue using Pro features.',
+        403
+      );
+    }
+  }
+
   if (existing) {
     // Already activated on this device — just update last_validated
     await env.DB.prepare(
-      'UPDATE activations SET last_validated = datetime("now") WHERE license_key = ? AND device_id = ?'
+      'UPDATE activations SET last_validated = datetime("now") WHERE license_key = ? AND device_id = ? AND active = 1'
     ).bind(key, deviceId).run();
 
     const signature = await signResponse(key, license.tier, deviceId);
@@ -384,6 +414,7 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
       tier: license.tier,
       maxDevices: license.max_devices,
       message: 'Already activated on this device',
+      expiresAt: licenseRow.expires_at || null,
       signature,
     });
   }
@@ -410,13 +441,21 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
     tier: license.tier,
     maxDevices: license.max_devices,
     devicesUsed: activeCount.count + 1,
-    message: 'License activated successfully',
+    message: licenseRow.expires_at
+      ? `License activated successfully! Your free Pro trial expires on ${new Date(licenseRow.expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.`
+      : 'License activated successfully',
+    expiresAt: licenseRow.expires_at || null,
     signature,
   });
 }
 
 async function handleValidate(request: Request, env: Env): Promise<Response> {
-  const body = await request.json() as { key?: string; deviceId?: string };
+  let body: { key?: string; deviceId?: string };
+  try {
+    body = await request.json() as { key?: string; deviceId?: string };
+  } catch {
+    return errorResponse('Invalid request body', 400);
+  }
   const { key, deviceId } = body;
 
   if (!key || !deviceId) {
@@ -426,7 +465,7 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
   // Look up the license
   const license = await env.DB.prepare(
     'SELECT * FROM license_keys WHERE key = ?'
-  ).bind(key).first() as { tier: string; max_devices: number; revoked: number } | null;
+  ).bind(key).first() as { tier: string; max_devices: number; revoked: number; expires_at?: string } | null;
 
   if (!license) {
     return jsonResponse({ valid: false, error: 'Invalid license key' });
@@ -434,6 +473,22 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
 
   if (license.revoked) {
     return jsonResponse({ valid: false, error: 'License key has been revoked' });
+  }
+
+  // Fix #4/#5: Check license-level expiration (ISO 8601 UTC, set at redemption for giveaway keys)
+  if (license.expires_at) {
+    const expiresAt = new Date(license.expires_at);
+    if (new Date() > expiresAt) {
+      // Auto-deactivate all activations for this expired license
+      await env.DB.prepare(
+        'UPDATE activations SET active = 0 WHERE license_key = ? AND active = 1'
+      ).bind(key).run();
+      return jsonResponse({
+        valid: false,
+        error: 'Your 3-month free Pro trial has expired. Please purchase a license to continue using Pro features.',
+        expired: true,
+      });
+    }
   }
 
   // Check activation
@@ -445,9 +500,9 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ valid: false, error: 'Device not activated' });
   }
 
-  // Update last_validated timestamp
+  // Fix #6: Add active = 1 filter to UPDATE
   await env.DB.prepare(
-    'UPDATE activations SET last_validated = datetime("now") WHERE license_key = ? AND device_id = ?'
+    'UPDATE activations SET last_validated = datetime("now") WHERE license_key = ? AND device_id = ? AND active = 1'
   ).bind(key, deviceId).run();
 
   const signature = await signResponse(key, license.tier, deviceId);
@@ -455,12 +510,18 @@ async function handleValidate(request: Request, env: Env): Promise<Response> {
     valid: true,
     tier: license.tier,
     maxDevices: license.max_devices,
+    expiresAt: license.expires_at || null,
     signature,
   });
 }
 
 async function handleDeactivate(request: Request, env: Env): Promise<Response> {
-  const body = await request.json() as { key?: string; deviceId?: string };
+  let body: { key?: string; deviceId?: string };
+  try {
+    body = await request.json() as { key?: string; deviceId?: string };
+  } catch {
+    return errorResponse('Invalid request body', 400);
+  }
   const { key, deviceId } = body;
 
   if (!key || !deviceId) {
@@ -1199,98 +1260,126 @@ async function handleGiveawayRedeem(request: Request, env: Env): Promise<Respons
     return errorResponse('Please enter a valid email address');
   }
 
-  const giveawayKey = env.GIVEAWAY_KEY;
-  if (!giveawayKey) {
+  const giveawayId = env.GIVEAWAY_KEY;
+  if (!giveawayId) {
     return errorResponse('Giveaway is not currently active', 503);
   }
 
-  // Check if giveaway key exists and is valid
-  const license = await env.DB.prepare(
-    'SELECT * FROM license_keys WHERE key = ? AND revoked = 0'
-  ).bind(giveawayKey).first() as { tier: string; max_devices: number } | null;
+  // Fix #7: Check IP-based rate limit for giveaway abuse prevention
+  const clientIP = getClientIP(request);
+  const ipHash = await hashIP(clientIP);
+  const ipRedemptions = await env.DB.prepare(
+    'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE ip_hash = ? AND giveaway_key = ?'
+  ).bind(ipHash, giveawayId).first() as { count: number };
 
-  if (!license) {
-    return errorResponse('Giveaway is no longer available', 410);
+  if (ipRedemptions.count >= GIVEAWAY_MAX_IP_REDEMPTIONS) {
+    return errorResponse('Too many redemptions from this network. Please try from a different connection.', 429);
   }
 
   // Check if this email already redeemed
   const existing = await env.DB.prepare(
     'SELECT * FROM giveaway_redemptions WHERE giveaway_key = ? AND email = ?'
-  ).bind(giveawayKey, email).first();
+  ).bind(giveawayId, email).first() as { issued_key?: string; expires_at?: string } | null;
 
   if (existing) {
-    // Already redeemed — return the key again (idempotent)
+    // Already redeemed — return their unique key again (idempotent)
     const currentCount = await env.DB.prepare(
       'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
-    ).bind(giveawayKey).first() as { count: number };
+    ).bind(giveawayId).first() as { count: number };
     return jsonResponse({
       success: true,
-      key: giveawayKey,
+      key: existing.issued_key,
       message: 'You have already claimed this giveaway! Here is your license key again.',
       alreadyClaimed: true,
       remaining: GIVEAWAY_MAX_REDEMPTIONS - currentCount.count,
+      expiresAt: existing.expires_at || null,
     });
   }
 
-  // Record redemption with atomic capacity check using INSERT + subquery
-  // Fix #2: Prevent race condition by checking count atomically in the INSERT
-  const clientIP = getClientIP(request);
-  const ipHash = await hashIP(clientIP);
+  // Fix #1: Calculate expiry using safe addMonths (avoids month-end overflow)
+  const expiresAt = addMonths(new Date(), GIVEAWAY_EXPIRY_MONTHS).toISOString();
 
+  // Fix #2: Generate a unique per-user license key (not shared)
+  const userKey = generateLicenseKey();
+
+  // Insert the per-user license key into license_keys with expiration
+  await env.DB.prepare(
+    'INSERT INTO license_keys (key, tier, max_devices, expires_at, buyer_name, buyer_contact, notes) VALUES (?, ?, 1, ?, ?, ?, ?)'
+  ).bind(userKey, 'pro', expiresAt, name, email, 'giveaway-redemption').run();
+
+  // Record redemption with atomic capacity check
   try {
     const result = await env.DB.prepare(
-      `INSERT INTO giveaway_redemptions (giveaway_key, name, email, ip_hash)
-       SELECT ?, ?, ?, ?
+      `INSERT INTO giveaway_redemptions (giveaway_key, issued_key, name, email, ip_hash, expires_at)
+       SELECT ?, ?, ?, ?, ?, ?
        WHERE (SELECT COUNT(*) FROM giveaway_redemptions WHERE giveaway_key = ?) < ?`
-    ).bind(giveawayKey, name, email, ipHash, giveawayKey, GIVEAWAY_MAX_REDEMPTIONS).run();
+    ).bind(giveawayId, userKey, name, email, ipHash, expiresAt, giveawayId, GIVEAWAY_MAX_REDEMPTIONS).run();
 
     if (!result.meta.changes || result.meta.changes === 0) {
-      // Either capacity full or UNIQUE violation — check which
+      // Capacity full or race condition — clean up the generated key
+      await env.DB.prepare('DELETE FROM license_keys WHERE key = ?').bind(userKey).run();
       const totalRedemptions = await env.DB.prepare(
         'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
-      ).bind(giveawayKey).first() as { count: number };
+      ).bind(giveawayId).first() as { count: number };
 
       if (totalRedemptions.count >= GIVEAWAY_MAX_REDEMPTIONS) {
         return errorResponse('Sorry, all giveaway slots have been claimed! The giveaway is full.', 410);
       }
       // Must be duplicate email (race condition on UNIQUE)
+      const existingAfterRace = await env.DB.prepare(
+        'SELECT issued_key, expires_at FROM giveaway_redemptions WHERE giveaway_key = ? AND email = ?'
+      ).bind(giveawayId, email).first() as { issued_key: string; expires_at: string } | null;
       return jsonResponse({
         success: true,
-        key: giveawayKey,
+        key: existingAfterRace?.issued_key || userKey,
         message: 'You have already claimed this giveaway! Here is your license key again.',
         alreadyClaimed: true,
         remaining: GIVEAWAY_MAX_REDEMPTIONS - totalRedemptions.count,
+        expiresAt: existingAfterRace?.expires_at || expiresAt,
       });
     }
-  } catch {
-    // UNIQUE constraint violation (concurrent duplicate email)
-    const currentCount = await env.DB.prepare(
-      'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
-    ).bind(giveawayKey).first() as { count: number };
-    return jsonResponse({
-      success: true,
-      key: giveawayKey,
-      message: 'You have already claimed this giveaway! Here is your license key again.',
-      alreadyClaimed: true,
-      remaining: GIVEAWAY_MAX_REDEMPTIONS - currentCount.count,
-    });
+  } catch (e: unknown) {
+    // Fix #8: Only treat UNIQUE constraint errors as duplicates; re-throw others
+    const errMsg = e instanceof Error ? e.message : String(e);
+    if (errMsg.includes('UNIQUE constraint')) {
+      // Concurrent duplicate email — clean up generated key
+      await env.DB.prepare('DELETE FROM license_keys WHERE key = ?').bind(userKey).run();
+      const existingAfterRace = await env.DB.prepare(
+        'SELECT issued_key, expires_at FROM giveaway_redemptions WHERE giveaway_key = ? AND email = ?'
+      ).bind(giveawayId, email).first() as { issued_key: string; expires_at: string } | null;
+      const currentCount = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
+      ).bind(giveawayId).first() as { count: number };
+      return jsonResponse({
+        success: true,
+        key: existingAfterRace?.issued_key || userKey,
+        message: 'You have already claimed this giveaway! Here is your license key again.',
+        alreadyClaimed: true,
+        remaining: GIVEAWAY_MAX_REDEMPTIONS - currentCount.count,
+        expiresAt: existingAfterRace?.expires_at || expiresAt,
+      });
+    }
+    // Non-UNIQUE error — clean up and return 500
+    await env.DB.prepare('DELETE FROM license_keys WHERE key = ?').bind(userKey).run();
+    return errorResponse('An unexpected error occurred. Please try again later.', 500);
   }
 
   // Get fresh count after successful insert
   const newTotal = await env.DB.prepare(
     'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
-  ).bind(giveawayKey).first() as { count: number };
+  ).bind(giveawayId).first() as { count: number };
 
   // Send email notification to admin (fire and forget — don't block response)
   sendGiveawayNotification(env, name, email, newTotal.count).catch(() => { /* ignore email failures */ });
 
   return jsonResponse({
     success: true,
-    key: giveawayKey,
-    message: 'Congratulations! Here is your free GrabTube Pro license key.',
+    key: userKey,
+    message: `Congratulations! Here is your free 3-month GrabTube Pro license key. Activate it within the app to start your trial.`,
     alreadyClaimed: false,
     remaining: GIVEAWAY_MAX_REDEMPTIONS - newTotal.count,
     redemptionNumber: newTotal.count,
+    expiresAt,
   });
 }
 
@@ -1356,7 +1445,7 @@ function getGiveawayPageHTML(): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>GrabTube — Free Pro License Giveaway</title>
+  <title>GrabTube — Free 3-Month Pro Trial Giveaway</title>
   <style>
     :root {
       --bg: #030712; --bg2: #111827; --bg3: #1f2937; --border: #374151;
@@ -1421,16 +1510,16 @@ function getGiveawayPageHTML(): string {
       <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#22c55e" opacity="0.15"/><path d="M8 12l3 3 5-6" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>GrabTube</span>
     </div>
-    <div class="badge">LIMITED GIVEAWAY</div>
-    <h1>Get <span class="accent">GrabTube Pro</span> Free</h1>
-    <p class="subtitle">Claim your free Pro license key — unlimited downloads, 8K quality, 1800+ sites. No credit card needed.</p>
+    <div class="badge">LIMITED GIVEAWAY — 3 MONTH PRO TRIAL</div>
+    <h1>Get <span class="accent">GrabTube Pro</span> Free for 3 Months</h1>
+    <p class="subtitle">Claim your free 3-month Pro trial — unlimited downloads, 8K quality, 1800+ sites. No credit card needed. Full Pro features for 90 days!</p>
     <div class="features">
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Unlimited downloads</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Up to 8K quality</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>1800+ websites</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Built-in player</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Format converter</div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Lifetime access</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>3 months Pro access</div>
     </div>
     <form id="claim-form" onsubmit="handleClaim(event)">
       <div class="form-group">
@@ -1442,7 +1531,7 @@ function getGiveawayPageHTML(): string {
         <input type="email" id="input-email" placeholder="you@example.com" required maxlength="200" autocomplete="email">
       </div>
       <div id="error-msg" class="error-msg"></div>
-      <button type="submit" class="btn" id="claim-btn">Claim Free License Key</button>
+      <button type="submit" class="btn" id="claim-btn">Claim Free 3-Month Pro Trial</button>
     </form>
     <div class="slots" id="slots-info"></div>
   </div>
@@ -1454,8 +1543,9 @@ function getGiveawayPageHTML(): string {
       <span>GrabTube</span>
     </div>
     <div class="badge" style="background:rgba(34,197,94,0.2)">CLAIMED SUCCESSFULLY</div>
-    <h1>Your <span class="accent">Pro License</span> Key</h1>
-    <p class="subtitle" id="success-msg">Congratulations! Here is your free GrabTube Pro license key.</p>
+    <h1>Your <span class="accent">3-Month Pro</span> Key</h1>
+    <p class="subtitle" id="success-msg">Congratulations! Here is your free 3-month GrabTube Pro license key.</p>
+    <p class="subtitle" style="color:#eab308;font-size:0.85rem;margin-bottom:12px" id="expiry-info"></p>
     <div class="key-display">
       <div class="key" id="license-key-display"></div>
       <button class="copy-btn" onclick="copyKey()">
@@ -1500,7 +1590,11 @@ async function handleClaim(e) {
 
     if (d.success && d.key) {
       document.getElementById('license-key-display').textContent = d.key;
-      document.getElementById('success-msg').textContent = d.message || 'Here is your free license key!';
+      document.getElementById('success-msg').textContent = d.message || 'Here is your free 3-month Pro license key!';
+      if (d.expiresAt) {
+        const exp = new Date(d.expiresAt);
+        document.getElementById('expiry-info').textContent = 'Your Pro trial expires on: ' + exp.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      }
       document.getElementById('form-card').classList.add('hidden');
       document.getElementById('success-card').classList.add('visible');
       // Mini confetti
@@ -1518,13 +1612,13 @@ async function handleClaim(e) {
       errEl.textContent = d.error || 'Something went wrong. Please try again.';
       errEl.style.display = 'block';
       btn.disabled = false;
-      btn.textContent = 'Claim Free License Key';
+      btn.textContent = 'Claim Free 3-Month Pro Trial';
     }
   } catch (err) {
     errEl.textContent = 'Network error. Please check your connection and try again.';
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Claim Free License Key';
+    btn.textContent = 'Claim Free 3-Month Pro Trial';
   }
 }
 
