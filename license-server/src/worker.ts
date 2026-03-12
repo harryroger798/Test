@@ -1383,39 +1383,52 @@ async function handleGiveawayRedeem(request: Request, env: Env): Promise<Respons
   });
 }
 
-// Send email notification via Mailgun
+// Send email notification via Mailgun (optional — leads are always stored in D1 regardless)
 async function sendGiveawayNotification(env: Env, name: string, email: string, count: number): Promise<void> {
+  // Email is entirely optional — if no API key is configured, skip silently.
+  // All giveaway leads are persisted in the giveaway_redemptions D1 table
+  // and viewable via /admin/giveaway regardless of email delivery.
   if (!env.MAILGUN_API_KEY) return;
 
-  const formData = new URLSearchParams();
-  formData.append('from', 'GrabTube Giveaway <noreply@grabtube.org>');
-  formData.append('to', GIVEAWAY_NOTIFICATION_EMAIL);
-  formData.append('subject', `[GrabTube Giveaway] New Lead #${count} — ${name}`);
-  // Fix #1: HTML-escape user inputs to prevent XSS in email
-  const safeName = escapeHtml(name);
-  const safeEmail = escapeHtml(email);
-  formData.append('html', `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
-      <h2 style="color:#22c55e">New Giveaway Redemption #${count}/${GIVEAWAY_MAX_REDEMPTIONS}</h2>
-      <table style="width:100%;border-collapse:collapse">
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Name</td><td style="padding:8px;border-bottom:1px solid #eee">${safeName}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Email</td><td style="padding:8px;border-bottom:1px solid #eee">${safeEmail}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Redemption #</td><td style="padding:8px;border-bottom:1px solid #eee">${count} of ${GIVEAWAY_MAX_REDEMPTIONS}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Remaining</td><td style="padding:8px;border-bottom:1px solid #eee">${GIVEAWAY_MAX_REDEMPTIONS - count}</td></tr>
-        <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${new Date().toISOString()}</td></tr>
-      </table>
-      <p style="margin-top:20px;color:#666;font-size:12px">This is an automated notification from GrabTube License Server.</p>
-    </div>
-  `);
+  try {
+    const formData = new URLSearchParams();
+    formData.append('from', 'GrabTube Giveaway <noreply@grabtube.org>');
+    formData.append('to', GIVEAWAY_NOTIFICATION_EMAIL);
+    formData.append('subject', `[GrabTube Giveaway] New Lead #${count} — ${name}`);
+    // HTML-escape user inputs to prevent XSS in email
+    const safeName = escapeHtml(name);
+    const safeEmail = escapeHtml(email);
+    formData.append('html', `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
+        <h2 style="color:#22c55e">New Giveaway Redemption #${count}/${GIVEAWAY_MAX_REDEMPTIONS}</h2>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Name</td><td style="padding:8px;border-bottom:1px solid #eee">${safeName}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Email</td><td style="padding:8px;border-bottom:1px solid #eee">${safeEmail}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Redemption #</td><td style="padding:8px;border-bottom:1px solid #eee">${count} of ${GIVEAWAY_MAX_REDEMPTIONS}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Remaining</td><td style="padding:8px;border-bottom:1px solid #eee">${GIVEAWAY_MAX_REDEMPTIONS - count}</td></tr>
+          <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${new Date().toISOString()}</td></tr>
+        </table>
+        <p style="margin-top:20px;color:#666;font-size:12px">This is an automated notification from GrabTube License Server.</p>
+      </div>
+    `);
 
-  await fetch('https://api.mailgun.net/v3/grabtube.org/messages', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + btoa('api:' + env.MAILGUN_API_KEY),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: formData.toString(),
-  });
+    const resp = await fetch('https://api.mailgun.net/v3/grabtube.org/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + btoa('api:' + env.MAILGUN_API_KEY),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData.toString(),
+    });
+
+    if (!resp.ok) {
+      // Log but don't throw — email failure should never block giveaway redemption
+      console.error(`Mailgun notification failed: ${resp.status} ${resp.statusText}`);
+    }
+  } catch (err: unknown) {
+    // Silently swallow email errors — the lead is already saved in D1
+    console.error('Email notification error:', err instanceof Error ? err.message : String(err));
+  }
 }
 
 // Admin: list giveaway redemptions
