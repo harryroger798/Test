@@ -224,7 +224,7 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         url: state.url,
         formatId: state.selectedFormat,
         outputPath,
-        filename: `${state.videoInfo.title}.%(ext)s`,
+        filename: `${state.videoInfo.title.replace(/[/\\:*?"<>|]/g, '_').replace(/\.\./g, '_').replace(/[\x00-\x1f]/g, '').trim().slice(0, 200)}.%(ext)s`,
         audioOnly: state.audioOnly,
         audioFormat: state.audioOnly ? state.audioFormat : undefined,
         embedSubs: state.embedSubs,

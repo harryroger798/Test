@@ -20,11 +20,13 @@ const electronAPI = {
 
   // Progress events
   onDownloadProgress: (callback: (progress: unknown) => void) => {
+    ipcRenderer.removeAllListeners('download-progress');
     const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress);
     ipcRenderer.on('download-progress', handler);
     return () => ipcRenderer.removeListener('download-progress', handler);
   },
   onDownloadComplete: (callback: (result: unknown) => void) => {
+    ipcRenderer.removeAllListeners('download-complete');
     const handler = (_event: Electron.IpcRendererEvent, result: unknown) => callback(result);
     ipcRenderer.on('download-complete', handler);
     return () => ipcRenderer.removeListener('download-complete', handler);
@@ -67,6 +69,7 @@ const electronAPI = {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   onUpdateStatus: (callback: (status: unknown) => void) => {
+    ipcRenderer.removeAllListeners('update-status');
     const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
     ipcRenderer.on('update-status', handler);
     return () => ipcRenderer.removeListener('update-status', handler);
@@ -75,6 +78,7 @@ const electronAPI = {
   // Binary updates
   checkBinaryUpdates: () => ipcRenderer.invoke('check-binary-updates'),
   onBinaryUpdateStatus: (callback: (status: unknown) => void) => {
+    ipcRenderer.removeAllListeners('binary-update-status');
     const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
     ipcRenderer.on('binary-update-status', handler);
     return () => ipcRenderer.removeListener('binary-update-status', handler);
@@ -98,11 +102,13 @@ const electronAPI = {
   runHealthCheck: () => ipcRenderer.invoke('run-health-check'),
   getFailureLog: () => ipcRenderer.invoke('get-failure-log'),
   onHealthReport: (callback: (report: unknown) => void) => {
+    ipcRenderer.removeAllListeners('health-report');
     const handler = (_event: Electron.IpcRendererEvent, report: unknown) => callback(report);
     ipcRenderer.on('health-report', handler);
     return () => ipcRenderer.removeListener('health-report', handler);
   },
   onHealthHeal: (callback: (data: unknown) => void) => {
+    ipcRenderer.removeAllListeners('health-heal-complete');
     const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('health-heal-complete', handler);
     return () => ipcRenderer.removeListener('health-heal-complete', handler);
@@ -111,6 +117,7 @@ const electronAPI = {
   // License management
   getLicenseState: () => ipcRenderer.invoke('get-license-state'),
   onLicenseTierChanged: (callback: (data: unknown) => void) => {
+    ipcRenderer.removeAllListeners('license-tier-changed');
     const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('license-tier-changed', handler);
     return () => ipcRenderer.removeListener('license-tier-changed', handler);
@@ -125,6 +132,7 @@ const electronAPI = {
   checkPlaylistAllowed: () => ipcRenderer.invoke('check-playlist-allowed'),
   resetRateLimiter: () => ipcRenderer.invoke('reset-rate-limiter'),
   onRateLimitWarning: (callback: (status: unknown) => void) => {
+    ipcRenderer.removeAllListeners('rate-limit-warning');
     const handler = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
     ipcRenderer.on('rate-limit-warning', handler);
     return () => ipcRenderer.removeListener('rate-limit-warning', handler);
@@ -149,6 +157,7 @@ const electronAPI = {
   getBanPreventionSettings: () => ipcRenderer.invoke('get-ban-prevention-settings'),
   resetCookielessMode: (platform: string) => ipcRenderer.invoke('reset-cookieless-mode', platform),
   onBanPreventionWarning: (callback: (data: unknown) => void) => {
+    ipcRenderer.removeAllListeners('ban-prevention-warning');
     const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('ban-prevention-warning', handler);
     return () => ipcRenderer.removeListener('ban-prevention-warning', handler);
@@ -163,11 +172,13 @@ const electronAPI = {
   selectOutputDirectory: () => ipcRenderer.invoke('select-output-directory'),
   openFileInFolder: (filePath: string) => ipcRenderer.invoke('open-file-in-folder', filePath),
   onConversionProgress: (callback: (data: unknown) => void) => {
+    ipcRenderer.removeAllListeners('conversion-progress');
     const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('conversion-progress', handler);
     return () => ipcRenderer.removeListener('conversion-progress', handler);
   },
   onConversionComplete: (callback: (data: unknown) => void) => {
+    ipcRenderer.removeAllListeners('conversion-complete');
     const handler = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
     ipcRenderer.on('conversion-complete', handler);
     return () => ipcRenderer.removeListener('conversion-complete', handler);

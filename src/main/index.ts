@@ -825,11 +825,31 @@ function setupIPC(): void {
     try {
       if (!filePath || typeof filePath !== 'string') return { success: false };
       if (typeof position !== 'number' || !isFinite(position) || position < 0) return { success: false };
+
+      // Validate filePath against allowed directories
+      const resolvedFP = path.resolve(filePath);
+      const fpAllowedRoots = [app.getPath('downloads'), app.getPath('home')];
+      const fpCfgPath = settings.get('downloadPath');
+      if (fpCfgPath) fpAllowedRoots.push(path.resolve(fpCfgPath));
+      if (!fpAllowedRoots.some(r => resolvedFP.startsWith(r + path.sep) || resolvedFP === r)) {
+        return { success: false };
+      }
+
       const posFile = path.join(app.getPath('userData'), 'playback-positions.json');
       let data: Record<string, number> = {};
       if (fs.existsSync(posFile)) {
         data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
       }
+
+      // Cap max entries to prevent unbounded growth
+      const MAX_ENTRIES = 500;
+      const keys = Object.keys(data);
+      if (keys.length >= MAX_ENTRIES) {
+        // Remove oldest entries (first inserted)
+        const toRemove = keys.slice(0, keys.length - MAX_ENTRIES + 1);
+        for (const k of toRemove) delete data[k];
+      }
+
       const key = Buffer.from(filePath).toString('base64url');
       data[key] = position;
       fs.writeFileSync(posFile, JSON.stringify(data));
@@ -1187,7 +1207,9 @@ app.whenReady().then(async () => {
   setupIPC();
 
   // Set main window reference for ban prevention warnings
-  banPrevention.setMainWindow(mainWindow);
+  if (mainWindow) {
+    banPrevention.setMainWindow(mainWindow);
+  }
 
   // Phase 2: Non-critical UI (tray icon) — defer slightly
   setTimeout(() => createTray(), 500);
