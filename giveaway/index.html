@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GrabTube Giveaway — Get 3 Months Free Pro</title>
+  <meta name="description" content="Claim your free 3-month GrabTube Pro license key. 1,000 keys available — unlimited downloads, 8K quality, 1800+ sites." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="canonical" href="https://www.grabtube.org/giveaway/" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #030712;
+      --bg-card: #111827;
+      --bg-input: #1f2937;
+      --border: #374151;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --green: #22c55e;
+      --green-hover: #16a34a;
+      --green-glow: rgba(34, 197, 94, 0.15);
+      --gold: #eab308;
+      --gold-glow: rgba(234, 179, 8, 0.15);
+      --red: #ef4444;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* Header */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px; border-bottom: 1px solid var(--border);
+      background: rgba(3, 7, 18, 0.95); backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 50;
+    }
+    .logo-link { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+    .logo-link img { width: 36px; height: 36px; border-radius: 8px; }
+    .logo-link span { font-size: 20px; font-weight: 700; }
+    .logo-link .badge { font-size: 11px; background: var(--gold); color: #000; padding: 2px 8px; border-radius: 20px; font-weight: 600; margin-left: 4px; }
+    .header-actions { display: flex; gap: 12px; align-items: center; }
+    .btn-outline {
+      padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); background: transparent; cursor: pointer; font-size: 14px;
+      text-decoration: none; transition: all 0.2s;
+    }
+    .btn-outline:hover { border-color: var(--green); color: var(--green); }
+    .btn-primary {
+      padding: 8px 20px; border: none; border-radius: 8px;
+      background: var(--green); color: #000; cursor: pointer; font-size: 14px;
+      font-weight: 600; text-decoration: none; transition: all 0.2s;
+    }
+    .btn-primary:hover { background: var(--green-hover); }
+
+    /* Main */
+    .main { max-width: 640px; margin: 0 auto; padding: 48px 20px 80px; }
+
+    /* Hero */
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px; padding: 6px 18px;
+      border-radius: 9999px; background: var(--gold-glow); border: 1px solid rgba(234,179,8,0.25);
+      color: #fde68a; font-size: 13px; font-weight: 700; margin-bottom: 20px;
+      letter-spacing: 0.03em; text-transform: uppercase;
+    }
+    .hero-badge .icon { font-size: 16px; }
+    .hero-title { text-align: center; font-size: 40px; font-weight: 800; margin-bottom: 12px; line-height: 1.15; }
+    .hero-title .gold { color: var(--gold); }
+    .hero-title .green { color: var(--green); }
+    .hero-sub { text-align: center; color: var(--text-muted); font-size: 16px; margin-bottom: 36px; line-height: 1.7; }
+    .hero-sub strong { color: var(--gold); }
+    .text-center { text-align: center; }
+
+    /* Features Grid */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+      margin-bottom: 36px;
+    }
+    .feature-item {
+      display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; font-size: 14px; font-weight: 500;
+    }
+    .feature-item .check {
+      width: 22px; height: 22px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0;
+      background: var(--green-glow); color: var(--green); font-size: 13px; font-weight: 700;
+    }
+
+    /* Form Card */
+    .form-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px; margin-bottom: 24px;
+    }
+    .form-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .form-card .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 600; color: var(--text-muted);
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .form-input {
+      width: 100%; padding: 14px 16px; border-radius: var(--radius);
+      background: var(--bg-input); border: 1px solid var(--border);
+      color: var(--text); font-size: 16px; outline: none; transition: border-color 0.2s;
+    }
+    .form-input:focus { border-color: var(--green); }
+    .form-input::placeholder { color: #6b7280; }
+    .form-input.error { border-color: var(--red); }
+
+    .claim-btn {
+      width: 100%; padding: 16px; border: none; border-radius: var(--radius);
+      background: linear-gradient(135deg, var(--gold) 0%, var(--green) 100%);
+      color: #000; font-size: 18px; font-weight: 800; cursor: pointer;
+      transition: all 0.25s; display: flex; align-items: center;
+      justify-content: center; gap: 10px; margin-top: 8px;
+    }
+    .claim-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(234,179,8,0.25); }
+    .claim-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* Slots Counter */
+    .slots-counter {
+      text-align: center; margin-top: 16px; font-size: 14px; color: var(--text-muted);
+    }
+    .slots-counter strong { color: var(--gold); }
+
+    /* Error */
+    .error-msg {
+      padding: 12px 16px; background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 10px;
+      color: var(--red); font-size: 14px; margin-bottom: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* Success State */
+    .success-card {
+      background: var(--bg-card); border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 16px; padding: 32px; text-align: center;
+      animation: fadeIn 0.4s ease;
+    }
+    .success-icon { font-size: 48px; margin-bottom: 16px; }
+    .success-card h2 { font-size: 24px; font-weight: 800; margin-bottom: 8px; color: var(--green); }
+    .success-card .congrats { color: var(--text-muted); font-size: 15px; margin-bottom: 24px; }
+
+    .key-display {
+      background: var(--bg-input); border: 2px solid var(--green);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 24px;
+      position: relative;
+    }
+    .key-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+    .key-value {
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 20px; font-weight: 700; color: var(--gold); word-break: break-all;
+      user-select: all; letter-spacing: 0.05em;
+    }
+    .copy-btn {
+      margin-top: 12px; padding: 8px 20px; border: 1px solid var(--green);
+      border-radius: 8px; background: var(--green-glow); color: var(--green);
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .copy-btn:hover { background: var(--green); color: #000; }
+    .copy-btn.copied { background: var(--green); color: #000; }
+
+    .expiry-notice {
+      font-size: 13px; color: var(--text-muted); margin-bottom: 24px;
+      padding: 10px 16px; background: var(--gold-glow); border-radius: 8px;
+      border: 1px solid rgba(234,179,8,0.2);
+    }
+    .expiry-notice strong { color: var(--gold); }
+
+    /* Instructions */
+    .instructions {
+      text-align: left; margin-bottom: 24px;
+    }
+    .instructions h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+    .instructions ol {
+      list-style: none; counter-reset: steps; padding: 0;
+    }
+    .instructions ol li {
+      counter-increment: steps; padding: 10px 0 10px 40px; position: relative;
+      font-size: 14px; color: var(--text-muted); border-bottom: 1px solid rgba(55,65,81,0.5);
+    }
+    .instructions ol li:last-child { border-bottom: none; }
+    .instructions ol li::before {
+      content: counter(steps);
+      position: absolute; left: 0; top: 10px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--green-glow); color: var(--green);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+    }
+
+    .download-cta {
+      display: inline-flex; align-items: center; gap: 8px; padding: 14px 32px;
+      background: var(--green); color: #000; border-radius: var(--radius);
+      font-weight: 800; font-size: 16px; text-decoration: none; transition: all 0.2s;
+    }
+    .download-cta:hover { background: var(--green-hover); transform: translateY(-2px); box-shadow: 0 4px 20px var(--green-glow); }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 20px; height: 20px;
+      border: 2px solid rgba(0,0,0,0.3); border-top-color: #000;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 24px; border-top: 1px solid var(--border);
+      color: var(--text-muted); font-size: 13px;
+    }
+    .footer a { color: var(--green); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero-title { font-size: 30px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .form-card { padding: 24px 20px; }
+      .success-card { padding: 24px 20px; }
+      .key-value { font-size: 16px; }
+      .header-actions .btn-outline { display: none; }
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <a href="/" class="logo-link">
+      <img src="/logo.png" alt="GrabTube" />
+      <span>GrabTube</span>
+      <span class="badge">Giveaway</span>
+    </a>
+    <div class="header-actions">
+      <a href="/try/" class="btn-outline">Try Online</a>
+      <a href="/#download" class="btn-primary">Download App</a>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Form State -->
+    <div id="formState">
+      <div class="text-center">
+        <div class="hero-badge">
+          <span class="icon">&#127873;</span>
+          Limited Time Giveaway
+        </div>
+      </div>
+
+      <h1 class="hero-title">
+        Get <span class="gold">3 Months Free</span><br/>
+        <span class="green">GrabTube Pro</span>
+      </h1>
+
+      <p class="hero-sub">
+        We're giving away <strong>1,000 free Pro license keys</strong> &mdash;
+        unlimited downloads, 8K quality, zero restrictions.<br/>
+        Enter your name &amp; email to claim yours instantly.
+      </p>
+
+      <!-- Features -->
+      <div class="features-grid">
+        <div class="feature-item">
+          <span class="check">&#10003;</span>
+          Unlimited Downloads
+        </div>
+        <div class="feature-item">
+          <span class="check">&#10003;</span>
+          Up to 8K Quality
+        </div>
+        <div class="feature-item">
+          <span class="check">&#10003;</span>
+          1800+ Websites
+        </div>
+        <div class="feature-item">
+          <span class="check">&#10003;</span>
+          3-Month Pro Trial
+        </div>
+        <div class="feature-item">
+          <span class="check">&#10003;</span>
+          Built-in Player
+        </div>
+        <div class="feature-item">
+          <span class="check">&#10003;</span>
+          Universal Converter
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div class="error-msg hidden" id="errorMsg"></div>
+
+      <!-- Form -->
+      <div class="form-card">
+        <h2>Claim Your Free Key</h2>
+        <p class="subtitle">Fill in your details below to receive your license key instantly.</p>
+
+        <form id="giveawayForm" onsubmit="handleSubmit(event)" novalidate>
+          <div class="form-group">
+            <label for="nameInput">Your Name</label>
+            <input type="text" class="form-input" id="nameInput"
+                   placeholder="e.g. John Doe" required maxlength="100"
+                   autocomplete="name" />
+          </div>
+          <div class="form-group">
+            <label for="emailInput">Email Address</label>
+            <input type="email" class="form-input" id="emailInput"
+                   placeholder="e.g. john@example.com" required maxlength="254"
+                   autocomplete="email" />
+          </div>
+          <button type="submit" class="claim-btn" id="claimBtn">
+            <span id="btnText">&#127873; Claim Your Free Pro License</span>
+            <span class="spinner hidden" id="btnSpinner"></span>
+          </button>
+        </form>
+      </div>
+
+      <div class="slots-counter">
+        Limited to <strong>1,000 keys</strong> &mdash; first come, first served
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div id="successState" class="hidden">
+      <div class="success-card">
+        <div class="success-icon">&#127881;</div>
+        <h2>You're In!</h2>
+        <p class="congrats">Your free 3-month Pro license key has been generated.</p>
+
+        <div class="key-display">
+          <div class="key-label">Your License Key</div>
+          <div class="key-value" id="licenseKey"></div>
+          <button class="copy-btn" id="copyBtn" onclick="copyKey()">
+            &#128203; Copy Key
+          </button>
+        </div>
+
+        <div class="expiry-notice">
+          <strong>Valid for 3 months</strong> from activation. Activate before <span id="expiryDate"></span>.
+        </div>
+
+        <div class="instructions">
+          <h3>How to Activate</h3>
+          <ol>
+            <li>Download GrabTube for your platform (Windows, macOS, or Linux)</li>
+            <li>Open the app and go to <strong>Settings &gt; License Activation</strong></li>
+            <li>Paste your license key and click <strong>Activate</strong></li>
+            <li>Enjoy unlimited downloads, 8K quality, and all Pro features for 3 months!</li>
+          </ol>
+        </div>
+
+        <a href="/#download" class="download-cta">
+          &#11015;&#65039; Download GrabTube Now
+        </a>
+
+        <div class="slots-counter" style="margin-top: 20px;">
+          <span id="remainingSlots"></span> keys remaining
+        </div>
+      </div>
+    </div>
+
+    <!-- Capacity Full State -->
+    <div id="fullState" class="hidden">
+      <div class="success-card" style="border-color: rgba(234,179,8,0.3);">
+        <div class="success-icon">&#128532;</div>
+        <h2 style="color: var(--gold);">Giveaway Ended</h2>
+        <p class="congrats">All 1,000 free Pro keys have been claimed. But you can still get GrabTube!</p>
+
+        <div class="features-grid" style="margin-bottom: 24px;">
+          <div class="feature-item">
+            <span class="check">&#10003;</span>
+            Free Tier: 5 downloads/day
+          </div>
+          <div class="feature-item">
+            <span class="check">&#10003;</span>
+            Up to 1080p Quality
+          </div>
+        </div>
+
+        <a href="/#download" class="download-cta">
+          &#11015;&#65039; Download GrabTube Free
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="/">GrabTube</a> &mdash; The best free video downloader for 1800+ websites.
+    <br />v1.0.40 &middot; &copy; 2026 GrabTube. All rights reserved.
+  </footer>
+
+  <script>
+    'use strict';
+
+    const API_URL = 'https://grabtube-license.grabtube-app.workers.dev/giveaway/redeem';
+
+    const formState = document.getElementById('formState');
+    const successState = document.getElementById('successState');
+    const fullState = document.getElementById('fullState');
+    const errorMsg = document.getElementById('errorMsg');
+    const nameInput = document.getElementById('nameInput');
+    const emailInput = document.getElementById('emailInput');
+    const claimBtn = document.getElementById('claimBtn');
+    const btnText = document.getElementById('btnText');
+    const btnSpinner = document.getElementById('btnSpinner');
+    const licenseKey = document.getElementById('licenseKey');
+    const expiryDate = document.getElementById('expiryDate');
+    const remainingSlots = document.getElementById('remainingSlots');
+    const copyBtn = document.getElementById('copyBtn');
+
+    let isSubmitting = false;
+
+    /** Escape HTML to prevent XSS */
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    /** Validate email format */
+    function isValidEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    /** Show error message */
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove('hidden');
+    }
+
+    /** Hide error message */
+    function hideError() {
+      errorMsg.classList.add('hidden');
+      errorMsg.textContent = '';
+    }
+
+    /** Set loading state */
+    function setLoading(loading) {
+      isSubmitting = loading;
+      claimBtn.disabled = loading;
+      btnText.textContent = loading ? 'Claiming...' : '\uD83C\uDF81 Claim Your Free Pro License';
+      btnSpinner.classList.toggle('hidden', !loading);
+    }
+
+    /** Format date to readable string */
+    function formatDate(isoStr) {
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      } catch (e) {
+        return isoStr;
+      }
+    }
+
+    /** Copy key to clipboard */
+    function copyKey() {
+      const key = licenseKey.textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(key).then(function() {
+          copyBtn.innerHTML = '&#10003; Copied!';
+          copyBtn.classList.add('copied');
+          setTimeout(function() {
+            copyBtn.innerHTML = '&#128203; Copy Key';
+            copyBtn.classList.remove('copied');
+          }, 2000);
+        }).catch(function() {
+          fallbackCopy(key);
+        });
+      } else {
+        fallbackCopy(key);
+      }
+    }
+
+    /** Fallback copy for older browsers */
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        copyBtn.innerHTML = '&#10003; Copied!';
+        copyBtn.classList.add('copied');
+        setTimeout(function() {
+          copyBtn.innerHTML = '&#128203; Copy Key';
+          copyBtn.classList.remove('copied');
+        }, 2000);
+      } catch (e) {
+        /* ignore */
+      }
+      document.body.removeChild(ta);
+    }
+
+    /** Handle form submission */
+    async function handleSubmit(e) {
+      e.preventDefault();
+      if (isSubmitting) return;
+
+      hideError();
+      nameInput.classList.remove('error');
+      emailInput.classList.remove('error');
+
+      const name = nameInput.value.trim();
+      const email = emailInput.value.trim().toLowerCase();
+
+      /* Client-side validation */
+      if (!name) {
+        nameInput.classList.add('error');
+        nameInput.focus();
+        showError('Please enter your name.');
+        return;
+      }
+      if (name.length < 2) {
+        nameInput.classList.add('error');
+        nameInput.focus();
+        showError('Name must be at least 2 characters.');
+        return;
+      }
+      if (!email) {
+        emailInput.classList.add('error');
+        emailInput.focus();
+        showError('Please enter your email address.');
+        return;
+      }
+      if (!isValidEmail(email)) {
+        emailInput.classList.add('error');
+        emailInput.focus();
+        showError('Please enter a valid email address.');
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const resp = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, email: email })
+        });
+
+        let data;
+        try {
+          data = await resp.json();
+        } catch (parseErr) {
+          throw new Error('Unexpected server response. Please try again.');
+        }
+
+        if (!resp.ok || !data.success) {
+          const errMessage = data.error || 'Something went wrong. Please try again.';
+
+          /* Check for capacity full */
+          if (resp.status === 410 || errMessage.toLowerCase().includes('capacity') || errMessage.toLowerCase().includes('sold out') || errMessage.toLowerCase().includes('no more')) {
+            formState.classList.add('hidden');
+            fullState.classList.remove('hidden');
+            return;
+          }
+
+          showError(errMessage);
+          return;
+        }
+
+        /* Success */
+        licenseKey.textContent = data.key || data.license_key || '';
+        expiryDate.textContent = formatDate(data.expires_at || '');
+        if (data.remaining !== undefined) {
+          remainingSlots.textContent = data.remaining.toLocaleString();
+        } else {
+          remainingSlots.textContent = '---';
+        }
+
+        formState.classList.add('hidden');
+        successState.classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      } catch (err) {
+        if (err.name === 'TypeError' && err.message.includes('fetch')) {
+          showError('Network error. Please check your connection and try again.');
+        } else {
+          showError(err.message || 'Something went wrong. Please try again.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    /* Auto-focus name input on load */
+    window.addEventListener('DOMContentLoaded', function() {
+      nameInput.focus();
+    });
+  </script>
+</body>
+</html>
