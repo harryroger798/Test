@@ -12,9 +12,9 @@ export const VideoCard: React.FC<VideoCardProps> = ({ info }) => {
   const handleOpenOriginal = () => {
     if (window.electronAPI) {
       window.electronAPI.openExternal(info.webpage_url);
-    } else {
-      window.open(info.webpage_url, '_blank');
     }
+    // No fallback to window.open — in Electron context window.open can
+    // bypass security restrictions. The electronAPI path is the only safe way.
   };
 
   return (

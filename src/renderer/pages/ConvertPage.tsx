@@ -94,6 +94,13 @@ export const ConvertPage: React.FC = () => {
     }).catch(() => {});
   }, []);
 
+  // Reset drag state on window blur (drag leaves window without dragLeave event)
+  React.useEffect(() => {
+    const handleBlur = () => setIsDragging(false);
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, []);
+
   // Listen for conversion progress
   React.useEffect(() => {
     const removeProgress = api.onConversionProgress((data: { conversionId: string; progress: number }) => {

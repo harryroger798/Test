@@ -17,7 +17,7 @@ export const Sidebar: React.FC = () => {
   const [appVersion, setAppVersion] = useState('...');
 
   useEffect(() => {
-    api.getAppVersion().then((res) => setAppVersion(res.version)).catch(() => setAppVersion('1.0.5'));
+    api.getAppVersion().then((res) => setAppVersion(res.version)).catch(() => setAppVersion('unknown'));
   }, []);
 
   const activeVideoDownloads = downloads.filter(

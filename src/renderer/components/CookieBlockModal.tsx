@@ -23,8 +23,9 @@ export const CookieBlockModal: React.FC<CookieBlockModalProps> = ({ onDismiss, o
       }
     } catch {
       setError('Verification failed. Please try again.');
+    } finally {
+      setVerifying(false);
     }
-    setVerifying(false);
   };
 
   return (

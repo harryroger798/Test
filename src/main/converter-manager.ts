@@ -168,7 +168,11 @@ export class ConverterManager {
     return new Promise((resolve) => {
       // First, get duration for progress calculation
       const probeArgs = ['-i', inputPath, '-show_entries', 'format=duration', '-v', 'quiet', '-of', 'csv=p=0'];
-      const probePath = this.ffmpegPath.replace('ffmpeg', 'ffprobe').replace('ffmpeg.exe', 'ffprobe.exe');
+      // Derive ffprobe path by replacing only the filename part (not directory components containing 'ffmpeg')
+      const ffmpegDir = path.dirname(this.ffmpegPath);
+      const ffmpegBasename = path.basename(this.ffmpegPath);
+      const ffprobeBasename = ffmpegBasename.replace('ffmpeg', 'ffprobe');
+      const probePath = path.join(ffmpegDir, ffprobeBasename);
 
       let totalDuration = 0;
 
@@ -227,7 +231,8 @@ export class ConverterManager {
     if (outputFormat === 'gif') {
       const fps = options.fps || '15';
       const height = options.maxHeight || '480';
-      args.length = 0; // Reset args
+      // Rebuild args from scratch for GIF instead of using args.length=0 mutation
+      args.splice(0, args.length);
       args.push('-i', inputPath, '-y');
       args.push('-vf', `fps=${fps},scale=-1:${height}:flags=lanczos`);
       args.push('-progress', 'pipe:1');

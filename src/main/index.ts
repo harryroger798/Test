@@ -69,7 +69,7 @@ function createWindow(): void {
   mainWindow.on('close', (event) => {
     if (downloadManager.hasActiveDownloads()) {
       event.preventDefault();
-      const choice = dialog.showMessageBoxSync(mainWindow!, {
+      const choice = dialog.showMessageBoxSync(mainWindow ?? new BrowserWindow({ show: false }), {
         type: 'question',
         buttons: ['Cancel', 'Quit Anyway'],
         defaultId: 0,
@@ -381,7 +381,8 @@ function setupIPC(): void {
 
   // Select download folder
   ipcMain.handle('select-folder', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    if (!mainWindow) return { success: false, error: 'No window available' };
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
       title: 'Select Download Folder',
     });
@@ -397,7 +398,36 @@ function setupIPC(): void {
   });
 
   ipcMain.handle('save-settings', async (_event, newSettings: Record<string, unknown>) => {
-    settings.setAll(newSettings);
+    // Validate known fields to prevent injection of arbitrary settings
+    const allowedKeys = new Set([
+      'downloadPath', 'theme', 'proxy', 'maxConcurrentDownloads',
+      'embedThumbnail', 'embedSubtitles', 'defaultVideoFormat',
+      'defaultAudioFormat', 'clipboardMonitoring', 'notifications',
+      'cookiesPath', 'browserCookies', 'setupComplete', 'featureTourComplete',
+    ]);
+    const filtered: Record<string, unknown> = {};
+    for (const key of Object.keys(newSettings)) {
+      if (allowedKeys.has(key)) {
+        filtered[key] = newSettings[key];
+      }
+    }
+    // Validate downloadPath if provided
+    if (typeof filtered.downloadPath === 'string' && filtered.downloadPath) {
+      const resolved = path.resolve(filtered.downloadPath);
+      filtered.downloadPath = resolved;
+    }
+    // Validate theme
+    if (filtered.theme && !['dark', 'light', 'system'].includes(filtered.theme as string)) {
+      delete filtered.theme;
+    }
+    // Validate browserCookies — only allow known browser names
+    if (filtered.browserCookies && typeof filtered.browserCookies === 'string') {
+      const allowedBrowsers = ['', 'chrome', 'firefox', 'edge', 'brave', 'opera', 'vivaldi', 'chromium'];
+      if (!allowedBrowsers.includes(filtered.browserCookies)) {
+        delete filtered.browserCookies;
+      }
+    }
+    settings.setAll(filtered);
     return { success: true };
   });
 
@@ -412,28 +442,48 @@ function setupIPC(): void {
   ipcMain.handle('open-file-location', async (_event, filePath: string) => {
     if (!filePath) return { success: false, error: 'No file path provided' };
 
+    // Resolve to absolute and validate against allowed directories
+    const resolved = path.resolve(filePath);
+    const downloadsDir = app.getPath('downloads');
+    const userHome = app.getPath('home');
+    const configuredPath = settings.get('downloadPath');
+    const allowedRoots = [downloadsDir, userHome];
+    if (configuredPath) allowedRoots.push(path.resolve(configuredPath));
+
+    const isAllowed = allowedRoots.some(root => resolved.startsWith(root + path.sep) || resolved === root);
+    if (!isAllowed) {
+      return { success: false, error: 'Path outside allowed directories' };
+    }
+
     // If the path exists (file or directory), show it directly
-    if (fs.existsSync(filePath)) {
-      shell.showItemInFolder(filePath);
+    if (fs.existsSync(resolved)) {
+      shell.showItemInFolder(resolved);
       return { success: true };
     }
 
     // File doesn't exist — try opening the parent directory instead
-    const dir = path.dirname(filePath);
+    const dir = path.dirname(resolved);
     if (fs.existsSync(dir)) {
       shell.openPath(dir);
       return { success: true };
     }
 
-    // Nothing exists — last resort, try showing the original path anyway
-    shell.showItemInFolder(filePath);
-    return { success: true };
+    return { success: false, error: 'Path not found' };
   });
 
-  // Open external link
+  // Open external link — only allow safe URL schemes
   ipcMain.handle('open-external', async (_event, url: string) => {
-    shell.openExternal(url);
-    return { success: true };
+    try {
+      const parsed = new URL(url);
+      const allowedSchemes = ['http:', 'https:', 'mailto:'];
+      if (!allowedSchemes.includes(parsed.protocol)) {
+        return { success: false, error: `Blocked URL scheme: ${parsed.protocol}` };
+      }
+      shell.openExternal(url);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Invalid URL' };
+    }
   });
 
   // Check yt-dlp availability
@@ -449,7 +499,8 @@ function setupIPC(): void {
 
   // Select cookies file (P2: Cookie Import)
   ipcMain.handle('select-cookies-file', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    if (!mainWindow) return { success: false };
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
       title: 'Select Cookies File (cookies.txt)',
       filters: [
@@ -472,7 +523,12 @@ function setupIPC(): void {
   });
 
   // Set browser cookies source (P3: Cookies from Browser)
+  // Validate against known browser names to prevent command injection via yt-dlp --cookies-from-browser
   ipcMain.handle('set-browser-cookies', async (_event, browser: string) => {
+    const allowedBrowsers = ['', 'chrome', 'firefox', 'edge', 'brave', 'opera', 'vivaldi', 'chromium'];
+    if (!allowedBrowsers.includes(browser)) {
+      return { success: false, error: 'Unknown browser name' };
+    }
     settings.set('browserCookies', browser);
     return { success: true };
   });
@@ -688,7 +744,8 @@ function setupIPC(): void {
   ipcMain.handle('select-media-file', async () => {
     const videoExts = ['mp4', 'mkv', 'webm', 'avi', 'mov', 'flv', 'wmv', 'mpg', 'mpeg', 'm4v', 'ts'];
     const audioExts = ['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'wma', 'opus'];
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    if (!mainWindow) return { success: false };
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
       title: 'Select Media File',
       filters: [
@@ -710,20 +767,31 @@ function setupIPC(): void {
 
   // Detect subtitle files alongside a media file
   ipcMain.handle('detect-subtitles', async (_event, filePath: string) => {
-    const fs = await import('fs');
-    const p = await import('path');
-    const dir = p.dirname(filePath);
-    const baseName = p.basename(filePath, p.extname(filePath));
+    if (!filePath || typeof filePath !== 'string') return [];
+    // Validate path is within allowed directories
+    const resolvedMedia = path.resolve(filePath);
+    const dlDir = app.getPath('downloads');
+    const homeDir = app.getPath('home');
+    const cfgPath = settings.get('downloadPath');
+    const roots = [dlDir, homeDir];
+    if (cfgPath) roots.push(path.resolve(cfgPath));
+    if (!roots.some(r => resolvedMedia.startsWith(r + path.sep) || resolvedMedia === r)) return [];
+
+    const dir = path.dirname(resolvedMedia);
+    const baseName = path.basename(resolvedMedia, path.extname(resolvedMedia));
     const subExts = ['.srt', '.vtt', '.ass', '.ssa', '.sbv', '.sub'];
     const results: Array<{ path: string; label: string; lang: string }> = [];
     try {
       const files = fs.readdirSync(dir);
       for (const file of files) {
-        const ext = p.extname(file).toLowerCase();
+        const ext = path.extname(file).toLowerCase();
         if (subExts.includes(ext) && file.startsWith(baseName)) {
           const langMatch = file.match(/\.([a-z]{2,3})\.[a-z]+$/i);
+          const subPath = path.join(dir, file);
+          // Ensure resolved subtitle path stays within allowed directory
+          if (!path.resolve(subPath).startsWith(dir)) continue;
           results.push({
-            path: p.join(dir, file),
+            path: subPath,
             label: langMatch ? langMatch[1].toUpperCase() : ext.slice(1).toUpperCase(),
             lang: langMatch ? langMatch[1] : 'und',
           });
@@ -740,14 +808,14 @@ function setupIPC(): void {
   });
 
   // Get saved playback position (stored in a separate JSON file)
+  // Use full base64 key (not truncated) to avoid collisions
   ipcMain.handle('get-playback-position', async (_event, filePath: string) => {
     try {
-      const fs = await import('fs');
-      const p = await import('path');
-      const posFile = p.join(app.getPath('userData'), 'playback-positions.json');
+      if (!filePath || typeof filePath !== 'string') return 0;
+      const posFile = path.join(app.getPath('userData'), 'playback-positions.json');
       if (!fs.existsSync(posFile)) return 0;
       const data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
-      const key = Buffer.from(filePath).toString('base64').substring(0, 40);
+      const key = Buffer.from(filePath).toString('base64url');
       return data[key] || 0;
     } catch { return 0; }
   });
@@ -755,14 +823,14 @@ function setupIPC(): void {
   // Save playback position
   ipcMain.handle('save-playback-position', async (_event, filePath: string, position: number) => {
     try {
-      const fs = await import('fs');
-      const p = await import('path');
-      const posFile = p.join(app.getPath('userData'), 'playback-positions.json');
+      if (!filePath || typeof filePath !== 'string') return { success: false };
+      if (typeof position !== 'number' || !isFinite(position) || position < 0) return { success: false };
+      const posFile = path.join(app.getPath('userData'), 'playback-positions.json');
       let data: Record<string, number> = {};
       if (fs.existsSync(posFile)) {
         data = JSON.parse(fs.readFileSync(posFile, 'utf-8')) as Record<string, number>;
       }
-      const key = Buffer.from(filePath).toString('base64').substring(0, 40);
+      const key = Buffer.from(filePath).toString('base64url');
       data[key] = position;
       fs.writeFileSync(posFile, JSON.stringify(data));
       return { success: true };
@@ -845,7 +913,8 @@ function setupIPC(): void {
 
   // Select file for conversion
   ipcMain.handle('select-convert-file', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    if (!mainWindow) return { success: false };
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile'],
       title: 'Select File to Convert',
       filters: [
@@ -873,7 +942,8 @@ function setupIPC(): void {
 
   // Select output directory for conversion
   ipcMain.handle('select-output-directory', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    if (!mainWindow) return { success: false };
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
       title: 'Select Output Folder',
     });
@@ -883,9 +953,20 @@ function setupIPC(): void {
     return { success: false };
   });
 
-  // Open file in its containing folder
+  // Open file in its containing folder — validate path
   ipcMain.handle('open-file-in-folder', async (_event, filePath: string) => {
-    shell.showItemInFolder(filePath);
+    if (!filePath) return { success: false, error: 'No file path provided' };
+    const resolved = path.resolve(filePath);
+    const downloadsDir = app.getPath('downloads');
+    const userHome = app.getPath('home');
+    const configuredPath = settings.get('downloadPath');
+    const allowedRoots = [downloadsDir, userHome];
+    if (configuredPath) allowedRoots.push(path.resolve(configuredPath));
+    const isAllowed = allowedRoots.some(root => resolved.startsWith(root + path.sep) || resolved === root);
+    if (!isAllowed) {
+      return { success: false, error: 'Path outside allowed directories' };
+    }
+    shell.showItemInFolder(resolved);
     return { success: true };
   });
 
@@ -963,16 +1044,22 @@ app.whenReady().then(async () => {
       filePath = '/' + filePath;
     }
 
-    // Check file exists
-    if (!fs.existsSync(filePath)) {
-      return new Response('File not found', { status: 404 });
+    // Resolve to absolute path and validate against allowed directories
+    // This prevents path traversal attacks (e.g. ../../etc/passwd)
+    const resolvedPath = path.resolve(filePath);
+    const downloadsDir = app.getPath('downloads');
+    const userHome = app.getPath('home');
+    const configuredPath = settings.get('downloadPath');
+    const allowedRoots = [downloadsDir, userHome];
+    if (configuredPath) allowedRoots.push(path.resolve(configuredPath));
+
+    const isAllowed = allowedRoots.some(root => resolvedPath.startsWith(root + path.sep) || resolvedPath === root);
+    if (!isAllowed) {
+      return new Response('Access denied: path outside allowed directories', { status: 403 });
     }
 
-    const stat = fs.statSync(filePath);
-    const fileSize = stat.size;
-
-    // Determine MIME type from extension
-    const ext = path.extname(filePath).toLowerCase();
+    // Only serve known media file extensions
+    const ext = path.extname(resolvedPath).toLowerCase();
     const mimeTypes: Record<string, string> = {
       '.mp4': 'video/mp4', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
       '.avi': 'video/x-msvideo', '.mov': 'video/quicktime', '.flv': 'video/x-flv',
@@ -980,8 +1067,20 @@ app.whenReady().then(async () => {
       '.mp3': 'audio/mpeg', '.flac': 'audio/flac', '.wav': 'audio/wav',
       '.ogg': 'audio/ogg', '.aac': 'audio/aac', '.m4a': 'audio/mp4',
       '.wma': 'audio/x-ms-wma', '.opus': 'audio/opus',
+      '.srt': 'text/plain', '.vtt': 'text/vtt', '.ass': 'text/plain',
     };
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const contentType = mimeTypes[ext];
+    if (!contentType) {
+      return new Response('Unsupported file type', { status: 403 });
+    }
+
+    // Check file exists
+    if (!fs.existsSync(resolvedPath)) {
+      return new Response('File not found', { status: 404 });
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    const fileSize = stat.size;
 
     // Handle Range requests for proper video seeking
     const rangeHeader = request.headers.get('range');
@@ -990,20 +1089,33 @@ app.whenReady().then(async () => {
       if (rangeMatch) {
         const start = parseInt(rangeMatch[1], 10);
         const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : fileSize - 1;
+
+        // Validate range bounds
+        if (start >= fileSize || end >= fileSize || start > end) {
+          return new Response('Range not satisfiable', {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${fileSize}` },
+          });
+        }
+
         const chunkSize = end - start + 1;
+        // Cap chunk size to 10MB to prevent unbounded memory allocation
+        const MAX_CHUNK = 10 * 1024 * 1024;
+        const cappedEnd = start + Math.min(chunkSize, MAX_CHUNK) - 1;
+        const cappedSize = cappedEnd - start + 1;
 
         // Read the requested byte range
-        const buffer = Buffer.alloc(chunkSize);
-        const fd = fs.openSync(filePath, 'r');
-        fs.readSync(fd, buffer, 0, chunkSize, start);
+        const buffer = Buffer.alloc(cappedSize);
+        const fd = fs.openSync(resolvedPath, 'r');
+        fs.readSync(fd, buffer, 0, cappedSize, start);
         fs.closeSync(fd);
 
         return new Response(buffer, {
           status: 206,
           headers: {
-            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Content-Range': `bytes ${start}-${cappedEnd}/${fileSize}`,
             'Accept-Ranges': 'bytes',
-            'Content-Length': String(chunkSize),
+            'Content-Length': String(cappedSize),
             'Content-Type': contentType,
           },
         });
@@ -1012,7 +1124,7 @@ app.whenReady().then(async () => {
 
     // No Range header — serve full file with Accept-Ranges to indicate support
     // Use net.fetch for efficient streaming of full file
-    return net.fetch(pathToFileURL(filePath).href).then((response) => {
+    return net.fetch(pathToFileURL(resolvedPath).href).then((response) => {
       // Clone the response but add proper headers for media streaming
       return new Response(response.body, {
         status: 200,

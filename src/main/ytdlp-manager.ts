@@ -1152,8 +1152,15 @@ export class YtdlpManager {
 
     args.push(url);
 
+    // Log download start without sensitive args (cookies, proxy credentials)
     console.log(`[GrabTube] Starting download: ${url}`);
-    console.log(`[GrabTube] Download args: ${args.join(' ')}`);
+    const safeArgs = args.filter((_arg, i, arr) => {
+      // Redact values after sensitive flags
+      const prev = i > 0 ? arr[i - 1] : '';
+      if (prev === '--cookies' || prev === '--cookies-from-browser' || prev === '--proxy') return false;
+      return true;
+    });
+    console.log(`[GrabTube] Download args: ${safeArgs.join(' ')}`);
 
     const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
     let stderrBuffer = '';

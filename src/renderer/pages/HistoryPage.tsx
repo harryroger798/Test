@@ -85,9 +85,8 @@ export const HistoryPage: React.FC = () => {
                     onClick={() => {
                       if (window.electronAPI) {
                         window.electronAPI.openExternal(item.url);
-                      } else {
-                        window.open(item.url, '_blank');
                       }
+                      // No fallback to window.open — Electron context only
                     }}
                     className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-secondary"
                     title="Open original URL"

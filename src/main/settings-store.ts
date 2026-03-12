@@ -106,7 +106,20 @@ export class SettingsManager {
   }
 
   setAll(newSettings: Record<string, unknown>): void {
-    this.settings = { ...this.settings, ...newSettings } as AppSettings;
+    // Only merge known keys from AppSettings to prevent arbitrary property injection
+    const safeKeys: Array<keyof AppSettings> = [
+      'downloadPath', 'theme', 'proxy', 'maxConcurrentDownloads',
+      'embedThumbnail', 'embedSubtitles', 'defaultVideoFormat',
+      'defaultAudioFormat', 'clipboardMonitoring', 'notifications',
+      'cookiesPath', 'browserCookies', 'setupComplete', 'featureTourComplete',
+    ];
+    const merged = { ...this.settings };
+    for (const key of safeKeys) {
+      if (key in newSettings) {
+        (merged as Record<string, unknown>)[key] = newSettings[key];
+      }
+    }
+    this.settings = merged;
     this.save();
   }
 
