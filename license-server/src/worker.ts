@@ -26,6 +26,8 @@ export interface Env {
   DB: D1Database;
   ADMIN_EMAIL: string;    // Set via wrangler secret
   ADMIN_PASSWORD: string; // Set via wrangler secret
+  MAILGUN_API_KEY: string; // Set via wrangler secret
+  GIVEAWAY_KEY: string;    // Set via wrangler secret (e.g. GT-GIFT-FREE-2026-GRAB)
 }
 
 // Shared secret for signing server responses (must match client)
@@ -38,6 +40,10 @@ const RATE_LIMIT_WINDOW_SEC = 60;
 // Admin brute-force protection
 const ADMIN_LOGIN_MAX_ATTEMPTS = 5;
 const ADMIN_LOGIN_WINDOW_SEC = 900; // 15 minutes
+
+// Giveaway constants
+const GIVEAWAY_MAX_REDEMPTIONS = 1000;
+const GIVEAWAY_NOTIFICATION_EMAIL = 'harryroger798@gmail.com';
 
 // Allowed origins for CORS
 const ALLOWED_ORIGINS = [
@@ -281,6 +287,37 @@ export default {
       if (path === '/admin/devices' && request.method === 'GET') {
         if (!await verifyAdmin(request, env)) return errorResponse('Unauthorized', 401);
         return await handleAdminDevices(request, env);
+      }
+
+      // === GIVEAWAY ENDPOINTS ===
+
+      // Hidden giveaway page
+      if ((path === '/gift' || path === '/gift/') && request.method === 'GET') {
+        return new Response(getGiveawayPageHTML(), {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Robots-Tag': 'noindex, nofollow',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            ...getCorsHeaders(request),
+          },
+        });
+      }
+
+      // Giveaway redemption API
+      if (path === '/giveaway/redeem' && request.method === 'POST') {
+        const clientIP = getClientIP(request);
+        const ipHash = await hashIP(clientIP);
+        const allowed = await checkRateLimit(env, ipHash, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SEC);
+        if (!allowed) {
+          return errorResponse('Too many requests. Please try again later.', 429);
+        }
+        return await handleGiveawayRedeem(request, env);
+      }
+
+      // Admin: view giveaway redemptions
+      if (path === '/admin/giveaway' && request.method === 'GET') {
+        if (!await verifyAdmin(request, env)) return errorResponse('Unauthorized', 401);
+        return await handleAdminGiveawayList(env);
       }
 
       // === HIDDEN ADMIN PANEL WEB UI ===
@@ -1115,6 +1152,11 @@ async function handleAdminStats(env: Env): Promise<Response> {
     'SELECT COUNT(*) as count FROM activations WHERE activated_at > datetime("now", "-7 days")'
   ).first() as { count: number };
 
+  // Giveaway redemptions count
+  const giveawayRedemptions = await env.DB.prepare(
+    'SELECT COUNT(*) as count FROM giveaway_redemptions'
+  ).first() as { count: number };
+
   return jsonResponse({
     success: true,
     stats: {
@@ -1125,6 +1167,378 @@ async function handleAdminStats(env: Env): Promise<Response> {
       proKeys: proKeys.count,
       familyKeys: familyKeys.count,
       recentActivations: recentActivations.count,
+      giveawayRedemptions: giveawayRedemptions.count,
     },
   });
+}
+
+// === GIVEAWAY HANDLER ===
+
+// HTML-escape helper to prevent XSS in email notifications
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function handleGiveawayRedeem(request: Request, env: Env): Promise<Response> {
+  // Fix #3: Wrap JSON parse in try-catch
+  let body: { name?: string; email?: string };
+  try {
+    body = await request.json() as { name?: string; email?: string };
+  } catch {
+    return errorResponse('Invalid request body', 400);
+  }
+  const name = (body.name || '').trim();
+  const email = (body.email || '').trim().toLowerCase();
+
+  if (!name || name.length < 2 || name.length > 100) {
+    return errorResponse('Please enter a valid name (2-100 characters)');
+  }
+
+  // Basic email validation
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) {
+    return errorResponse('Please enter a valid email address');
+  }
+
+  const giveawayKey = env.GIVEAWAY_KEY;
+  if (!giveawayKey) {
+    return errorResponse('Giveaway is not currently active', 503);
+  }
+
+  // Check if giveaway key exists and is valid
+  const license = await env.DB.prepare(
+    'SELECT * FROM license_keys WHERE key = ? AND revoked = 0'
+  ).bind(giveawayKey).first() as { tier: string; max_devices: number } | null;
+
+  if (!license) {
+    return errorResponse('Giveaway is no longer available', 410);
+  }
+
+  // Check if this email already redeemed
+  const existing = await env.DB.prepare(
+    'SELECT * FROM giveaway_redemptions WHERE giveaway_key = ? AND email = ?'
+  ).bind(giveawayKey, email).first();
+
+  if (existing) {
+    // Already redeemed — return the key again (idempotent)
+    const currentCount = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
+    ).bind(giveawayKey).first() as { count: number };
+    return jsonResponse({
+      success: true,
+      key: giveawayKey,
+      message: 'You have already claimed this giveaway! Here is your license key again.',
+      alreadyClaimed: true,
+      remaining: GIVEAWAY_MAX_REDEMPTIONS - currentCount.count,
+    });
+  }
+
+  // Record redemption with atomic capacity check using INSERT + subquery
+  // Fix #2: Prevent race condition by checking count atomically in the INSERT
+  const clientIP = getClientIP(request);
+  const ipHash = await hashIP(clientIP);
+
+  try {
+    const result = await env.DB.prepare(
+      `INSERT INTO giveaway_redemptions (giveaway_key, name, email, ip_hash)
+       SELECT ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM giveaway_redemptions WHERE giveaway_key = ?) < ?`
+    ).bind(giveawayKey, name, email, ipHash, giveawayKey, GIVEAWAY_MAX_REDEMPTIONS).run();
+
+    if (!result.meta.changes || result.meta.changes === 0) {
+      // Either capacity full or UNIQUE violation — check which
+      const totalRedemptions = await env.DB.prepare(
+        'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
+      ).bind(giveawayKey).first() as { count: number };
+
+      if (totalRedemptions.count >= GIVEAWAY_MAX_REDEMPTIONS) {
+        return errorResponse('Sorry, all giveaway slots have been claimed! The giveaway is full.', 410);
+      }
+      // Must be duplicate email (race condition on UNIQUE)
+      return jsonResponse({
+        success: true,
+        key: giveawayKey,
+        message: 'You have already claimed this giveaway! Here is your license key again.',
+        alreadyClaimed: true,
+        remaining: GIVEAWAY_MAX_REDEMPTIONS - totalRedemptions.count,
+      });
+    }
+  } catch {
+    // UNIQUE constraint violation (concurrent duplicate email)
+    const currentCount = await env.DB.prepare(
+      'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
+    ).bind(giveawayKey).first() as { count: number };
+    return jsonResponse({
+      success: true,
+      key: giveawayKey,
+      message: 'You have already claimed this giveaway! Here is your license key again.',
+      alreadyClaimed: true,
+      remaining: GIVEAWAY_MAX_REDEMPTIONS - currentCount.count,
+    });
+  }
+
+  // Get fresh count after successful insert
+  const newTotal = await env.DB.prepare(
+    'SELECT COUNT(*) as count FROM giveaway_redemptions WHERE giveaway_key = ?'
+  ).bind(giveawayKey).first() as { count: number };
+
+  // Send email notification to admin (fire and forget — don't block response)
+  sendGiveawayNotification(env, name, email, newTotal.count).catch(() => { /* ignore email failures */ });
+
+  return jsonResponse({
+    success: true,
+    key: giveawayKey,
+    message: 'Congratulations! Here is your free GrabTube Pro license key.',
+    alreadyClaimed: false,
+    remaining: GIVEAWAY_MAX_REDEMPTIONS - newTotal.count,
+    redemptionNumber: newTotal.count,
+  });
+}
+
+// Send email notification via Mailgun
+async function sendGiveawayNotification(env: Env, name: string, email: string, count: number): Promise<void> {
+  if (!env.MAILGUN_API_KEY) return;
+
+  const formData = new URLSearchParams();
+  formData.append('from', 'GrabTube Giveaway <noreply@grabtube.org>');
+  formData.append('to', GIVEAWAY_NOTIFICATION_EMAIL);
+  formData.append('subject', `[GrabTube Giveaway] New Lead #${count} — ${name}`);
+  // Fix #1: HTML-escape user inputs to prevent XSS in email
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+  formData.append('html', `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
+      <h2 style="color:#22c55e">New Giveaway Redemption #${count}/${GIVEAWAY_MAX_REDEMPTIONS}</h2>
+      <table style="width:100%;border-collapse:collapse">
+        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Name</td><td style="padding:8px;border-bottom:1px solid #eee">${safeName}</td></tr>
+        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Email</td><td style="padding:8px;border-bottom:1px solid #eee">${safeEmail}</td></tr>
+        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Redemption #</td><td style="padding:8px;border-bottom:1px solid #eee">${count} of ${GIVEAWAY_MAX_REDEMPTIONS}</td></tr>
+        <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">Remaining</td><td style="padding:8px;border-bottom:1px solid #eee">${GIVEAWAY_MAX_REDEMPTIONS - count}</td></tr>
+        <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${new Date().toISOString()}</td></tr>
+      </table>
+      <p style="margin-top:20px;color:#666;font-size:12px">This is an automated notification from GrabTube License Server.</p>
+    </div>
+  `);
+
+  await fetch('https://api.mailgun.net/v3/grabtube.org/messages', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + btoa('api:' + env.MAILGUN_API_KEY),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: formData.toString(),
+  });
+}
+
+// Admin: list giveaway redemptions
+async function handleAdminGiveawayList(env: Env): Promise<Response> {
+  const redemptions = await env.DB.prepare(
+    'SELECT * FROM giveaway_redemptions ORDER BY redeemed_at DESC LIMIT 200'
+  ).all();
+
+  const total = await env.DB.prepare(
+    'SELECT COUNT(*) as count FROM giveaway_redemptions'
+  ).first() as { count: number };
+
+  return jsonResponse({
+    success: true,
+    redemptions: redemptions.results,
+    total: total.count,
+    maxRedemptions: GIVEAWAY_MAX_REDEMPTIONS,
+    remaining: GIVEAWAY_MAX_REDEMPTIONS - total.count,
+  });
+}
+
+// === GIVEAWAY PAGE HTML ===
+function getGiveawayPageHTML(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>GrabTube — Free Pro License Giveaway</title>
+  <style>
+    :root {
+      --bg: #030712; --bg2: #111827; --bg3: #1f2937; --border: #374151;
+      --text: #f9fafb; --muted: #9ca3af; --green: #22c55e; --green2: #16a34a;
+      --red: #ef4444; --blue: #3b82f6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .container { width: 100%; max-width: 520px; }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 20px; padding: 2.5rem; position: relative; overflow: hidden; }
+    .card::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 300px; height: 300px; background: radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%); pointer-events: none; }
+    .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; position: relative; }
+    .logo svg { width: 32px; height: 32px; }
+    .logo span { font-size: 1.3rem; font-weight: 800; color: var(--green); }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.25); color: #86efac; font-size: 12px; font-weight: 600; margin-bottom: 16px; letter-spacing: 0.03em; }
+    h1 { font-size: 1.75rem; font-weight: 800; line-height: 1.2; margin-bottom: 8px; position: relative; }
+    h1 .accent { color: var(--green); }
+    .subtitle { color: var(--muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 28px; position: relative; }
+    .features { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 28px; position: relative; }
+    .feature { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); }
+    .feature svg { width: 16px; height: 16px; color: var(--green); flex-shrink: 0; }
+    .form-group { margin-bottom: 14px; position: relative; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .form-group input { width: 100%; padding: 14px 16px; background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 1rem; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+    .form-group input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,197,94,0.12); }
+    .form-group input::placeholder { color: #6b7280; }
+    .btn { width: 100%; padding: 16px; border: none; border-radius: 12px; background: var(--green); color: #000; font-size: 1.05rem; font-weight: 800; cursor: pointer; transition: all 0.2s; letter-spacing: 0.01em; position: relative; }
+    .btn:hover { background: var(--green2); transform: translateY(-1px); box-shadow: 0 8px 25px rgba(34,197,94,0.2); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .error-msg { color: var(--red); font-size: 0.85rem; margin-top: 8px; display: none; }
+    .slots { text-align: center; margin-top: 16px; font-size: 0.8rem; color: var(--muted); position: relative; }
+    .slots strong { color: var(--green); }
+
+    /* Success state */
+    .success-card { display: none; }
+    .success-card.visible { display: block; }
+    .form-card.hidden { display: none; }
+    .key-display { background: var(--bg3); border: 2px solid var(--green); border-radius: 12px; padding: 18px; text-align: center; margin: 20px 0; }
+    .key-display .key { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 1.25rem; font-weight: 700; color: var(--green); letter-spacing: 0.05em; word-break: break-all; }
+    .copy-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 0.85rem; cursor: pointer; margin-top: 10px; transition: all 0.15s; }
+    .copy-btn:hover { color: var(--green); border-color: var(--green); }
+    .instructions { background: var(--bg3); border-radius: 12px; padding: 16px; margin-top: 16px; }
+    .instructions h3 { font-size: 0.9rem; color: var(--green); margin-bottom: 10px; }
+    .instructions ol { padding-left: 20px; }
+    .instructions li { font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; line-height: 1.4; }
+    .download-link { display: block; text-align: center; margin-top: 16px; color: var(--green); font-weight: 700; font-size: 0.95rem; text-decoration: none; padding: 12px; border: 1px solid var(--green); border-radius: 10px; transition: all 0.15s; }
+    .download-link:hover { background: rgba(34,197,94,0.08); }
+    .confetti { position: fixed; pointer-events: none; z-index: 999; }
+
+    @media (max-width: 480px) {
+      .card { padding: 1.5rem; }
+      h1 { font-size: 1.4rem; }
+      .features { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <!-- CLAIM FORM -->
+  <div id="form-card" class="card form-card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#22c55e" opacity="0.15"/><path d="M8 12l3 3 5-6" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>GrabTube</span>
+    </div>
+    <div class="badge">LIMITED GIVEAWAY</div>
+    <h1>Get <span class="accent">GrabTube Pro</span> Free</h1>
+    <p class="subtitle">Claim your free Pro license key — unlimited downloads, 8K quality, 1800+ sites. No credit card needed.</p>
+    <div class="features">
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Unlimited downloads</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Up to 8K quality</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>1800+ websites</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Built-in player</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Format converter</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Lifetime access</div>
+    </div>
+    <form id="claim-form" onsubmit="handleClaim(event)">
+      <div class="form-group">
+        <label>Your Name</label>
+        <input type="text" id="input-name" placeholder="Enter your name" required minlength="2" maxlength="100" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" id="input-email" placeholder="you@example.com" required maxlength="200" autocomplete="email">
+      </div>
+      <div id="error-msg" class="error-msg"></div>
+      <button type="submit" class="btn" id="claim-btn">Claim Free License Key</button>
+    </form>
+    <div class="slots" id="slots-info"></div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div id="success-card" class="card success-card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#22c55e" opacity="0.15"/><path d="M8 12l3 3 5-6" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>GrabTube</span>
+    </div>
+    <div class="badge" style="background:rgba(34,197,94,0.2)">CLAIMED SUCCESSFULLY</div>
+    <h1>Your <span class="accent">Pro License</span> Key</h1>
+    <p class="subtitle" id="success-msg">Congratulations! Here is your free GrabTube Pro license key.</p>
+    <div class="key-display">
+      <div class="key" id="license-key-display"></div>
+      <button class="copy-btn" onclick="copyKey()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span id="copy-text">Copy Key</span>
+      </button>
+    </div>
+    <div class="instructions">
+      <h3>How to Activate</h3>
+      <ol>
+        <li>Download GrabTube from <a href="https://www.grabtube.org/#download" style="color:var(--green)" target="_blank">grabtube.org</a></li>
+        <li>Open the app and go to <strong>Settings</strong></li>
+        <li>Click <strong>License Activation</strong></li>
+        <li>Paste your key and click <strong>Activate</strong></li>
+      </ol>
+    </div>
+    <a href="https://www.grabtube.org/#download" class="download-link" target="_blank">Download GrabTube Desktop — Free</a>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+
+async function handleClaim(e) {
+  e.preventDefault();
+  const btn = document.getElementById('claim-btn');
+  const errEl = document.getElementById('error-msg');
+  const name = document.getElementById('input-name').value.trim();
+  const email = document.getElementById('input-email').value.trim();
+
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Claiming...';
+
+  try {
+    const r = await fetch(API + '/giveaway/redeem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email })
+    });
+    const d = await r.json();
+
+    if (d.success && d.key) {
+      document.getElementById('license-key-display').textContent = d.key;
+      document.getElementById('success-msg').textContent = d.message || 'Here is your free license key!';
+      document.getElementById('form-card').classList.add('hidden');
+      document.getElementById('success-card').classList.add('visible');
+      // Mini confetti
+      for (let i = 0; i < 30; i++) {
+        const c = document.createElement('div');
+        c.className = 'confetti';
+        c.style.cssText = 'position:fixed;width:8px;height:8px;border-radius:50%;top:-10px;left:' + (Math.random()*100) + 'vw;background:' + ['#22c55e','#3b82f6','#eab308','#a855f7','#ef4444'][Math.floor(Math.random()*5)] + ';animation:fall ' + (1.5+Math.random()*2) + 's ease-out forwards;z-index:999;';
+        document.body.appendChild(c);
+        setTimeout(() => c.remove(), 4000);
+      }
+      const style = document.createElement('style');
+      style.textContent = '@keyframes fall { to { transform: translateY(110vh) rotate(' + (Math.random()*720-360) + 'deg); opacity: 0; } }';
+      document.head.appendChild(style);
+    } else {
+      errEl.textContent = d.error || 'Something went wrong. Please try again.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Claim Free License Key';
+    }
+  } catch (err) {
+    errEl.textContent = 'Network error. Please check your connection and try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Claim Free License Key';
+  }
+}
+
+function copyKey() {
+  const key = document.getElementById('license-key-display').textContent;
+  navigator.clipboard.writeText(key).then(() => {
+    document.getElementById('copy-text').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('copy-text').textContent = 'Copy Key'; }, 2000);
+  });
+}
+
+// Enter key support
+document.getElementById('input-email').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('claim-form').requestSubmit(); });
+</script>
+</body>
+</html>`;
 }

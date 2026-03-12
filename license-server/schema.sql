@@ -41,8 +41,20 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Giveaway redemptions table (v1.0.40)
+CREATE TABLE IF NOT EXISTS giveaway_redemptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  giveaway_key TEXT NOT NULL,                -- references license_keys.key
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  ip_hash TEXT,                              -- SHA256 hash of client IP (abuse prevention)
+  redeemed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(giveaway_key, email)               -- 1 email = 1 redemption enforced at DB level
+);
+
 -- Index for fast lookups
 CREATE INDEX IF NOT EXISTS idx_activations_key ON activations(license_key);
 CREATE INDEX IF NOT EXISTS idx_activations_device ON activations(device_id);
 CREATE INDEX IF NOT EXISTS idx_license_keys_key ON license_keys(key);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_ip ON rate_limits(ip_hash, endpoint, created_at);
+CREATE INDEX IF NOT EXISTS idx_giveaway_email ON giveaway_redemptions(giveaway_key, email);
