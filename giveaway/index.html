@@ -574,7 +574,7 @@
 
         /* Success */
         licenseKey.textContent = data.key || data.license_key || '';
-        expiryDate.textContent = formatDate(data.expires_at || '');
+        expiryDate.textContent = formatDate(data.expiresAt || data.expires_at || '');
         if (data.remaining !== undefined) {
           remainingSlots.textContent = data.remaining.toLocaleString();
         } else {
