@@ -354,6 +354,163 @@
       </div>
     </div>
 
+    <!-- Giveaway Section — injected after React mount -->
+    <style>
+      #giveaway-section {
+        display: none;
+        background: linear-gradient(180deg, rgba(234,179,8,0.06) 0%, rgba(34,197,94,0.04) 50%, transparent 100%);
+        border-top: 1px solid rgba(234,179,8,0.15);
+        border-bottom: 1px solid rgba(34,197,94,0.1);
+        padding: 72px 20px;
+        position: relative;
+        overflow: hidden;
+      }
+      #giveaway-section::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 700px;
+        height: 700px;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(circle, rgba(234,179,8,0.06) 0%, rgba(34,197,94,0.04) 40%, transparent 70%);
+        pointer-events: none;
+      }
+      .giveaway-inner {
+        max-width: 680px;
+        margin: 0 auto;
+        position: relative;
+        z-index: 1;
+        text-align: center;
+      }
+      .giveaway-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 18px;
+        border-radius: 9999px;
+        background: rgba(234,179,8,0.12);
+        border: 1px solid rgba(234,179,8,0.25);
+        color: #fde68a;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 20px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+      .giveaway-badge .gift-icon { font-size: 16px; }
+      .giveaway-heading {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 38px;
+        font-weight: 800;
+        color: #fff;
+        margin-bottom: 12px;
+        line-height: 1.15;
+      }
+      .giveaway-heading .gold { color: #eab308; }
+      .giveaway-heading .green { color: #22c55e; }
+      .giveaway-subtext {
+        color: #9ca3af;
+        font-size: 16px;
+        margin-bottom: 32px;
+        line-height: 1.6;
+      }
+      .giveaway-features {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        max-width: 480px;
+        margin: 0 auto 32px;
+        text-align: left;
+      }
+      .giveaway-features .gf-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: #d1d5db;
+      }
+      .giveaway-features .gf-icon {
+        width: 20px;
+        height: 20px;
+        color: #22c55e;
+        flex-shrink: 0;
+      }
+      .giveaway-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 18px 44px;
+        border: none;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #eab308 0%, #22c55e 100%);
+        color: #000;
+        font-size: 18px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: all 0.25s;
+        text-decoration: none;
+        letter-spacing: 0.01em;
+      }
+      .giveaway-cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(234,179,8,0.25);
+      }
+      .giveaway-slots {
+        margin-top: 16px;
+        color: #6b7280;
+        font-size: 13px;
+      }
+      .giveaway-slots strong { color: #eab308; }
+      @media (max-width: 640px) {
+        #giveaway-section { padding: 48px 16px; }
+        .giveaway-heading { font-size: 28px; }
+        .giveaway-features { grid-template-columns: 1fr; }
+        .giveaway-cta { padding: 16px 32px; font-size: 16px; }
+      }
+    </style>
+
+    <div id="giveaway-section">
+      <div class="giveaway-inner">
+        <div class="giveaway-badge">
+          <span class="gift-icon">&#127873;</span>
+          Limited Time Giveaway
+        </div>
+        <h2 class="giveaway-heading">
+          Get <span class="gold">3 Months Free</span><br/>
+          <span class="green">GrabTube Pro</span>
+        </h2>
+        <p class="giveaway-subtext">
+          We're giving away <strong style="color:#eab308">1,000 free Pro license keys</strong> — unlimited downloads,
+          8K quality, zero restrictions. Enter your name &amp; email to claim yours instantly.
+        </p>
+        <div class="giveaway-features">
+          <div class="gf-item">
+            <svg class="gf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Unlimited Downloads
+          </div>
+          <div class="gf-item">
+            <svg class="gf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Up to 8K Quality
+          </div>
+          <div class="gf-item">
+            <svg class="gf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            1800+ Websites
+          </div>
+          <div class="gf-item">
+            <svg class="gf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            3-Month Pro Trial
+          </div>
+        </div>
+        <a href="https://grabtube-license.grabtube-app.workers.dev/gift" class="giveaway-cta" target="_blank" rel="noopener">
+          &#127873; Claim Your Free Key
+        </a>
+        <p class="giveaway-slots">
+          Limited to <strong>1,000 keys</strong> — first come, first served
+        </p>
+      </div>
+    </div>
+
     <script>
       // Inject the "Try It Free" section into the React-rendered page
       // after the supported platforms marquee section
@@ -410,7 +567,10 @@
         // Try immediately, then with MutationObserver for React hydration
         if (!inject()) {
           const observer = new MutationObserver(() => {
-            if (inject()) observer.disconnect();
+            if (inject()) {
+              injectGiveaway();
+              observer.disconnect();
+            }
           });
           observer.observe(document.getElementById('root'), { childList: true, subtree: true });
 
@@ -418,7 +578,29 @@
           setTimeout(() => {
             observer.disconnect();
             inject();
+            injectGiveaway();
           }, 5000);
+        } else {
+          injectGiveaway();
+        }
+
+        // Inject giveaway section before the FAQ section (near bottom)
+        function injectGiveaway() {
+          const giveawaySection = document.getElementById('giveaway-section');
+          if (!giveawaySection || giveawaySection.style.display === 'block') return;
+
+          const main = document.querySelector('main');
+          if (!main) return;
+
+          // Find the footer or the last section-divider to insert before it
+          const footer = document.querySelector('footer');
+          if (footer) {
+            footer.parentNode.insertBefore(giveawaySection, footer);
+          } else {
+            // Fallback: append to main
+            main.appendChild(giveawaySection);
+          }
+          giveawaySection.style.display = 'block';
         }
 
         // Handle Grab button click — redirect to /try?url=...
