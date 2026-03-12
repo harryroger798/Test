@@ -172,7 +172,10 @@ export class ConverterManager {
       const ffmpegDir = path.dirname(this.ffmpegPath);
       const ffmpegBasename = path.basename(this.ffmpegPath);
       const ffprobeBasename = ffmpegBasename.replace('ffmpeg', 'ffprobe');
-      const probePath = path.join(ffmpegDir, ffprobeBasename);
+      // If using system PATH fallback, use bare 'ffprobe' directly
+      const probePath = this.ffmpegPath === 'ffmpeg'
+        ? 'ffprobe'
+        : path.join(ffmpegDir, ffprobeBasename);
 
       let totalDuration = 0;
 
@@ -231,9 +234,14 @@ export class ConverterManager {
     if (outputFormat === 'gif') {
       const fps = options.fps || '15';
       const height = options.maxHeight || '480';
+      // Preserve maxDuration before clearing args
+      const maxDuration = options.maxDuration;
       // Rebuild args from scratch for GIF instead of using args.length=0 mutation
       args.splice(0, args.length);
       args.push('-i', inputPath, '-y');
+      if (maxDuration) {
+        args.push('-t', maxDuration);
+      }
       args.push('-vf', `fps=${fps},scale=-1:${height}:flags=lanczos`);
       args.push('-progress', 'pipe:1');
     } else if (outputFormat === 'mp4') {

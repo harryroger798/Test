@@ -530,6 +530,13 @@ export class YtdlpManager {
    */
   async initiateOAuth2Login(): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
+      let settled = false;
+      const safeResolve = (value: { success: boolean; error?: string }) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+
       const args = [
         '--username', 'oauth2',
         '--password', '',
@@ -555,28 +562,27 @@ export class YtdlpManager {
 
       proc.on('close', (code) => {
         if (code === 0) {
-          // Mark token as available
+          // Mark token as available — use recursive mkdirSync unconditionally (no TOCTOU)
           if (this.oauth2TokenPath) {
-            const dir = path.dirname(this.oauth2TokenPath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.mkdirSync(path.dirname(this.oauth2TokenPath), { recursive: true });
             fs.writeFileSync(this.oauth2TokenPath, JSON.stringify({ authenticated: true, timestamp: Date.now() }));
           }
           console.log('[GrabTube] OAuth2 login successful');
-          resolve({ success: true });
+          safeResolve({ success: true });
         } else {
           console.warn('[GrabTube] OAuth2 login failed:', stderr);
-          resolve({ success: false, error: stderr || 'OAuth2 login failed' });
+          safeResolve({ success: false, error: stderr || 'OAuth2 login failed' });
         }
       });
 
       proc.on('error', (err) => {
-        resolve({ success: false, error: err.message });
+        safeResolve({ success: false, error: err.message });
       });
 
       // Timeout after 5 minutes (user needs to complete browser auth)
       setTimeout(() => {
         proc.kill();
-        resolve({ success: false, error: 'OAuth2 login timed out. Please try again.' });
+        safeResolve({ success: false, error: 'OAuth2 login timed out. Please try again.' });
       }, 300000);
     });
   }
@@ -594,7 +600,11 @@ export class YtdlpManager {
       : path.join(os.homedir(), '.config', 'GrabTube');
     const ytdlpCache = path.join(cacheDir, 'youtube-oauth2');
     if (fs.existsSync(ytdlpCache)) {
-      fs.rmSync(ytdlpCache, { recursive: true, force: true });
+      // Check it's actually a directory and not a symlink before recursive delete
+      const stat = fs.lstatSync(ytdlpCache);
+      if (stat.isDirectory() && !stat.isSymbolicLink()) {
+        fs.rmSync(ytdlpCache, { recursive: true, force: true });
+      }
     }
     console.log('[GrabTube] OAuth2 token removed');
   }
@@ -670,6 +680,10 @@ export class YtdlpManager {
 
   async getVideoInfo(url: string, proxy?: string, cookiesPath?: string, browserCookies?: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const safeResolve = (value: VideoInfo) => { if (!settled) { settled = true; resolve(value); } };
+      const safeReject = (err: Error) => { if (!settled) { settled = true; reject(err); } };
+
       const args = [
         '--dump-json',
         '--no-download',
@@ -690,8 +704,17 @@ export class YtdlpManager {
       const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
       let stdout = '';
       let stderr = '';
+      const MAX_STDOUT = 50 * 1024 * 1024; // 50MB limit to prevent unbounded memory growth
 
-      proc.stdout.on('data', (data) => { stdout += data.toString(); });
+      proc.stdout.on('data', (data) => {
+        if (stdout.length < MAX_STDOUT) {
+          stdout += data.toString();
+        } else if (stdout.length < MAX_STDOUT + 100) {
+          // Only warn once when we cross the threshold
+          stdout += '\n[TRUNCATED]';
+          console.warn('[GrabTube] stdout exceeded 50MB limit, truncating');
+        }
+      });
       proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
       proc.on('close', (code) => {
@@ -699,21 +722,21 @@ export class YtdlpManager {
           try {
             const raw = JSON.parse(stdout);
             const info = this.parseVideoInfo(raw);
-            resolve(info);
+            safeResolve(info);
           } catch {
-            reject(new Error('Failed to parse video info'));
+            safeReject(new Error('Failed to parse video info'));
           }
         } else {
-          reject(new Error(stderr || 'Failed to fetch video information'));
+          safeReject(new Error(stderr || 'Failed to fetch video information'));
         }
       });
 
-      proc.on('error', (err) => reject(err));
+      proc.on('error', (err) => safeReject(err));
 
       // Timeout after 60 seconds (increased for platforms needing impersonation)
       setTimeout(() => {
         proc.kill();
-        reject(new Error('Timed out fetching video info'));
+        safeReject(new Error('Timed out fetching video info'));
       }, 60000);
     });
   }

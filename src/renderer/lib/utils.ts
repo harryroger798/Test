@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatFileSize(bytes: number | null): string {
-  if (!bytes) return 'Unknown';
+  if (bytes === null || bytes === undefined || bytes < 0) return 'Unknown';
+  if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
   let size = bytes;
   let unitIndex = 0;
@@ -28,7 +29,8 @@ export function formatDuration(seconds: number): string {
 }
 
 export function formatViews(count: number): string {
-  if (!count) return '';
+  if (count === null || count === undefined) return '';
+  if (count === 0) return '0 views';
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M views`;
   if (count >= 1000) return `${(count / 1000).toFixed(1)}K views`;
   return `${count} views`;

@@ -7,6 +7,8 @@ export const HistoryPage: React.FC = () => {
   const { history, clearHistory, setUrl, setCurrentPage, fetchVideoInfo } = useDownloadStore();
 
   const handleRedownload = (url: string) => {
+    if (!url || typeof url !== 'string') return;
+    try { new URL(url); } catch { return; }
     setUrl(url);
     setCurrentPage('home');
     fetchVideoInfo(url);

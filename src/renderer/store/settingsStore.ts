@@ -103,8 +103,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     // Apply theme to DOM
     if (theme === 'light') {
       document.documentElement.classList.add('light');
-    } else {
+      document.documentElement.classList.remove('dark');
+    } else if (theme === 'dark') {
       document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+    } else {
+      // system: respect OS preference
+      document.documentElement.classList.remove('light', 'dark');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.classList.add(prefersDark ? 'dark' : 'light');
     }
   },
 

@@ -151,11 +151,24 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
     })),
 
   // History
-  history: JSON.parse(localStorage.getItem('grabtube-history') || '[]'),
+  history: (() => {
+    try {
+      const raw = localStorage.getItem('grabtube-history');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed as DownloadItem[] : [];
+    } catch {
+      return [];
+    }
+  })(),
   addToHistory: (item) =>
     set((state) => {
       const newHistory = [item, ...state.history].slice(0, 100);
-      localStorage.setItem('grabtube-history', JSON.stringify(newHistory));
+      try {
+        localStorage.setItem('grabtube-history', JSON.stringify(newHistory));
+      } catch (e) {
+        console.warn('Failed to persist history to localStorage:', e);
+      }
       return { history: newHistory };
     }),
   clearHistory: () => {

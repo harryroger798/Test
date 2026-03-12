@@ -10,11 +10,11 @@ interface VideoCardProps {
 
 export const VideoCard: React.FC<VideoCardProps> = ({ info }) => {
   const handleOpenOriginal = () => {
+    const url = info.webpage_url;
+    if (!url || !/^https?:\/\//i.test(url)) return;
     if (window.electronAPI) {
-      window.electronAPI.openExternal(info.webpage_url);
+      window.electronAPI.openExternal(url);
     }
-    // No fallback to window.open — in Electron context window.open can
-    // bypass security restrictions. The electronAPI path is the only safe way.
   };
 
   return (
