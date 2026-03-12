@@ -661,10 +661,17 @@ export class YtdlpManager {
     }
 
     // Browser cookies: explicit setting > auto-detected > none
+    // Validate browser name against allowlist to prevent injection via --cookies-from-browser
+    const ALLOWED_BROWSERS = new Set(['chrome', 'firefox', 'edge', 'brave', 'opera', 'vivaldi', 'chromium', 'safari']);
     const effectiveBrowser = browserCookies ||
       (platform === 'youtube' && !cookiesPath && !this.hasOAuth2Token() && this.autoBrowser ? this.autoBrowser : undefined);
     if (effectiveBrowser) {
-      args.push('--cookies-from-browser', effectiveBrowser);
+      const browserName = effectiveBrowser.split(':')[0].toLowerCase();
+      if (ALLOWED_BROWSERS.has(browserName)) {
+        args.push('--cookies-from-browser', effectiveBrowser);
+      } else {
+        console.warn(`[GrabTube] Rejected invalid browser name: ${browserName}`);
+      }
     }
 
     // Use bundled FFmpeg if available
@@ -715,7 +722,12 @@ export class YtdlpManager {
           console.warn('[GrabTube] stdout exceeded 50MB limit, truncating');
         }
       });
-      proc.stderr.on('data', (data) => { stderr += data.toString(); });
+      const MAX_STDERR = 1 * 1024 * 1024; // 1MB limit for stderr
+      proc.stderr.on('data', (data) => {
+        if (stderr.length < MAX_STDERR) {
+          stderr += data.toString();
+        }
+      });
 
       proc.on('close', (code) => {
         if (code === 0 && stdout) {
@@ -1187,6 +1199,7 @@ export class YtdlpManager {
 
     const proc = spawn(this.ytdlpPath, args, { env: this.getSpawnEnv() });
     let stderrBuffer = '';
+    const MAX_STDERR_BUF = 512 * 1024; // 512KB cap for stderr buffer
     let stdoutRemainder = '';
     let stderrRemainder = '';
 
@@ -1215,7 +1228,9 @@ export class YtdlpManager {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        stderrBuffer += trimmed + '\n';
+        if (stderrBuffer.length < MAX_STDERR_BUF) {
+          stderrBuffer += trimmed + '\n';
+        }
         console.log(`[GrabTube] stderr: ${trimmed}`);
 
         // First, try to parse as progress/filename info (handles [Merger], [ExtractAudio], [download] Destination)

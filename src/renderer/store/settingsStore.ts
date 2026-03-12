@@ -93,12 +93,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   setDownloadPath: (path) => {
-    set({ downloadPath: path });
     get().updateSettings({ downloadPath: path });
   },
 
   setTheme: (theme) => {
-    set({ theme });
     get().updateSettings({ theme });
     // Apply theme to DOM
     if (theme === 'light') {
@@ -116,17 +114,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   },
 
   setProxy: (proxy) => {
-    set({ proxy });
     get().updateSettings({ proxy });
   },
 
   setCookiesPath: (path) => {
-    set({ cookiesPath: path });
     get().updateSettings({ cookiesPath: path });
   },
 
   setBrowserCookies: (browser) => {
-    set({ browserCookies: browser });
     get().updateSettings({ browserCookies: browser });
   },
 }));

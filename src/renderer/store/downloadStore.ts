@@ -156,7 +156,12 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
       const raw = localStorage.getItem('grabtube-history');
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed as DownloadItem[] : [];
+      if (!Array.isArray(parsed)) return [];
+      // Validate each item has required fields to handle schema changes
+      return parsed.filter((item: unknown): item is DownloadItem => {
+        const d = item as Record<string, unknown>;
+        return typeof d?.id === 'string' && typeof d?.url === 'string' && typeof d?.status === 'string';
+      });
     } catch {
       return [];
     }

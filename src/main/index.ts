@@ -876,6 +876,46 @@ function setupIPC(): void {
       return { success: false, error: check.reason };
     }
 
+    // Validate inputPath against allowed directories
+    if (!options.inputPath || typeof options.inputPath !== 'string') {
+      return { success: false, error: 'Invalid input path' };
+    }
+    const resolvedInput = path.resolve(options.inputPath);
+    const convAllowedRoots = [app.getPath('downloads'), app.getPath('home')];
+    const convCfgPath = settings.get('downloadPath');
+    if (convCfgPath) convAllowedRoots.push(path.resolve(convCfgPath));
+    if (!convAllowedRoots.some(r => resolvedInput.startsWith(r + path.sep) || resolvedInput === r)) {
+      return { success: false, error: 'Input path outside allowed directories' };
+    }
+
+    // Validate outputFormat is a known format
+    const allowedFormats = ['mp4', 'mkv', 'webm', 'avi', 'mov', 'mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'gif', 'png', 'jpg', 'jpeg', 'webp', 'avif', 'bmp', 'tiff', 'srt', 'vtt', 'ass', 'ssa', 'sbv', 'sub'];
+    if (!allowedFormats.includes(options.outputFormat)) {
+      return { success: false, error: 'Unsupported output format' };
+    }
+
+    // Validate outputDir if provided
+    if (options.outputDir) {
+      const resolvedOut = path.resolve(options.outputDir);
+      if (!convAllowedRoots.some(r => resolvedOut.startsWith(r + path.sep) || resolvedOut === r)) {
+        return { success: false, error: 'Output directory outside allowed directories' };
+      }
+    }
+
+    // Validate conversion options (bitrate, fps, etc.) against safe patterns
+    if (options.options) {
+      const isValidNum = (v: string) => /^\d+(\.\d+)?$/.test(v);
+      const isValidBitrate = (v: string) => /^\d+[kKmM]?$/.test(v);
+      for (const [key, val] of Object.entries(options.options)) {
+        if (['fps', 'maxHeight', 'maxDuration'].includes(key) && !isValidNum(val)) {
+          return { success: false, error: `Invalid ${key} value` };
+        }
+        if (['videoBitrate', 'audioBitrate'].includes(key) && !isValidBitrate(val)) {
+          return { success: false, error: `Invalid ${key} value` };
+        }
+      }
+    }
+
     const conversionId = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     // Run conversion in background
@@ -1104,13 +1144,18 @@ app.whenReady().then(async () => {
         const cappedEnd = start + Math.min(chunkSize, MAX_CHUNK) - 1;
         const cappedSize = cappedEnd - start + 1;
 
-        // Read the requested byte range
-        const buffer = Buffer.alloc(cappedSize);
-        const fd = fs.openSync(resolvedPath, 'r');
-        fs.readSync(fd, buffer, 0, cappedSize, start);
-        fs.closeSync(fd);
+        // Use streaming read instead of sync I/O to avoid blocking the main process
+        const stream = fs.createReadStream(resolvedPath, { start, end: cappedEnd });
+        const readable = new ReadableStream({
+          start(controller) {
+            stream.on('data', (chunk: Buffer) => controller.enqueue(chunk));
+            stream.on('end', () => controller.close());
+            stream.on('error', (err) => controller.error(err));
+          },
+          cancel() { stream.destroy(); },
+        });
 
-        return new Response(buffer, {
+        return new Response(readable, {
           status: 206,
           headers: {
             'Content-Range': `bytes ${start}-${cappedEnd}/${fileSize}`,

@@ -19,6 +19,7 @@ export function formatFileSize(bytes: number | null): string {
 }
 
 export function formatDuration(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '0:00';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
@@ -28,7 +29,7 @@ export function formatDuration(seconds: number): string {
   return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
-export function formatViews(count: number): string {
+export function formatViews(count: number | null | undefined): string {
   if (count === null || count === undefined) return '';
   if (count === 0) return '0 views';
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M views`;
