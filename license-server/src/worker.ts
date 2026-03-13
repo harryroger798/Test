@@ -836,6 +836,10 @@ function getAdminPanelHTML(): string {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span>Devices</span>
     </div>
+    <div class="nav-item" data-page="mac-instructions" onclick="switchPage('mac-instructions')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-6h-2v6zm0-8h2V7h-2v2z"/></svg>
+      <span>Mac Guide</span>
+    </div>
     <div class="logout-btn" onclick="doLogout()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       <span>Logout</span>
@@ -890,6 +894,46 @@ function getAdminPanelHTML(): string {
           <thead><tr><th>Device ID</th><th>Device Name</th><th>License Key</th><th>Tier</th><th>Status</th><th>Activated</th><th>Last Seen</th></tr></thead>
           <tbody id="devices-body"></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- MAC INSTRUCTIONS PAGE -->
+    <div id="page-mac-instructions" class="hidden">
+      <h2 class="page-title">macOS Installation Guide</h2>
+      <p style="color:var(--muted);margin-bottom:1rem">Copy and share these instructions with buyers who need help installing on macOS (unsigned app).</p>
+      <div class="generate-card" style="max-width:700px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+          <h3 style="margin:0">Installation Instructions</h3>
+          <button class="btn btn-primary btn-sm" onclick="copyMacInstructions()">Copy to Clipboard</button>
+        </div>
+        <div id="mac-instructions-text" style="background:var(--bg3);border-radius:8px;padding:1.25rem;font-size:0.9rem;line-height:1.7;color:var(--text);white-space:pre-wrap;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+How to Install GrabTube on macOS (No Certificate)
+
+Method 1: Right-Click > Open (Easiest)
+1. Download GrabTube .dmg from grabtube.org
+2. Right-click (or Control+click) the .dmg file > select "Open"
+3. Click "Open" in the warning dialog
+4. Drag GrabTube to Applications folder
+5. Go to Applications, Right-click GrabTube.app > "Open" > click "Open" again
+6. Done! App will open normally from now on.
+
+Method 2: System Settings (if Method 1 fails)
+1. Double-click the .dmg (it will be blocked)
+2. Go to Apple Menu > System Settings > Privacy &amp; Security
+3. Scroll to Security section > find "GrabTube was blocked..."
+4. Click "Open Anyway" > enter admin password
+5. Done!
+
+Method 3: Terminal (Power Users)
+Open Terminal app and run these commands:
+
+xattr -cr ~/Downloads/GrabTube-*.dmg
+open ~/Downloads/GrabTube-*.dmg
+
+After copying to Applications:
+xattr -cr /Applications/GrabTube.app
+
+That's it! The app will work normally after the first launch.</div>
       </div>
     </div>
 
@@ -994,6 +1038,23 @@ function switchPage(page) {
   if (page === 'overview') loadOverview();
   else if (page === 'keys') loadKeys();
   else if (page === 'devices') loadDevices();
+}
+
+function copyMacInstructions() {
+  const el = document.getElementById('mac-instructions-text');
+  if (!el) return;
+  const text = el.innerText || el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied to clipboard!');
+  }).catch(() => {
+    // Fallback: select text
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    showToast('Text selected - press Ctrl+C / Cmd+C to copy');
+  });
 }
 
 // OVERVIEW
