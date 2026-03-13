@@ -12,6 +12,8 @@ export interface ElectronAPI {
     audioFormat?: string;
     embedSubs?: boolean;
     embedThumbnail?: boolean;
+    thumbnail?: string;
+    videoTitle?: string;
   }) => Promise<{ success: boolean; downloadId?: string; error?: string }>;
   cancelDownload: (downloadId: string) => Promise<{ success: boolean }>;
   getActiveDownloads: () => Promise<unknown[]>;

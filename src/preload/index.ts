@@ -14,6 +14,8 @@ const electronAPI = {
     audioFormat?: string;
     embedSubs?: boolean;
     embedThumbnail?: boolean;
+    thumbnail?: string;
+    videoTitle?: string;
   }) => ipcRenderer.invoke('start-download', options),
   cancelDownload: (downloadId: string) => ipcRenderer.invoke('cancel-download', downloadId),
   getActiveDownloads: () => ipcRenderer.invoke('get-active-downloads'),

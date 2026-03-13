@@ -229,6 +229,8 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         audioFormat: state.audioOnly ? state.audioFormat : undefined,
         embedSubs: state.embedSubs,
         embedThumbnail: state.embedThumbnail,
+        thumbnail: state.videoInfo.thumbnail,
+        videoTitle: state.videoInfo.title,
       });
 
       if (result.success) {
