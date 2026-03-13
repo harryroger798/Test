@@ -1428,7 +1428,7 @@ export class YtdlpManager {
     // This is critical for non-YouTube downloads where yt-dlp moves files after
     // fixup/remux (e.g. Instagram HLS → MP4, TikTok watermark removal).
     // Format: [MoveFiles] Moving file "old_path" to "new_path"
-    const moveMatch = line.match(/\[MoveFiles\]\s+Moving file\s+".+"\s+to\s+"(.+)"/);
+    const moveMatch = line.match(/\[MoveFiles\]\s+Moving file\s+"[^"]+"\s+to\s+"([^"]+)"/);
     if (moveMatch) {
       return {
         downloadId,
@@ -1444,7 +1444,7 @@ export class YtdlpManager {
     // Match [FixupM3u8] / [Fixup] — confirms final path for HLS/DASH downloads.
     // Format: [FixupM3u8] Fixing MPEG-TS in MP4 container of "/path/to/file.mp4"
     // Format: [Fixup...] Fixing ... of "/path/to/file.mp4"
-    const fixupMatch = line.match(/\[Fixup[^\]]*\]\s+.+of\s+"(.+)"/);
+    const fixupMatch = line.match(/\[Fixup[^\]]*\]\s+[^"]+of\s+"([^"]+)"/);
     if (fixupMatch) {
       return {
         downloadId,
