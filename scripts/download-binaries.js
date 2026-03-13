@@ -159,10 +159,14 @@ async function downloadFfmpeg() {
           if (fs.existsSync(ffprobeBin)) {
             fs.renameSync(ffprobeBin, path.join(binDir, 'ffprobe'));
           }
+          // Clean up extracted directory to reduce installer size
+          const extractedDir = path.join(binDir, entry);
+          try { fs.rmSync(extractedDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
           break;
         }
       }
       makeExecutable(path.join(binDir, 'ffmpeg'));
+      makeExecutable(path.join(binDir, 'ffprobe'));
       try { fs.unlinkSync(archiveDest); } catch (e) { /* ignore */ }
       console.log('  FFmpeg extracted successfully.');
     } catch (err) {
@@ -192,10 +196,11 @@ async function downloadFfmpeg() {
       } else {
         execSync('cd "' + binDir + '" && unzip -o ffmpeg.zip', { stdio: 'pipe' });
       }
-      // Find ffmpeg.exe in extracted directories
+      // Find ffmpeg.exe in extracted directories and clean up
       const entries = fs.readdirSync(binDir);
       for (const entry of entries) {
-        const binSubDir = path.join(binDir, entry, 'bin');
+        const entryPath = path.join(binDir, entry);
+        const binSubDir = path.join(entryPath, 'bin');
         if (fs.existsSync(binSubDir)) {
           const ffmpegExe = path.join(binSubDir, 'ffmpeg.exe');
           if (fs.existsSync(ffmpegExe)) {
@@ -204,6 +209,12 @@ async function downloadFfmpeg() {
             if (fs.existsSync(ffprobeExe)) {
               fs.renameSync(ffprobeExe, path.join(binDir, 'ffprobe.exe'));
             }
+            // Clean up the entire extracted directory (doc/, bin/ffplay.exe, LICENSE, etc.)
+            // This is CRITICAL — without cleanup, the extraResources filter bundles
+            // the entire FFmpeg distribution (~300MB+), bloating the installer and
+            // causing NSIS WinShell.dll extraction failures on Windows.
+            try { fs.rmSync(entryPath, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+            console.log('  Cleaned up FFmpeg extraction directory.');
             break;
           }
         }

@@ -1,6 +1,6 @@
 {
   "name": "grabtube",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "description": "Multi-platform video & audio downloader supporting 1800+ websites",
   "main": "dist/main/index.js",
   "author": "GrabTube",
@@ -73,7 +73,24 @@
         "from": "resources/bin/${os}",
         "to": "bin",
         "filter": [
-          "**/*"
+          "**/*.exe",
+          "**/ffmpeg",
+          "**/ffprobe",
+          "**/yt-dlp",
+          "**/yt-dlp_macos",
+          "**/yt-dlp_linux",
+          "**/bgutil-pot",
+          "**/deno",
+          "plugins/**/*",
+          "!**/*.zip",
+          "!**/*.tar.xz",
+          "!**/doc/**",
+          "!**/presets/**",
+          "!**/man/**",
+          "!**/share/**",
+          "!**/ffplay*",
+          "!**/ffmpeg-master-*/**",
+          "!**/ffmpeg-*-static/**"
         ]
       }
     ],
@@ -102,7 +119,12 @@
       "allowToChangeInstallationDirectory": true,
       "unicode": true,
       "deleteAppDataOnUninstall": false,
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "packElevateHelper": true,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
     }
   }
 }
