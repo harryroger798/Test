@@ -20,9 +20,19 @@
     <p>If the download doesn't start automatically, <a id="dl" href="https://grabtube-download.grabtube-app.workers.dev/linux">click here</a>.</p>
   </div>
   <script>
-    var url = "https://grabtube-download.grabtube-app.workers.dev/linux?t=" + Date.now();
-    document.getElementById("dl").href = url;
-    window.location.href = url;
+    fetch("https://grabtube-download.grabtube-app.workers.dev/api/latest?t=" + Date.now())
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var v = data.version;
+        var url = "https://github.com/harryroger798/Test/releases/download/v" + v + "/GrabTube-" + v + ".AppImage";
+        document.getElementById("dl").href = url;
+        window.location.href = url;
+      })
+      .catch(function() {
+        var url = "https://grabtube-download.grabtube-app.workers.dev/linux?t=" + Date.now();
+        document.getElementById("dl").href = url;
+        window.location.href = url;
+      });
   </script>
 </body>
 </html>
