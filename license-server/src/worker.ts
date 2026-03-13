@@ -385,9 +385,14 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
     return errorResponse('This license key has been revoked');
   }
 
-  // Check if this device is already activated
+  // Check if this device is already activated (active = 1)
   const existing = await env.DB.prepare(
     'SELECT * FROM activations WHERE license_key = ? AND device_id = ? AND active = 1'
+  ).bind(key, deviceId).first();
+
+  // Check if this device was previously deactivated (active = 0) — for re-activation
+  const deactivated = await env.DB.prepare(
+    'SELECT * FROM activations WHERE license_key = ? AND device_id = ? AND active = 0'
   ).bind(key, deviceId).first();
 
   // Fix #4: Check license-level expiration (set at redemption time for giveaway keys)
@@ -430,10 +435,17 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  // Activate
-  await env.DB.prepare(
-    'INSERT INTO activations (license_key, device_id, device_name) VALUES (?, ?, ?)'
-  ).bind(key, deviceId, deviceName || '').run();
+  if (deactivated) {
+    // Re-activate previously deactivated device (UPDATE instead of INSERT to avoid UNIQUE constraint)
+    await env.DB.prepare(
+      'UPDATE activations SET active = 1, device_name = ?, last_validated = datetime("now") WHERE license_key = ? AND device_id = ? AND active = 0'
+    ).bind(deviceName || '', key, deviceId).run();
+  } else {
+    // New activation
+    await env.DB.prepare(
+      'INSERT INTO activations (license_key, device_id, device_name) VALUES (?, ?, ?)'
+    ).bind(key, deviceId, deviceName || '').run();
+  }
 
   const signature = await signResponse(key, license.tier, deviceId);
   return jsonResponse({

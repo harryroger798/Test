@@ -21,10 +21,8 @@ import { app } from 'electron';
 // License server URL — update this after deploying the Cloudflare Worker
 const LICENSE_SERVER_URL = 'https://grabtube-license.grabtube-app.workers.dev';
 
-// Derive HMAC secrets at runtime from machine-specific entropy.
-// The base seeds are obfuscated and combined with a device-derived salt
-// so that the effective secret differs per installation.
-function deriveSecret(seed: string): string {
+// HMAC secret for signing local license files (machine-specific so files can't be copied between machines)
+function deriveLocalSecret(seed: string): string {
   const machineSalt = [
     os.hostname(),
     os.platform(),
@@ -33,8 +31,11 @@ function deriveSecret(seed: string): string {
   return crypto.createHmac('sha256', machineSalt).update(seed).digest('hex');
 }
 
-const LICENSE_HMAC_SECRET = deriveSecret('gt-license-integrity-v1');
-const SERVER_RESPONSE_SECRET = deriveSecret('gt-server-response-v1');
+const LICENSE_HMAC_SECRET = deriveLocalSecret('gt-license-integrity-v1');
+
+// Server response verification secret — MUST match the Cloudflare Worker's SERVER_RESPONSE_SECRET exactly.
+// This is NOT machine-specific because the server uses a single shared secret for all clients.
+const SERVER_RESPONSE_SECRET = 'gt-server-response-v1';
 
 export type LicenseTier = 'free' | 'pro' | 'family';
 
