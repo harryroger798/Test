@@ -167,6 +167,23 @@
     <a href="#main-content" class="skip-to-content" aria-label="Skip to main content">Skip to main content</a>
     <div id="root"></div>
 
+    <!-- Mobile Pricing Fix -->
+    <style>
+      /* Fix pricing grid overflow on mobile - stack cards vertically on small screens */
+      @media (max-width: 639px) {
+        .glass-card .grid.grid-cols-3 {
+          grid-template-columns: 1fr !important;
+          gap: 12px !important;
+        }
+        .glass-card .grid.grid-cols-3 > div {
+          padding: 20px 16px !important;
+        }
+        .glass-card .grid.grid-cols-3 .text-3xl {
+          font-size: 2rem !important;
+        }
+      }
+    </style>
+
     <!-- Try It Free Inline Section — injected after React mount -->
     <style>
       #try-inline-section {
