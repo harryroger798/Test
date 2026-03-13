@@ -1698,13 +1698,13 @@ async function handleClaim(e) {
       errEl.textContent = d.error || 'Something went wrong. Please try again.';
       errEl.style.display = 'block';
       btn.disabled = false;
-      btn.textContent = 'Claim Free 3-Month Pro Trial';
+      btn.textContent = 'Claim Free 6-Month Pro Trial';
     }
   } catch (err) {
     errEl.textContent = 'Network error. Please check your connection and try again.';
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = 'Claim Free 3-Month Pro Trial';
+    btn.textContent = 'Claim Free 6-Month Pro Trial';
   }
 }
 
