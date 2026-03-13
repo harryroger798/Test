@@ -186,6 +186,8 @@ function setupIPC(): void {
     audioFormat?: string;
     embedSubs?: boolean;
     embedThumbnail?: boolean;
+    thumbnail?: string;
+    videoTitle?: string;
   }) => {
     try {
       // Check tier gating: daily limit + cooldown
@@ -339,13 +341,13 @@ function setupIPC(): void {
               }
             }
 
-            const displayName = resolvedFilePath.split(/[/\\]/).pop() || 'Unknown';
+            const displayName = options.videoTitle || resolvedFilePath.split(/[/\\]/).pop() || 'Unknown';
             settings.addHistoryItem({
               id: `dl_${Date.now()}`,
               url: options.url,
               title: displayName,
               platform,
-              thumbnail: '',
+              thumbnail: options.thumbnail || '',
               downloadedAt: new Date().toISOString(),
               filePath: resolvedFilePath,
               fileSize: result.filesize || '',
