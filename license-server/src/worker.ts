@@ -42,9 +42,9 @@ const ADMIN_LOGIN_MAX_ATTEMPTS = 5;
 const ADMIN_LOGIN_WINDOW_SEC = 900; // 15 minutes
 
 // Giveaway constants
-const GIVEAWAY_MAX_REDEMPTIONS = 1000;
+const GIVEAWAY_MAX_REDEMPTIONS = 20000;
 const GIVEAWAY_NOTIFICATION_EMAIL = 'harryroger798@gmail.com';
-const GIVEAWAY_EXPIRY_MONTHS = 3; // Giveaway activations expire after 3 months
+const GIVEAWAY_EXPIRY_MONTHS = 6; // Giveaway activations expire after 6 months (SharewareOnSale partnership)
 const GIVEAWAY_MAX_IP_REDEMPTIONS = 5; // Max redemptions per IP address (abuse prevention)
 
 // Fix #1: Safe addMonths that clamps to end of month (avoids Jan 31 + 3 = May 1 bug)
@@ -1531,7 +1531,7 @@ function getGiveawayPageHTML(): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>GrabTube — Free 3-Month Pro Trial Giveaway</title>
+  <title>GrabTube — Free 6-Month Pro Trial Giveaway</title>
   <style>
     :root {
       --bg: #030712; --bg2: #111827; --bg3: #1f2937; --border: #374151;
@@ -1596,16 +1596,16 @@ function getGiveawayPageHTML(): string {
       <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#22c55e" opacity="0.15"/><path d="M8 12l3 3 5-6" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>GrabTube</span>
     </div>
-    <div class="badge">LIMITED GIVEAWAY — 3 MONTH PRO TRIAL</div>
-    <h1>Get <span class="accent">GrabTube Pro</span> Free for 3 Months</h1>
-    <p class="subtitle">Claim your free 3-month Pro trial — unlimited downloads, 8K quality, 1800+ sites. No credit card needed. Full Pro features for 90 days!</p>
+    <div class="badge">LIMITED GIVEAWAY — 6 MONTH PRO TRIAL</div>
+    <h1>Get <span class="accent">GrabTube Pro</span> Free for 6 Months</h1>
+    <p class="subtitle">Claim your free 6-month Pro trial — unlimited downloads, 8K quality, 1800+ sites. No credit card needed. Full Pro features for 180 days!</p>
     <div class="features">
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Unlimited downloads</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Up to 8K quality</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>1800+ websites</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Built-in player</div>
       <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>Format converter</div>
-      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>3 months Pro access</div>
+      <div class="feature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>6 months Pro access</div>
     </div>
     <form id="claim-form" onsubmit="handleClaim(event)">
       <div class="form-group">
@@ -1617,7 +1617,7 @@ function getGiveawayPageHTML(): string {
         <input type="email" id="input-email" placeholder="you@example.com" required maxlength="200" autocomplete="email">
       </div>
       <div id="error-msg" class="error-msg"></div>
-      <button type="submit" class="btn" id="claim-btn">Claim Free 3-Month Pro Trial</button>
+      <button type="submit" class="btn" id="claim-btn">Claim Free 6-Month Pro Trial</button>
     </form>
     <div class="slots" id="slots-info"></div>
   </div>
@@ -1629,8 +1629,8 @@ function getGiveawayPageHTML(): string {
       <span>GrabTube</span>
     </div>
     <div class="badge" style="background:rgba(34,197,94,0.2)">CLAIMED SUCCESSFULLY</div>
-    <h1>Your <span class="accent">3-Month Pro</span> Key</h1>
-    <p class="subtitle" id="success-msg">Congratulations! Here is your free 3-month GrabTube Pro license key.</p>
+    <h1>Your <span class="accent">6-Month Pro</span> Key</h1>
+    <p class="subtitle" id="success-msg">Congratulations! Here is your free 6-month GrabTube Pro license key.</p>
     <p class="subtitle" style="color:#eab308;font-size:0.85rem;margin-bottom:12px" id="expiry-info"></p>
     <div class="key-display">
       <div class="key" id="license-key-display"></div>
@@ -1676,7 +1676,7 @@ async function handleClaim(e) {
 
     if (d.success && d.key) {
       document.getElementById('license-key-display').textContent = d.key;
-      document.getElementById('success-msg').textContent = d.message || 'Here is your free 3-month Pro license key!';
+      document.getElementById('success-msg').textContent = d.message || 'Here is your free 6-month Pro license key!';
       if (d.expiresAt) {
         const exp = new Date(d.expiresAt);
         document.getElementById('expiry-info').textContent = 'Your Pro trial expires on: ' + exp.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
