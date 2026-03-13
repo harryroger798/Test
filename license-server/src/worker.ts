@@ -1241,7 +1241,9 @@ function renderDeviceRow(dev, showKey) {
   const active = dev.active === 1 ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-revoked">Inactive</span>';
   const activated = dev.activated_at ? new Date(dev.activated_at + 'Z').toLocaleDateString() : '-';
   const lastSeen = dev.last_validated ? new Date(dev.last_validated + 'Z').toLocaleDateString() : '-';
-  const kickBtn = dev.active === 1 ? '<button class="btn btn-sm btn-danger" style="margin-left:0.35rem" onclick="kickDevice(\'' + (dev.device_id || '').replace(/'/g, "\\'") + '\', \'' + (dev.license_key || '').replace(/'/g, "\\'") + '\')" title="Deactivate this device">Kick</button>' : '';
+  const safeDeviceId = encodeURIComponent(dev.device_id || '');
+  const safeLicenseKey = encodeURIComponent(dev.license_key || '');
+  const kickBtn = dev.active === 1 ? '<button class="btn btn-sm btn-danger" style="margin-left:0.35rem" data-did="' + safeDeviceId + '" data-lk="' + safeLicenseKey + '" onclick="kickDevice(decodeURIComponent(this.dataset.did), decodeURIComponent(this.dataset.lk))" title="Deactivate this device">Kick</button>' : '';
   return '<tr><td title="' + (dev.device_id || '') + '" style="font-family:monospace;font-size:0.8rem;cursor:help">' + devId + '</td><td>' + devName + '</td><td>' + key + '</td><td>' + tier + '</td><td>' + active + '</td><td>' + activated + '</td><td>' + lastSeen + '</td><td>' + kickBtn + '</td></tr>';
 }
 
