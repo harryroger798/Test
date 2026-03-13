@@ -1078,7 +1078,7 @@ export class YtdlpManager {
       id: String(raw.id || ''),
       title: String(raw.title || 'Unknown'),
       description: String(raw.description || ''),
-      thumbnail: String(raw.thumbnail || ''),
+      thumbnail: this.extractBestThumbnail(raw),
       duration,
       durationString,
       uploader: String(raw.uploader || raw.channel || 'Unknown'),
@@ -1093,6 +1093,84 @@ export class YtdlpManager {
       subtitles: (raw.subtitles as Record<string, Array<{ ext: string; url: string }>>) || {},
       requestedSubtitles: (raw.requested_subtitles as Record<string, unknown>) || null,
     };
+  }
+
+  /**
+   * Extract the best thumbnail URL from yt-dlp JSON output.
+   * yt-dlp usually sets `thumbnail` to the best URL, but some extractors
+   * (Instagram, TikTok, etc.) may only populate the `thumbnails` array.
+   * This method checks both fields and picks the highest-quality option.
+   */
+  private extractBestThumbnail(raw: Record<string, unknown>): string {
+    // 1. Try the top-level `thumbnail` field first (yt-dlp sets this for most extractors)
+    const directThumbnail = raw.thumbnail ? String(raw.thumbnail) : '';
+    if (directThumbnail && directThumbnail.startsWith('http')) {
+      return directThumbnail;
+    }
+
+    // 2. Try extracting from `thumbnails` array (common for Instagram, TikTok, etc.)
+    const thumbnails = raw.thumbnails as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(thumbnails) && thumbnails.length > 0) {
+      // Sort by preference: highest resolution first, then by preference field
+      const sorted = [...thumbnails]
+        .filter(t => t.url && String(t.url).startsWith('http'))
+        .sort((a, b) => {
+          // Prefer higher resolution
+          const aRes = ((a.width as number) || 0) * ((a.height as number) || 0);
+          const bRes = ((b.width as number) || 0) * ((b.height as number) || 0);
+          if (bRes !== aRes) return bRes - aRes;
+          // Prefer higher preference value
+          return ((b.preference as number) || 0) - ((a.preference as number) || 0);
+        });
+      if (sorted.length > 0) {
+        return String(sorted[0].url);
+      }
+    }
+
+    // 3. Fallback to direct thumbnail even if it doesn't start with http
+    return directThumbnail;
+  }
+
+  /**
+   * Download a thumbnail image and convert it to a base64 data URL.
+   * This is needed because non-YouTube thumbnail CDN URLs (Instagram, TikTok, etc.)
+   * often require authentication cookies that the Electron renderer doesn't have.
+   * By proxying through Node.js, we can download the image and embed it as a data URL.
+   */
+  async proxyThumbnail(thumbnailUrl: string): Promise<string> {
+    if (!thumbnailUrl || !thumbnailUrl.startsWith('http')) {
+      return thumbnailUrl;
+    }
+
+    // YouTube thumbnails are publicly accessible — no need to proxy
+    if (thumbnailUrl.includes('ytimg.com') || thumbnailUrl.includes('youtube.com') || thumbnailUrl.includes('ggpht.com')) {
+      return thumbnailUrl;
+    }
+
+    try {
+      const { net } = await import('electron');
+      const response = await net.fetch(thumbnailUrl, {
+        method: 'GET',
+        // 5 second timeout for thumbnail fetch — don't block the UI
+      });
+
+      if (!response.ok) {
+        console.log(`[GrabTube] Thumbnail proxy failed (${response.status}), using original URL`);
+        return thumbnailUrl;
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+      // Only convert if the response looks like an image and is under 5MB
+      if (buffer.length > 0 && buffer.length < 5 * 1024 * 1024) {
+        return `data:${contentType};base64,${buffer.toString('base64')}`;
+      }
+
+      return thumbnailUrl;
+    } catch (err) {
+      console.log(`[GrabTube] Thumbnail proxy error: ${err instanceof Error ? err.message : String(err)}`);
+      return thumbnailUrl;
+    }
   }
 
   private detectPlatform(extractor: string, url: string): string {

@@ -169,6 +169,25 @@ function setupIPC(): void {
       const cookiesPath = settings.get('cookiesPath') as string | undefined;
       const browserCookies = settings.get('browserCookies') as string | undefined;
       const info = await ytdlp.getVideoInfoWithRetry(url, proxy, cookiesPath || undefined, browserCookies || undefined);
+
+      // Proxy non-YouTube thumbnails through main process → base64 data URL.
+      // Non-YouTube CDN thumbnail URLs (Instagram, TikTok, etc.) often require
+      // authentication cookies that the Electron renderer sandbox doesn't have,
+      // causing <img> tags to fail with CORS/auth errors and show "No Thumbnail".
+      // By downloading the image here in the main process and converting to a
+      // data URL, the renderer always has an embeddable image that works.
+      if (info.thumbnail && platform !== 'youtube') {
+        try {
+          const proxiedThumbnail = await Promise.race([
+            ytdlp.proxyThumbnail(info.thumbnail),
+            new Promise<string>((resolve) => setTimeout(() => resolve(info.thumbnail), 8000)),
+          ]);
+          info.thumbnail = proxiedThumbnail;
+        } catch {
+          // Keep original URL as fallback — it may still work for some sites
+        }
+      }
+
       return { success: true, data: info };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to fetch video info';
@@ -267,6 +286,7 @@ function setupIPC(): void {
             //   - empty string (no filename captured at all)
             const rawFilename = result.filename || '';
             const outputDir = result.outputPath || options.outputPath;
+            console.log(`[GrabTube] Download completed. rawFilename="${rawFilename}", outputDir="${outputDir}", platform="${platform}"`);
             const isFullPath = rawFilename && (path.isAbsolute(rawFilename) || rawFilename.includes(path.sep));
             if (isFullPath) {
               resolvedFilePath = rawFilename;
@@ -341,6 +361,7 @@ function setupIPC(): void {
               }
             }
 
+            console.log(`[GrabTube] Resolved file path: "${resolvedFilePath}", exists: ${fs.existsSync(resolvedFilePath)}`);
             const displayName = options.videoTitle || resolvedFilePath.split(/[/\\]/).pop() || 'Unknown';
             settings.addHistoryItem({
               id: `dl_${Date.now()}`,
