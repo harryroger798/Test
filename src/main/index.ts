@@ -1310,6 +1310,18 @@ app.whenReady().then(async () => {
       binaryUpdater.init(mainWindow);
       healthMonitor.init(mainWindow);
     }
+
+    // Force license revalidation on every app startup (bypasses 7-day cache).
+    // This ensures admin-kicked devices lose access on next app launch.
+    licenseManager.validate(true).then((result) => {
+      if (!result.valid && mainWindow && !mainWindow.isDestroyed()) {
+        // License was invalidated server-side (kicked/revoked) — notify renderer
+        mainWindow.webContents.send('license-tier-changed', {
+          tier: 'free',
+          activated: false,
+        });
+      }
+    }).catch(() => { /* offline — grace period handles this */ });
   }, 2000);
 
   // Phase 4: Heavy initialization — defer even further

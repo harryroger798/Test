@@ -481,16 +481,16 @@ export class LicenseManager {
    * Validate the current license (periodic re-check).
    * If server is unreachable, uses offline grace period.
    */
-  async validate(): Promise<{ valid: boolean; tier: LicenseTier; offline?: boolean }> {
+  async validate(force = false): Promise<{ valid: boolean; tier: LicenseTier; offline?: boolean }> {
     // Free tier always valid
     if (!this.state.activated || !this.state.key) {
       return { valid: true, tier: 'free' };
     }
 
-    // Check if re-validation is needed
+    // Check if re-validation is needed (skip cache check if force=true)
     const lastValidated = new Date(this.state.validatedAt).getTime();
     const now = Date.now();
-    if (now - lastValidated < REVALIDATION_INTERVAL_MS) {
+    if (!force && now - lastValidated < REVALIDATION_INTERVAL_MS) {
       // Still within validation period, use cached state
       return { valid: true, tier: this.state.tier };
     }
