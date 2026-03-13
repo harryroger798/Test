@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url='https://grabtube-download.grabtube-app.workers.dev/linux'">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Downloading GrabTube for Linux...</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #0a0a0a; color: #fff; }
@@ -15,8 +17,12 @@
 <body>
   <div class="container">
     <h1>Downloading GrabTube for Linux...</h1>
-    <p>If the download doesn't start automatically, <a href="https://grabtube-download.grabtube-app.workers.dev/linux">click here</a>.</p>
+    <p>If the download doesn't start automatically, <a id="dl" href="https://grabtube-download.grabtube-app.workers.dev/linux">click here</a>.</p>
   </div>
-  <script>window.location.href = "https://grabtube-download.grabtube-app.workers.dev/linux";</script>
+  <script>
+    var url = "https://grabtube-download.grabtube-app.workers.dev/linux?t=" + Date.now();
+    document.getElementById("dl").href = url;
+    window.location.href = url;
+  </script>
 </body>
 </html>
