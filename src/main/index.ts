@@ -884,20 +884,86 @@ function setupIPC(): void {
   ipcMain.handle('get-player-playlist', async () => {
     const history = settings.get('downloadHistory');
     if (!history || history.length === 0) return [];
-    const fs = await import('fs');
     const audioExts = ['mp3', 'flac', 'wav', 'ogg', 'aac', 'm4a', 'wma', 'opus'];
-    return history
-      .filter((item) => item.filePath && fs.existsSync(item.filePath))
-      .map((item) => {
-        const ext = item.filePath.split('.').pop()?.toLowerCase() || '';
-        const isAudio = audioExts.includes(ext) || item.format === 'mp3' || item.format === 'flac' || item.format === 'wav' || item.format === 'ogg' || item.format === 'aac' || item.format === 'm4a';
-        return {
-          path: item.filePath,
-          name: item.title || item.filePath.split(/[/\\]/).pop() || 'Unknown',
-          type: isAudio ? 'audio' as const : 'video' as const,
-        };
-      })
-      .slice(0, 50);
+    const videoExts = ['mp4', 'mkv', 'webm', 'avi', 'mov', 'flv', 'm4v', 'ts'];
+    const allMediaExts = [...videoExts, ...audioExts];
+
+    // Helper: try to find the actual file if the stored path doesn't exist.
+    // Non-YouTube downloads (Instagram, TikTok, etc.) sometimes have mismatched
+    // paths because yt-dlp renames/moves files during post-processing and the
+    // progress parser may not capture the final path.
+    const resolveFilePath = (filePath: string, format: string): string | null => {
+      if (!filePath) return null;
+
+      // 1. Exact path exists — use it directly
+      if (fs.existsSync(filePath)) return filePath;
+
+      // 2. Path without extension — try common media extensions
+      const ext = path.extname(filePath);
+      if (!ext || ext.includes('%')) {
+        const base = ext.includes('%') ? filePath.replace(/\.[^/\\]*%[^/\\]*$/, '') : filePath;
+        const tryExts = (format === 'mp3' || format === 'flac' || format === 'wav' || format === 'ogg' || format === 'aac' || format === 'm4a')
+          ? audioExts : videoExts;
+        for (const e of tryExts) {
+          const candidate = `${base}.${e}`;
+          if (fs.existsSync(candidate)) return candidate;
+        }
+      }
+
+      // 3. Has extension but doesn't exist — try swapping to other common extensions
+      //    (handles cases where yt-dlp saved as .webm but we recorded .mp4, etc.)
+      if (ext && !ext.includes('%')) {
+        const base = filePath.slice(0, -ext.length);
+        for (const e of allMediaExts) {
+          const candidate = `${base}.${e}`;
+          if (candidate !== filePath && fs.existsSync(candidate)) return candidate;
+        }
+      }
+
+      // 4. Directory scan — find the most recent file matching the base name
+      const dir = path.dirname(filePath);
+      const fileName = path.basename(filePath);
+      const baseName = fileName.replace(/\.[^.]+$/, '').replace(/\.f\d+$/, '');
+      if (baseName && fs.existsSync(dir)) {
+        try {
+          const files = fs.readdirSync(dir);
+          let bestMatch = '';
+          let bestMtime = 0;
+          for (const file of files) {
+            if (!file.startsWith(baseName)) continue;
+            const fileExt = file.split('.').pop()?.toLowerCase() || '';
+            if (!allMediaExts.includes(fileExt)) continue;
+            const fullPath = path.join(dir, file);
+            try {
+              const stat = fs.statSync(fullPath);
+              if (stat.isFile() && stat.mtimeMs > bestMtime) {
+                bestMatch = fullPath;
+                bestMtime = stat.mtimeMs;
+              }
+            } catch { /* skip */ }
+          }
+          if (bestMatch) return bestMatch;
+        } catch { /* scan failed */ }
+      }
+
+      return null;
+    };
+
+    const results: Array<{ path: string; name: string; type: 'video' | 'audio' }> = [];
+    for (const item of history) {
+      if (!item.filePath) continue;
+      const resolved = resolveFilePath(item.filePath, item.format);
+      if (!resolved) continue;
+      const ext = resolved.split('.').pop()?.toLowerCase() || '';
+      const isAudio = audioExts.includes(ext) || item.format === 'mp3' || item.format === 'flac' || item.format === 'wav' || item.format === 'ogg' || item.format === 'aac' || item.format === 'm4a';
+      results.push({
+        path: resolved,
+        name: item.title || resolved.split(/[/\\]/).pop() || 'Unknown',
+        type: isAudio ? 'audio' : 'video',
+      });
+      if (results.length >= 50) break;
+    }
+    return results;
   });
 
   // === CONVERTER IPC HANDLERS ===
