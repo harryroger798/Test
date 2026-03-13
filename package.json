@@ -1,6 +1,6 @@
 {
   "name": "grabtube",
-  "version": "1.0.41",
+  "version": "1.0.42",
   "description": "Multi-platform video & audio downloader supporting 1800+ websites",
   "main": "dist/main/index.js",
   "author": "GrabTube",
@@ -99,7 +99,10 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "unicode": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     }
   }
 }
