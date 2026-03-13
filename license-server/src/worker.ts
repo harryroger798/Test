@@ -302,6 +302,11 @@ export default {
         return await handleAdminDevices(request, env);
       }
 
+      if (path === '/admin/devices/kick' && request.method === 'POST') {
+        if (!await verifyAdmin(request, env)) return errorResponse('Unauthorized', 401);
+        return await handleAdminKickDevice(request, env);
+      }
+
       // === GIVEAWAY ENDPOINTS ===
 
       // Hidden giveaway page
@@ -836,6 +841,10 @@ function getAdminPanelHTML(): string {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       <span>Devices</span>
     </div>
+    <div class="nav-item" data-page="giveaway" onclick="switchPage('giveaway')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+      <span>Giveaway Leads</span>
+    </div>
     <div class="nav-item" data-page="mac-instructions" onclick="switchPage('mac-instructions')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-6h-2v6zm0-8h2V7h-2v2z"/></svg>
       <span>Mac Guide</span>
@@ -891,7 +900,7 @@ function getAdminPanelHTML(): string {
       <div class="table-container">
         <div class="table-header"><h3 id="devices-title">All Recent Activations</h3></div>
         <table>
-          <thead><tr><th>Device ID</th><th>Device Name</th><th>License Key</th><th>Tier</th><th>Status</th><th>Activated</th><th>Last Seen</th></tr></thead>
+          <thead><tr><th>Device ID</th><th>Device Name</th><th>License Key</th><th>Tier</th><th>Status</th><th>Activated</th><th>Last Seen</th><th>Actions</th></tr></thead>
           <tbody id="devices-body"></tbody>
         </table>
       </div>
@@ -934,6 +943,22 @@ After copying to Applications:
 xattr -cr /Applications/GrabTube.app
 
 That's it! The app will work normally after the first launch.</div>
+      </div>
+    </div>
+
+    <!-- GIVEAWAY LEADS PAGE -->
+    <div id="page-giveaway" class="hidden">
+      <h2 class="page-title">Giveaway Leads</h2>
+      <div class="stats-grid" id="giveaway-stats-grid" style="margin-bottom:1rem"></div>
+      <div class="table-container">
+        <div class="table-header">
+          <h3 id="giveaway-title">All Giveaway Redemptions</h3>
+          <button class="btn btn-primary btn-sm" onclick="exportGiveawayCSV()">Export CSV</button>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>License Key</th><th>Redeemed At</th><th>IP Hash</th></tr></thead>
+          <tbody id="giveaway-body"></tbody>
+        </table>
       </div>
     </div>
 
@@ -1038,6 +1063,7 @@ function switchPage(page) {
   if (page === 'overview') loadOverview();
   else if (page === 'keys') loadKeys();
   else if (page === 'devices') loadDevices();
+  else if (page === 'giveaway') loadGiveaway();
 }
 
 function copyMacInstructions() {
@@ -1071,6 +1097,7 @@ async function loadOverview() {
       <div class="stat-card"><div class="label">Pro Keys</div><div class="value blue">\${s.proKeys}</div></div>
       <div class="stat-card"><div class="label">Family Keys</div><div class="value purple">\${s.familyKeys}</div></div>
       <div class="stat-card"><div class="label">Recent (7d)</div><div class="value yellow">\${s.recentActivations}</div></div>
+      <div class="stat-card"><div class="label">Giveaway Claims</div><div class="value yellow">\${s.giveawayRedemptions}</div></div>
     \`;
     // Load recent keys
     const k = await apiFetch('/admin/keys?page=1&limit=5&filter=all');
@@ -1193,14 +1220,14 @@ async function loadDevices() {
       titleEl.textContent = 'Devices for ' + keyInput;
       const devices = d.devices || [];
       document.getElementById('devices-body').innerHTML = devices.length === 0
-        ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No devices activated for this key</td></tr>'
+        ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem">No devices activated for this key</td></tr>'
         : devices.map(dev => renderDeviceRow(dev, false)).join('');
     } else {
       infoEl.classList.add('hidden');
       titleEl.textContent = 'All Recent Activations';
       const devices = d.devices || [];
       document.getElementById('devices-body').innerHTML = devices.length === 0
-        ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No device activations found</td></tr>'
+        ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem">No device activations found</td></tr>'
         : devices.map(dev => renderDeviceRow(dev, true)).join('');
     }
   } catch (e) { showToast('Failed to load devices', true); }
@@ -1214,7 +1241,56 @@ function renderDeviceRow(dev, showKey) {
   const active = dev.active === 1 ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-revoked">Inactive</span>';
   const activated = dev.activated_at ? new Date(dev.activated_at + 'Z').toLocaleDateString() : '-';
   const lastSeen = dev.last_validated ? new Date(dev.last_validated + 'Z').toLocaleDateString() : '-';
-  return '<tr><td title="' + (dev.device_id || '') + '" style="font-family:monospace;font-size:0.8rem;cursor:help">' + devId + '</td><td>' + devName + '</td><td>' + key + '</td><td>' + tier + '</td><td>' + active + '</td><td>' + activated + '</td><td>' + lastSeen + '</td></tr>';
+  const kickBtn = dev.active === 1 ? '<button class="btn btn-sm btn-danger" style="margin-left:0.35rem" onclick="kickDevice(\'' + (dev.device_id || '').replace(/'/g, "\\'") + '\', \'' + (dev.license_key || '').replace(/'/g, "\\'") + '\')" title="Deactivate this device">Kick</button>' : '';
+  return '<tr><td title="' + (dev.device_id || '') + '" style="font-family:monospace;font-size:0.8rem;cursor:help">' + devId + '</td><td>' + devName + '</td><td>' + key + '</td><td>' + tier + '</td><td>' + active + '</td><td>' + activated + '</td><td>' + lastSeen + '</td><td>' + kickBtn + '</td></tr>';
+}
+
+async function kickDevice(deviceId, licenseKey) {
+  if (!confirm('Deactivate this device? The user will need to re-activate.')) return;
+  try {
+    const d = await apiFetch('/admin/devices/kick', { method: 'POST', body: JSON.stringify({ deviceId, licenseKey }) });
+    if (d.success) { showToast('Device deactivated'); loadDevices(); }
+    else { showToast(d.error || 'Kick failed', true); }
+  } catch (e) { showToast('Network error', true); }
+}
+
+// GIVEAWAY LEADS
+let giveawayData = [];
+async function loadGiveaway() {
+  try {
+    const d = await apiFetch('/admin/giveaway');
+    if (!d.success) { showToast(d.error || 'Failed to load giveaway data', true); return; }
+    giveawayData = d.redemptions || [];
+    document.getElementById('giveaway-stats-grid').innerHTML =
+      '<div class="stat-card"><div class="label">Total Claims</div><div class="value yellow">' + d.total + '</div></div>' +
+      '<div class="stat-card"><div class="label">Remaining</div><div class="value green">' + d.remaining + '</div></div>' +
+      '<div class="stat-card"><div class="label">Max Capacity</div><div class="value blue">' + d.maxRedemptions + '</div></div>';
+    document.getElementById('giveaway-body').innerHTML = giveawayData.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">No giveaway redemptions yet</td></tr>'
+      : giveawayData.map(renderGiveawayRow).join('');
+  } catch (e) { showToast('Failed to load giveaway data', true); }
+}
+
+function renderGiveawayRow(r) {
+  const name = r.name || '-';
+  const email = r.email || '-';
+  const key = r.license_key || '-';
+  const date = r.redeemed_at ? new Date(r.redeemed_at + 'Z').toLocaleString() : '-';
+  const ip = r.ip_hash ? (r.ip_hash.substring(0, 10) + '...') : '-';
+  return '<tr><td>' + name + '</td><td><a href="mailto:' + email + '" style="color:var(--blue);text-decoration:none">' + email + '</a></td><td style="font-family:monospace;font-size:0.8rem">' + key + '</td><td>' + date + '</td><td style="font-family:monospace;font-size:0.75rem;color:var(--muted)" title="' + (r.ip_hash || '') + '">' + ip + '</td></tr>';
+}
+
+function exportGiveawayCSV() {
+  if (!giveawayData.length) { showToast('No data to export', true); return; }
+  const headers = ['Name', 'Email', 'License Key', 'Redeemed At', 'IP Hash'];
+  const rows = giveawayData.map(r => [r.name || '', r.email || '', r.license_key || '', r.redeemed_at || '', r.ip_hash || ''].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'giveaway-leads-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('CSV exported');
 }
 
 // Enter key on login
@@ -1271,6 +1347,25 @@ async function handleAdminDevices(request: Request, env: Env): Promise<Response>
     devices: allDevices.results,
     total: allDevices.results.length,
   });
+}
+
+async function handleAdminKickDevice(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as { deviceId?: string; licenseKey?: string };
+  const { deviceId, licenseKey } = body;
+
+  if (!deviceId || !licenseKey) {
+    return errorResponse('Missing deviceId or licenseKey');
+  }
+
+  const result = await env.DB.prepare(
+    'UPDATE activations SET active = 0 WHERE device_id = ? AND license_key = ?'
+  ).bind(deviceId, licenseKey).run();
+
+  if (result.meta.changes === 0) {
+    return errorResponse('Device activation not found');
+  }
+
+  return jsonResponse({ success: true, message: 'Device deactivated successfully' });
 }
 
 async function handleAdminStats(env: Env): Promise<Response> {
