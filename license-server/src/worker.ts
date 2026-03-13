@@ -1286,7 +1286,7 @@ function exportGiveawayCSV() {
   if (!giveawayData.length) { showToast('No data to export', true); return; }
   const headers = ['Name', 'Email', 'License Key', 'Redeemed At', 'IP Hash'];
   const rows = giveawayData.map(r => [r.name || '', r.email || '', r.license_key || '', r.redeemed_at || '', r.ip_hash || ''].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
-  const csv = [headers.join(','), ...rows].join('\n');
+  const csv = [headers.join(','), ...rows].join(String.fromCharCode(10));
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
