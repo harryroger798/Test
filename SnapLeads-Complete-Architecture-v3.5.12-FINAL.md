@@ -86,7 +86,7 @@ SnapLeads is a desktop lead-extraction application that extracts emails and phon
 | CI/CD | GitHub Actions |
 | License Server | FastAPI + SQLite (hosted on Render.com) |
 | Marketing Site | React + Vite (hosted on Netlify) |
-| File Storage | iDrive E2 S3 (download binaries, v3.5.12+) |
+| File Storage | Backblaze B2 (download binaries) |
 | Data Storage | iDrive E2 S3 (leads database CSVs) |
 | Anti-Detection | curl_cffi TLS fingerprint impersonation (v3.5.0+) |
 
@@ -150,12 +150,13 @@ Bucket:          snapleads-downloads
 Download URL:    https://f005.backblazeb2.com/file/snapleads-downloads/
 ```
 
-**File layout (v3.5.12 — current, now on iDrive S3):**
+**File layout (v3.5.12 — current):**
 ```
-crop-spray-uploads/leads-cm-database/
-  SnapLeads-Setup-3.5.12.exe             (Windows NSIS installer, ~330MB)
-  SnapLeads-3.5.12-arm64-mac.zip         (macOS zip, ~273MB)
-  SnapLeads-3.5.12.AppImage              (Linux AppImage — pending build)
+snapleads-downloads/
+  v3.5.12/
+    SnapLeads-Setup-3.5.12.exe             (Windows NSIS installer, ~330MB)
+    SnapLeads-3.5.12-arm64-mac.zip         (macOS zip, ~273MB)
+    SnapLeads-3.5.12.AppImage              (Linux AppImage — pending build)
 ```
 
 ### VirusTotal
@@ -427,9 +428,9 @@ jobs:
 
 | Platform | Download URL |
 |----------|-------------|
-| Windows | `https://s3.us-west-1.idrivee2.com/crop-spray-uploads/leads-cm-database/SnapLeads-Setup-3.5.12.exe` |
-| macOS | `https://s3.us-west-1.idrivee2.com/crop-spray-uploads/leads-cm-database/SnapLeads-3.5.12-arm64-mac.zip` |
-| Linux | `https://s3.us-west-1.idrivee2.com/crop-spray-uploads/leads-cm-database/SnapLeads-3.5.12.AppImage` (pending build) |
+| Windows | `https://f005.backblazeb2.com/file/snapleads-downloads/v3.5.12/SnapLeads-Setup-3.5.12.exe` |
+| macOS | `https://f005.backblazeb2.com/file/snapleads-downloads/v3.5.12/SnapLeads-3.5.12-arm64-mac.zip` |
+| Linux | `https://f005.backblazeb2.com/file/snapleads-downloads/v3.5.12/SnapLeads-3.5.12.AppImage` (pending build) |
 
 ### SHA256 Hashes (v3.5.12)
 
@@ -1068,7 +1069,7 @@ Instead of querying S3 CSVs on every search:
 - **Keep leads without email/phone:** Name/title/company/URL leads no longer silently discarded (~80% of DB results were being thrown away)
 - **Stop halving Instagram results:** Full max_results for Instagram (was `max_results // 2`)
 - **Raised dorking query budget:** 30 queries/session (was 8 — exhausted after 2-3 platforms)
-- Downloads moved from Backblaze B2 to iDrive E2 S3
+- Builds uploaded to Backblaze B2 (`v3.5.12/` prefix)
 
 ### v3.5.11 (March 14, 2026)
 - SQLite WAL mode enabled
