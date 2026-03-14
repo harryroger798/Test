@@ -307,6 +307,12 @@ export default {
         return await handleAdminKickDevice(request, env);
       }
 
+      // Bulk generate giveaway keys (for SharewareOnSale CSV export)
+      if (path === '/admin/generate-bulk' && request.method === 'POST') {
+        if (!await verifyAdmin(request, env)) return errorResponse('Unauthorized', 401);
+        return await handleAdminGenerateBulk(request, env);
+      }
+
       // === GIVEAWAY ENDPOINTS ===
 
       // Hidden giveaway page
@@ -1368,6 +1374,53 @@ async function handleAdminKickDevice(request: Request, env: Env): Promise<Respon
   }
 
   return jsonResponse({ success: true, message: 'Device deactivated successfully' });
+}
+
+// Bulk generate giveaway license keys with expiry (for SharewareOnSale partnership)
+async function handleAdminGenerateBulk(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as {
+    count?: number;
+    tier?: string;
+    expiryMonths?: number;
+    notes?: string;
+    batchSize?: number;
+  };
+
+  const count = Math.min(body.count || 100, 1000); // Max 1000 per request
+  const tier = body.tier || 'pro';
+  const expiryMonths = body.expiryMonths || 6;
+  const maxDevices = tier === 'family' ? 3 : 1;
+  const notes = body.notes || 'sharewareonsale-bulk';
+  const expiresAt = addMonths(new Date(), expiryMonths).toISOString();
+
+  const keys: string[] = [];
+  const BATCH = body.batchSize || 50;
+
+  for (let i = 0; i < count; i += BATCH) {
+    const batchCount = Math.min(BATCH, count - i);
+    const stmts = [];
+    const batchKeys: string[] = [];
+    for (let j = 0; j < batchCount; j++) {
+      const key = generateLicenseKey();
+      batchKeys.push(key);
+      stmts.push(
+        env.DB.prepare(
+          'INSERT INTO license_keys (key, tier, max_devices, expires_at, buyer_name, buyer_contact, notes) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).bind(key, tier, maxDevices, expiresAt, 'SharewareOnSale', 'kent@sharewareonsale.com', notes)
+      );
+    }
+    await env.DB.batch(stmts);
+    keys.push(...batchKeys);
+  }
+
+  return jsonResponse({
+    success: true,
+    keys,
+    tier,
+    maxDevices,
+    expiresAt,
+    count: keys.length,
+  });
 }
 
 async function handleAdminStats(env: Env): Promise<Response> {
