@@ -32,6 +32,32 @@ function sanitizeInterfaceName(iface: string): string {
   }
   return iface;
 }
+
+function sanitizeFilePath(p: string): string {
+  const forbidden = /[|;&`$!<>(){}\[\]\n\r]/
+  if (forbidden.test(p)) {
+    throw new Error(`Invalid file path: contains shell metacharacters`);
+  }
+  return p;
+}
+
+function sanitizePrinterName(name: string): string {
+  if (!/^[a-zA-Z0-9 _\-().#]+$/.test(name)) {
+    throw new Error(`Invalid printer name: ${name}`);
+  }
+  return name;
+}
+
+function sanitizeIpAddress(ip: string): string {
+  // IPv4
+  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+    const parts = ip.split('.').map(Number)
+    if (parts.every(n => n >= 0 && n <= 255)) return ip;
+  }
+  // IPv6
+  if (/^[a-fA-F0-9:]+$/.test(ip) && ip.includes(':')) return ip;
+  throw new Error(`Invalid IP address: ${ip}`);
+}
 import { createLogger } from './logger'
 import { resourceGovernor } from './resource-governor'
 import { saveScan } from './database'
@@ -271,7 +297,9 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('recovery:restoreShadowCopy', async (_event, args: { filePath: string; outputDir: string }) => {
-    return await restoreFromShadowCopy(args.filePath, args.outputDir)
+    const safeFilePath = sanitizeFilePath(args.filePath)
+    const safeOutputDir = sanitizeFilePath(args.outputDir)
+    return await restoreFromShadowCopy(safeFilePath, safeOutputDir)
   })
 
   ipcMain.handle('recovery:restoreRecycleBin', async () => {
@@ -280,7 +308,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('recovery:runPhotorec', async (_event, args: { sourceDrive: string; outputDir: string }) => {
     const safeDrive = sanitizeDriveLetter(args.sourceDrive);
-    return await runPhotorecRecovery(safeDrive, args.outputDir)
+    const safeOutputDir = sanitizeFilePath(args.outputDir)
+    return await runPhotorecRecovery(safeDrive, safeOutputDir)
   })
 
   ipcMain.handle('recovery:repairFilesystem', async (_event, args: { drive: string }) => {
@@ -365,7 +394,9 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('printer:convertWsdToTcpIp', async (_event, args: { printerName: string; ipAddress: string }) => {
-    return await convertWsdToTcpIp(args.printerName, args.ipAddress)
+    const safeName = sanitizePrinterName(args.printerName)
+    const safeIp = sanitizeIpAddress(args.ipAddress)
+    return await convertWsdToTcpIp(safeName, safeIp)
   })
 
   ipcMain.handle('printer:enableDiscovery', async () => {
@@ -430,7 +461,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('usb:repairRawDrive', async (_event, args: { driveLetter: string }) => {
-    return await repairRawDrive(args.driveLetter)
+    const safeDrive = sanitizeDriveLetter(args.driveLetter)
+    return await repairRawDrive(safeDrive)
   })
 
   ipcMain.handle('usb:disablePowerMgmt', async () => {
@@ -510,11 +542,9 @@ async function runQuickScan(): Promise<ScanResult> {
 
   logger.info(`Starting quick scan ${scanId}...`)
 
-  // Run all diagnostic modules in parallel
-  const [perfResults, osResults, malwareResults, networkResults, batteryResults,
-    recoveryResults, audioResults, btResults, printerResults, displayResults,
-    webcamResults, usbResults, indiaResults
-  ] = await Promise.allSettled([
+  // Run all diagnostic modules in parallel with a global 120s timeout
+  const QUICK_SCAN_TIMEOUT_MS = 120000
+  const allSettledWithTimeout = Promise.allSettled([
     runPerformanceDiagnostics(),
     runOSRepairDiagnostics(),
     runMalwareDiagnostics(),
@@ -529,6 +559,14 @@ async function runQuickScan(): Promise<ScanResult> {
     runUsbDiagnostics(),
     runIndiaAppsDiagnostics()
   ])
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Quick scan timed out after 120s')), QUICK_SCAN_TIMEOUT_MS)
+  )
+
+  let [perfResults, osResults, malwareResults, networkResults, batteryResults,
+    recoveryResults, audioResults, btResults, printerResults, displayResults,
+    webcamResults, usbResults, indiaResults
+  ] = await Promise.race([allSettledWithTimeout, timeoutPromise]) as PromiseSettledResult<DiagnosticResult[]>[]
 
   const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
     'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps']

@@ -4,7 +4,7 @@
 // ============================================================
 
 import { execSync, execFileSync } from 'child_process'
-import { existsSync, mkdirSync, readdirSync, statSync, lstatSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, statSync, lstatSync, realpathSync } from 'fs'
 import { join, resolve, normalize } from 'path'
 import { tmpdir, platform, homedir } from 'os'
 import { createLogger } from '../logger'
@@ -47,10 +47,23 @@ function sanitizeRecoveryPath(targetPath: string): string {
   }
   // Prevent writing to system directories
   const forbidden = isWin
-    ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)']
+    ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)', 'C:\\ProgramData']
     : ['/bin', '/sbin', '/usr', '/etc', '/boot', '/dev', '/proc', '/sys']
+  // Also block root of C: drive on Windows
+  if (isWin && /^[a-zA-Z]:\\?$/.test(normalized)) {
+    throw new Error('Cannot write recovery files to drive root')
+  }
+  // Resolve symlinks on non-Windows to prevent symlink attacks
+  let resolvedPath = normalized
+  if (!isWin) {
+    try {
+      resolvedPath = realpathSync(normalized)
+    } catch {
+      // Path may not exist yet, use normalized
+    }
+  }
   for (const dir of forbidden) {
-    if (normalized.toLowerCase().startsWith(dir.toLowerCase())) {
+    if (resolvedPath.toLowerCase().startsWith(dir.toLowerCase())) {
       throw new Error(`Cannot write recovery files to system directory: ${dir}`)
     }
   }
@@ -71,11 +84,19 @@ function sanitizeDrivePath(drive: string): string {
 }
 
 // Check if TestDisk/PhotoRec binaries are available
+function getToolsDir(): string {
+  // In packaged Electron, use process.resourcesPath; in dev, use __dirname
+  if (process.resourcesPath && existsSync(join(process.resourcesPath, 'tools'))) {
+    return join(process.resourcesPath, 'tools')
+  }
+  return join(__dirname, '../../tools')
+}
+
 function findPhotorec(): string | null {
   try {
     if (isWin) {
       const paths = [
-        join(__dirname, '../../tools/photorec_win.exe'),
+        join(getToolsDir(), 'photorec_win.exe'),
         'C:\\Program Files\\TestDisk\\photorec_win.exe',
         'C:\\Tools\\TestDisk\\photorec_win.exe',
       ]
@@ -98,7 +119,7 @@ function findTestdisk(): string | null {
   try {
     if (isWin) {
       const paths = [
-        join(__dirname, '../../tools/testdisk_win.exe'),
+        join(getToolsDir(), 'testdisk_win.exe'),
         'C:\\Program Files\\TestDisk\\testdisk_win.exe',
         'C:\\Tools\\TestDisk\\testdisk_win.exe',
       ]

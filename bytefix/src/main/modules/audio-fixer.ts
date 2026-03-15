@@ -13,6 +13,14 @@ const logger = createLogger('audio-fixer')
 const isWin = platform() === 'win32'
 const isMac = platform() === 'darwin'
 
+const SERVICE_STATUS_MAP: Record<number, string> = {
+  1: 'Stopped', 2: 'StartPending', 3: 'StopPending',
+  4: 'Running', 5: 'ContinuePending', 6: 'PausePending', 7: 'Paused'
+}
+const START_TYPE_MAP: Record<number, string> = {
+  0: 'Boot', 1: 'System', 2: 'Automatic', 3: 'Manual', 4: 'Disabled'
+}
+
 // Check audio service status (Windows)
 function checkAudioServices(): { name: string; status: string; startType: string }[] {
   const services: { name: string; status: string; startType: string }[] = []
@@ -29,8 +37,8 @@ function checkAudioServices(): { name: string; status: string; startType: string
       for (const svc of items) {
         services.push({
           name: String(svc.Name || ''),
-          status: String(svc.Status === 4 ? 'Running' : svc.Status === 1 ? 'Stopped' : svc.Status || 'Unknown'),
-          startType: String(svc.StartType === 2 ? 'Automatic' : svc.StartType || 'Unknown'),
+          status: SERVICE_STATUS_MAP[svc.Status] || String(svc.Status || 'Unknown'),
+          startType: START_TYPE_MAP[svc.StartType] || String(svc.StartType || 'Unknown'),
         })
       }
     }
@@ -290,9 +298,13 @@ export async function restartAudioServices(): Promise<FixResult> {
       details.push('Services set to start automatically')
       changes.push({ type: 'service', action: 'restarted', target: 'Audiosrv, AudioEndpointBuilder' })
     } else if (isMac) {
-      execSync('sudo killall coreaudiod 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      details.push('Core Audio daemon restarted (auto-restarts)')
-      changes.push({ type: 'service', action: 'restarted', target: 'coreaudiod' })
+      try {
+        execSync('osascript -e \'do shell script "killall coreaudiod" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
+        details.push('Core Audio daemon restarted (auto-restarts)')
+        changes.push({ type: 'service', action: 'restarted', target: 'coreaudiod' })
+      } catch {
+        details.push('Could not restart Core Audio — administrator privileges required')
+      }
     } else {
       try {
         execFileSync('pulseaudio', ['--kill'], { timeout: 5000, stdio: 'pipe' })
@@ -305,7 +317,13 @@ export async function restartAudioServices(): Promise<FixResult> {
           details.push('PipeWire audio restarted')
           changes.push({ type: 'service', action: 'restarted', target: 'pipewire' })
         } catch {
-          details.push('Could not restart audio service')
+          try {
+            execFileSync('pkexec', ['systemctl', 'restart', 'pulseaudio'], { timeout: 30000, stdio: 'pipe' })
+            details.push('PulseAudio restarted with elevated privileges')
+            changes.push({ type: 'service', action: 'restarted', target: 'pulseaudio' })
+          } catch {
+            details.push('Could not restart audio service — run ByteFix with elevated privileges')
+          }
         }
       }
     }
@@ -351,13 +369,21 @@ export async function reinstallAudioDrivers(): Promise<FixResult> {
       )
       details.push('Enabled any disabled audio endpoints')
     } else if (isMac) {
-      execSync('sudo killall coreaudiod 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      details.push('Core Audio reset (macOS manages drivers automatically)')
-      changes.push({ type: 'service', action: 'restarted', target: 'coreaudiod' })
+      try {
+        execSync('osascript -e \'do shell script "killall coreaudiod" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
+        details.push('Core Audio reset (macOS manages drivers automatically)')
+        changes.push({ type: 'service', action: 'restarted', target: 'coreaudiod' })
+      } catch {
+        details.push('Could not reset Core Audio — administrator privileges required')
+      }
     } else {
-      execSync('sudo alsa force-reload 2>/dev/null', { timeout: 15000, stdio: 'pipe' })
-      details.push('ALSA drivers reloaded')
-      changes.push({ type: 'driver', action: 'reinstalled', target: 'ALSA' })
+      try {
+        execFileSync('pkexec', ['alsa', 'force-reload'], { timeout: 30000, stdio: 'pipe' })
+        details.push('ALSA drivers reloaded')
+        changes.push({ type: 'driver', action: 'reinstalled', target: 'ALSA' })
+      } catch {
+        details.push('Could not reload ALSA — run ByteFix with elevated privileges')
+      }
     }
 
     return {
@@ -451,9 +477,13 @@ export async function disableAudioEnhancements(): Promise<FixResult> {
         details.push('Audio troubleshooter not available')
       }
     } else if (isMac) {
-      execSync('sudo killall coreaudiod 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      details.push('Core Audio reset to default settings')
-      changes.push({ type: 'service', action: 'restarted', target: 'coreaudiod' })
+      try {
+        execSync('osascript -e \'do shell script "killall coreaudiod" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
+        details.push('Core Audio reset to default settings')
+        changes.push({ type: 'service', action: 'restarted', target: 'coreaudiod' })
+      } catch {
+        details.push('Could not reset Core Audio — administrator privileges required')
+      }
     }
 
     return {

@@ -13,6 +13,14 @@ const logger = createLogger('bluetooth-fixer')
 const isWin = platform() === 'win32'
 const isMac = platform() === 'darwin'
 
+const SERVICE_STATUS_MAP: Record<number, string> = {
+  1: 'Stopped', 2: 'StartPending', 3: 'StopPending',
+  4: 'Running', 5: 'ContinuePending', 6: 'PausePending', 7: 'Paused'
+}
+const START_TYPE_MAP: Record<number, string> = {
+  0: 'Boot', 1: 'System', 2: 'Automatic', 3: 'Manual', 4: 'Disabled'
+}
+
 function checkBluetoothService(): { running: boolean; startType: string } {
   if (!isWin) return { running: true, startType: 'Unknown' }
   try {
@@ -23,8 +31,8 @@ function checkBluetoothService(): { running: boolean; startType: string } {
     if (output) {
       const svc = JSON.parse(output)
       return {
-        running: svc.Status === 4 || String(svc.Status) === 'Running',
-        startType: svc.StartType === 2 ? 'Automatic' : String(svc.StartType || 'Unknown'),
+        running: svc.Status === 4,
+        startType: START_TYPE_MAP[svc.StartType] || String(svc.StartType || 'Unknown'),
       }
     }
   } catch { /* service not found */ }
@@ -61,10 +69,11 @@ function checkFlightMode(): boolean {
   if (!isWin) return false
   try {
     const output = execSync(
-      'powershell -NoProfile -Command "(Get-ItemProperty \'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\RadioManagement\\SystemRadioState\' -ErrorAction SilentlyContinue).\'(default)\'"',
+      'reg query "HKLM\\SYSTEM\\CurrentControlSet\\Control\\RadioManagement\\SystemRadioState" /ve 2>nul',
       { encoding: 'utf8', timeout: 5000, stdio: 'pipe' }
     ).trim()
-    return output === '1'
+    // reg query output format: "(Default)    REG_DWORD    0x1"
+    return /0x0*1\s*$/.test(output)
   } catch { return false }
 }
 
@@ -268,13 +277,21 @@ export async function restartBluetoothService(): Promise<FixResult> {
       details.push('Bluetooth service restarted and set to Automatic')
       changes.push({ type: 'service', action: 'restarted', target: 'bthserv' })
     } else if (isMac) {
-      execSync('sudo killall bluetoothd 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      details.push('Bluetooth daemon restarted')
-      changes.push({ type: 'service', action: 'restarted', target: 'bluetoothd' })
+      try {
+        execSync('osascript -e \'do shell script "killall bluetoothd" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
+        details.push('Bluetooth daemon restarted')
+        changes.push({ type: 'service', action: 'restarted', target: 'bluetoothd' })
+      } catch {
+        details.push('Could not restart Bluetooth - administrator privileges required')
+      }
     } else {
-      execSync('sudo systemctl restart bluetooth 2>/dev/null', { timeout: 10000, stdio: 'pipe' })
-      details.push('Bluetooth service restarted')
-      changes.push({ type: 'service', action: 'restarted', target: 'bluetooth' })
+      try {
+        execFileSync('pkexec', ['systemctl', 'restart', 'bluetooth'], { timeout: 30000, stdio: 'pipe' })
+        details.push('Bluetooth service restarted')
+        changes.push({ type: 'service', action: 'restarted', target: 'bluetooth' })
+      } catch {
+        details.push('Could not restart Bluetooth - elevated privileges required')
+      }
     }
 
     return {
@@ -298,12 +315,25 @@ export async function clearBluetoothCache(): Promise<FixResult> {
 
   try {
     if (isWin) {
-      // Stop service, clear cache, restart
+      // Stop service first
       execSync(
         'powershell -NoProfile -Command "Stop-Service bthserv -Force -ErrorAction SilentlyContinue"',
         { timeout: 10000, stdio: 'pipe' }
       )
       details.push('Bluetooth service stopped')
+
+      // Backup before clearing
+      try {
+        const { tmpdir } = require('os')
+        const backupPath = require('path').join(tmpdir(), `bytefix-bt-backup-${Date.now()}.reg`)
+        execSync(
+          `reg export "HKLM\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters\\Devices" "${backupPath}" /y 2>nul`,
+          { timeout: 10000, stdio: 'pipe' }
+        )
+        details.push(`Backup saved to ${backupPath}`)
+      } catch {
+        details.push('Could not backup existing pairings (may not exist)')
+      }
 
       execSync(
         'powershell -NoProfile -Command "Remove-Item \'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters\\Devices\\*\' -Recurse -Force -ErrorAction SilentlyContinue"',
@@ -319,16 +349,24 @@ export async function clearBluetoothCache(): Promise<FixResult> {
       )
       details.push('Bluetooth service restarted')
     } else if (isMac) {
-      execSync('sudo defaults delete /Library/Preferences/com.apple.Bluetooth 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      execSync('sudo killall bluetoothd 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      details.push('Bluetooth preferences and cache cleared')
-      details.push('WARNING: All paired devices removed')
-      changes.push({ type: 'file', action: 'cleared', target: 'Bluetooth preferences' })
+      try {
+        execSync('osascript -e \'do shell script "defaults delete /Library/Preferences/com.apple.Bluetooth" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
+        execSync('osascript -e \'do shell script "killall bluetoothd" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
+        details.push('Bluetooth preferences and cache cleared')
+        details.push('WARNING: All paired devices removed')
+        changes.push({ type: 'file', action: 'cleared', target: 'Bluetooth preferences' })
+      } catch {
+        details.push('Could not clear Bluetooth cache - administrator privileges required')
+      }
     } else {
-      execSync('sudo rm -rf /var/lib/bluetooth/* 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      execSync('sudo systemctl restart bluetooth 2>/dev/null', { timeout: 10000, stdio: 'pipe' })
-      details.push('Bluetooth cache cleared and service restarted')
-      changes.push({ type: 'file', action: 'cleared', target: '/var/lib/bluetooth' })
+      try {
+        execFileSync('pkexec', ['rm', '-rf', '/var/lib/bluetooth/'], { timeout: 30000, stdio: 'pipe' })
+        execFileSync('pkexec', ['systemctl', 'restart', 'bluetooth'], { timeout: 30000, stdio: 'pipe' })
+        details.push('Bluetooth cache cleared and service restarted')
+        changes.push({ type: 'file', action: 'cleared', target: '/var/lib/bluetooth' })
+      } catch {
+        details.push('Could not clear Bluetooth cache - elevated privileges required')
+      }
     }
 
     return {
@@ -362,17 +400,25 @@ export async function reinstallBluetoothDrivers(): Promise<FixResult> {
       details.push('Hardware scan completed — drivers will be reinstalled')
       changes.push({ type: 'driver', action: 'reinstalled', target: 'Bluetooth adapter' })
     } else if (isMac) {
-      execSync('sudo kextload -b com.apple.iokit.BroadcomBluetoothHostControllerUSBTransport 2>/dev/null', {
-        timeout: 10000, stdio: 'pipe'
-      })
-      details.push('Bluetooth kernel extension reloaded')
-      changes.push({ type: 'driver', action: 'reloaded', target: 'Bluetooth kext' })
+      try {
+        execSync('osascript -e \'do shell script "kextload -b com.apple.iokit.BroadcomBluetoothHostControllerUSBTransport" with administrator privileges\' 2>/dev/null', {
+          timeout: 30000, stdio: 'pipe'
+        })
+        details.push('Bluetooth kernel extension reloaded')
+        changes.push({ type: 'driver', action: 'reloaded', target: 'Bluetooth kext' })
+      } catch {
+        details.push('Could not reload Bluetooth driver - administrator privileges required')
+      }
     } else {
-      execSync('sudo modprobe -r btusb 2>/dev/null && sudo modprobe btusb 2>/dev/null', {
-        timeout: 10000, stdio: 'pipe'
-      })
-      details.push('Bluetooth USB driver reloaded')
-      changes.push({ type: 'driver', action: 'reloaded', target: 'btusb' })
+      try {
+        execFileSync('pkexec', ['sh', '-c', 'modprobe -r btusb && modprobe btusb'], {
+          timeout: 30000, stdio: 'pipe'
+        })
+        details.push('Bluetooth USB driver reloaded')
+        changes.push({ type: 'driver', action: 'reloaded', target: 'btusb' })
+      } catch {
+        details.push('Could not reload Bluetooth driver - elevated privileges required')
+      }
     }
 
     return {
@@ -421,7 +467,7 @@ export async function fixBluetoothAudio(): Promise<FixResult> {
         'defaults write com.apple.BluetoothAudioAgent "Apple Bitpool Min (editable)" -int 53 2>/dev/null',
         { timeout: 5000, stdio: 'pipe' }
       )
-      execSync('sudo killall coreaudiod 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
+      execSync('osascript -e \'do shell script "killall coreaudiod" with administrator privileges\' 2>/dev/null', { timeout: 30000, stdio: 'pipe' })
       details.push('Increased Bluetooth audio bitpool for better quality')
       details.push('Core Audio restarted')
       changes.push({ type: 'system', action: 'modified', target: 'Bluetooth audio bitpool' })
