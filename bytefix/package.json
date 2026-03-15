@@ -26,6 +26,7 @@
     "execa": "^5.1.1",
     "i18next": "^25.8.18",
     "nanoid": "^3.3.7",
+    "onnxruntime-node": "^1.24.3",
     "qrcode": "^1.5.4",
     "react-i18next": "^16.5.8",
     "systeminformation": "^5.23.0",

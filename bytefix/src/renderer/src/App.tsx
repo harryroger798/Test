@@ -39,6 +39,7 @@ import { PartitionManagerPage } from './pages/PartitionManagerPage'
 import { MemoryDiagnosticsPage } from './pages/MemoryDiagnosticsPage'
 import { FirmwareBiosPage } from './pages/FirmwareBiosPage'
 import { RemoteAccessPage } from './pages/RemoteAccessPage'
+import { AIDiagnosticsPage } from './pages/AIDiagnosticsPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
@@ -97,6 +98,7 @@ export default function App(): JSX.Element {
               <Route path="/memory-diag" element={<ErrorBoundary module="memory-diag"><MemoryDiagnosticsPage /></ErrorBoundary>} />
               <Route path="/firmware" element={<ErrorBoundary module="firmware"><FirmwareBiosPage /></ErrorBoundary>} />
               <Route path="/remote-access" element={<ErrorBoundary module="remote-access"><RemoteAccessPage /></ErrorBoundary>} />
+              <Route path="/ai-diagnostics" element={<ErrorBoundary module="ai-diagnostics"><AIDiagnosticsPage /></ErrorBoundary>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

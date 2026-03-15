@@ -15,6 +15,10 @@ extraResources:
       - "**/*.dll"
       - "**/platforms/**"
       - "**/63/**"
+  - from: models/
+    to: models/
+    filter:
+      - "**/*.onnx"
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**/*

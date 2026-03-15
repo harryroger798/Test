@@ -95,6 +95,7 @@ import { runPartitionManagerDiagnostics, resizePartition, formatPartition, creat
 import { runMemoryDiagnostics, runBuiltInMemTest, scheduleWindowsMemDiag } from './modules/memory-diagnostics'
 import { runFirmwareDiagnostics, checkFirmwareUpdates, updateDrivers } from './modules/firmware-manager'
 import { runRemoteAccessDiagnostics, enableRemoteDesktop, disableRemoteDesktop, generateRemoteAssistInvite, configureWakeOnLan } from './modules/remote-access'
+import { runAIDiagnosis, getHealthScore, collectSystemMetrics } from './modules/ai-diagnostics'
 
 // Phase 4 module imports
 import { createInvoice, getInvoice, getInvoicesByCustomer, getAllInvoices, updatePaymentStatus, getInvoiceStats, getHsnCodes, getIndianStates } from './modules/gst-billing'
@@ -1015,6 +1016,21 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('remote:configureWol', async () => {
     return await configureWakeOnLan()
+  })
+
+  // ============================================================
+  // AI Diagnostics (ONNX-powered local AI)
+  // ============================================================
+  ipcMain.handle('ai:runDiagnosis', async () => {
+    return await runAIDiagnosis()
+  })
+
+  ipcMain.handle('ai:getHealthScore', async () => {
+    return await getHealthScore()
+  })
+
+  ipcMain.handle('ai:collectMetrics', async () => {
+    return await collectSystemMetrics()
   })
 
   logger.info('All IPC handlers registered successfully')

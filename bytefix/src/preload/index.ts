@@ -264,6 +264,11 @@ const api = {
   generateRemoteInvite: () => ipcRenderer.invoke('remote:generateInvite'),
   configureWakeOnLan: () => ipcRenderer.invoke('remote:configureWol'),
 
+  // AI Diagnostics (ONNX-powered local AI)
+  aiRunDiagnosis: () => ipcRenderer.invoke('ai:runDiagnosis'),
+  aiGetHealthScore: () => ipcRenderer.invoke('ai:getHealthScore'),
+  aiCollectMetrics: () => ipcRenderer.invoke('ai:collectMetrics'),
+
   // Phase 5: Production Hardening - Error Logging
   logError: (data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) =>
     ipcRenderer.invoke('app:logError', data),
