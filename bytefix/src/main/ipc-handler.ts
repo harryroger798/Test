@@ -111,7 +111,7 @@ import { discoverBackupTargets, createBackupPlan, executeBackup, discoverBrowser
 import { setLanguage, getLanguage, getSupportedLanguages, getTranslationsForLanguage } from './modules/i18n-config'
 import type { SupportedLanguage } from './modules/i18n-config'
 
-import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem } from '../shared/types'
+import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem, FixResult } from '../shared/types'
 
 const logger = createLogger('ipc-handler')
 
