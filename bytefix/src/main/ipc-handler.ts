@@ -89,6 +89,13 @@ import { runActivationDiagnostics, runActivationTroubleshooter } from './modules
 import { runEmailDiagnostics, autoConfigureEmail, repairOutlookProfile, clearEmailCredentials } from './modules/email-account-setup'
 import { runPhoneTransferDiagnostics, guideUsbDebugging, pullFilesViaAdb } from './modules/phone-data-transfer'
 
+// Phase 6: New tool integration imports
+import { runDiskImagingDiagnostics, createSystemImage, clonePartition, rescueFailingDrive } from './modules/disk-imaging'
+import { runPartitionManagerDiagnostics, resizePartition, formatPartition, createPartition } from './modules/partition-manager'
+import { runMemoryDiagnostics, runBuiltInMemTest, scheduleWindowsMemDiag } from './modules/memory-diagnostics'
+import { runFirmwareDiagnostics, checkFirmwareUpdates, updateDrivers } from './modules/firmware-manager'
+import { runRemoteAccessDiagnostics, enableRemoteDesktop, disableRemoteDesktop, generateRemoteAssistInvite, configureWakeOnLan } from './modules/remote-access'
+
 // Phase 4 module imports
 import { createInvoice, getInvoice, getInvoicesByCustomer, getAllInvoices, updatePaymentStatus, getInvoiceStats, getHsnCodes, getIndianStates } from './modules/gst-billing'
 import { generateUPIPayment, generateInvoiceUPI, validateUPIAddress } from './modules/upi-payment'
@@ -904,6 +911,112 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     // Placeholder
   })
 
+  // ============================================================
+  // Phase 6: Disk Imaging
+  // ============================================================
+  ipcMain.handle('diskimg:diagnose', async () => {
+    return await runDiskImagingDiagnostics()
+  })
+
+  ipcMain.handle('diskimg:createSystemImage', async (_event, args: { destinationPath: string }) => {
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    return await createSystemImage(safeDest)
+  })
+
+  ipcMain.handle('diskimg:clonePartition', async (_event, args: { sourceDrive: string; destDrive: string }) => {
+    return await clonePartition(args.sourceDrive, args.destDrive)
+  })
+
+  ipcMain.handle('diskimg:rescueDrive', async (_event, args: { sourceDrive: string; destinationPath: string }) => {
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    return await rescueFailingDrive(args.sourceDrive, safeDest)
+  })
+
+  // ============================================================
+  // Phase 6: Partition Manager
+  // ============================================================
+  ipcMain.handle('partmgr:diagnose', async () => {
+    return await runPartitionManagerDiagnostics()
+  })
+
+  ipcMain.handle('partmgr:resize', async (_event, args: { driveLetter: string; newSizeMB: number }) => {
+    return await resizePartition(args.driveLetter, args.newSizeMB)
+  })
+
+  ipcMain.handle('partmgr:format', async (_event, args: { driveLetter: string; fileSystem: string; label: string }) => {
+    return await formatPartition(args.driveLetter, args.fileSystem, args.label)
+  })
+
+  ipcMain.handle('partmgr:create', async (_event, args: { diskNumber: number; sizeMB: number; fileSystem: string; label: string }) => {
+    return await createPartition(args.diskNumber, args.sizeMB, args.fileSystem, args.label)
+  })
+
+  // ============================================================
+  // Phase 6: Memory Diagnostics
+  // ============================================================
+  ipcMain.handle('memdiag:diagnose', async () => {
+    return await runMemoryDiagnostics()
+  })
+
+  ipcMain.handle('memdiag:runPatternTest', async (_event, args: { testSizeMB: number }) => {
+    const sizeMB = Math.min(Math.max(32, args.testSizeMB || 128), 512)
+    const testResult = await runBuiltInMemTest(sizeMB)
+    return {
+      success: testResult.overallPassed,
+      module: 'memory',
+      action: 'pattern-test',
+      description: testResult.overallPassed
+        ? `Memory pattern test PASSED (${testResult.testedMB}MB, ${testResult.patterns.length} patterns, ${testResult.durationMs}ms)`
+        : `Memory pattern test FAILED — ${testResult.errors} error(s) detected`,
+      details: testResult.patterns.map(p => `${p.name}: ${p.passed ? 'PASS' : 'FAIL'} (${p.durationMs}ms)`),
+      changes: [],
+      rollbackAvailable: false,
+      error: testResult.overallPassed ? undefined : `${testResult.errors} memory error(s) detected`
+    } as FixResult
+  })
+
+  ipcMain.handle('memdiag:scheduleWinTest', async () => {
+    return await scheduleWindowsMemDiag()
+  })
+
+  // ============================================================
+  // Phase 6: Firmware & BIOS
+  // ============================================================
+  ipcMain.handle('firmware:diagnose', async () => {
+    return await runFirmwareDiagnostics()
+  })
+
+  ipcMain.handle('firmware:checkUpdates', async () => {
+    return await checkFirmwareUpdates()
+  })
+
+  ipcMain.handle('firmware:updateDrivers', async () => {
+    return await updateDrivers()
+  })
+
+  // ============================================================
+  // Phase 6: Remote Access
+  // ============================================================
+  ipcMain.handle('remote:diagnose', async () => {
+    return await runRemoteAccessDiagnostics()
+  })
+
+  ipcMain.handle('remote:enableRdp', async () => {
+    return await enableRemoteDesktop()
+  })
+
+  ipcMain.handle('remote:disableRdp', async () => {
+    return await disableRemoteDesktop()
+  })
+
+  ipcMain.handle('remote:generateInvite', async () => {
+    return await generateRemoteAssistInvite()
+  })
+
+  ipcMain.handle('remote:configureWol', async () => {
+    return await configureWakeOnLan()
+  })
+
   logger.info('All IPC handlers registered successfully')
 }
 
@@ -950,7 +1063,8 @@ async function runQuickScan(): Promise<ScanResult> {
   const PER_MODULE_TIMEOUT_MS = 30000 // 30s per module
   const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
     'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps',
-    'thermal', 'hardware', 'keyboard', 'gaming', 'partition', 'activation', 'email', 'phone']
+    'thermal', 'hardware', 'keyboard', 'gaming', 'partition', 'activation', 'email', 'phone',
+    'disk-imaging', 'partition-mgr', 'memory-diag', 'firmware', 'remote-access']
 
   const moduleFns: Array<() => Promise<DiagnosticResult[]>> = [
     runPerformanceDiagnostics,
@@ -973,7 +1087,12 @@ async function runQuickScan(): Promise<ScanResult> {
     runPartitionBootDiagnostics,
     runActivationDiagnostics,
     runEmailDiagnostics,
-    runPhoneTransferDiagnostics
+    runPhoneTransferDiagnostics,
+    runDiskImagingDiagnostics,
+    runPartitionManagerDiagnostics,
+    runMemoryDiagnostics,
+    runFirmwareDiagnostics,
+    runRemoteAccessDiagnostics
   ]
 
   for (let i = 0; i < moduleFns.length; i++) {

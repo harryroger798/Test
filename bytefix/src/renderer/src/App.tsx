@@ -34,6 +34,11 @@ import { CustomersPage } from './pages/CustomersPage'
 import { RepairJobsPage } from './pages/RepairJobsPage'
 import { BackupWizardPage } from './pages/BackupWizardPage'
 import { LanguageSettingsPage } from './pages/LanguageSettingsPage'
+import { DiskImagingPage } from './pages/DiskImagingPage'
+import { PartitionManagerPage } from './pages/PartitionManagerPage'
+import { MemoryDiagnosticsPage } from './pages/MemoryDiagnosticsPage'
+import { FirmwareBiosPage } from './pages/FirmwareBiosPage'
+import { RemoteAccessPage } from './pages/RemoteAccessPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
@@ -87,6 +92,11 @@ export default function App(): JSX.Element {
               <Route path="/jobs" element={<ErrorBoundary module="jobs"><RepairJobsPage /></ErrorBoundary>} />
               <Route path="/backup" element={<ErrorBoundary module="backup"><BackupWizardPage /></ErrorBoundary>} />
               <Route path="/language" element={<ErrorBoundary module="language"><LanguageSettingsPage /></ErrorBoundary>} />
+              <Route path="/disk-imaging" element={<ErrorBoundary module="disk-imaging"><DiskImagingPage /></ErrorBoundary>} />
+              <Route path="/partition-mgr" element={<ErrorBoundary module="partition-mgr"><PartitionManagerPage /></ErrorBoundary>} />
+              <Route path="/memory-diag" element={<ErrorBoundary module="memory-diag"><MemoryDiagnosticsPage /></ErrorBoundary>} />
+              <Route path="/firmware" element={<ErrorBoundary module="firmware"><FirmwareBiosPage /></ErrorBoundary>} />
+              <Route path="/remote-access" element={<ErrorBoundary module="remote-access"><RemoteAccessPage /></ErrorBoundary>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

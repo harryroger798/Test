@@ -228,6 +228,42 @@ const api = {
   getSupportedLanguages: () => ipcRenderer.invoke('i18n:getSupportedLanguages'),
   getTranslations: (lang: string) => ipcRenderer.invoke('i18n:getTranslations', { lang }),
 
+  // Phase 6: Disk Imaging
+  diskImgDiagnose: () => ipcRenderer.invoke('diskimg:diagnose'),
+  createSystemImage: (destinationPath: string) =>
+    ipcRenderer.invoke('diskimg:createSystemImage', { destinationPath }),
+  clonePartition: (sourceDrive: string, destDrive: string) =>
+    ipcRenderer.invoke('diskimg:clonePartition', { sourceDrive, destDrive }),
+  rescueDrive: (sourceDrive: string, destinationPath: string) =>
+    ipcRenderer.invoke('diskimg:rescueDrive', { sourceDrive, destinationPath }),
+
+  // Phase 6: Partition Manager
+  partMgrDiagnose: () => ipcRenderer.invoke('partmgr:diagnose'),
+  resizePartition: (driveLetter: string, newSizeMB: number) =>
+    ipcRenderer.invoke('partmgr:resize', { driveLetter, newSizeMB }),
+  formatPartition: (driveLetter: string, fileSystem: string, label: string) =>
+    ipcRenderer.invoke('partmgr:format', { driveLetter, fileSystem, label }),
+  createPartition: (diskNumber: number, sizeMB: number, fileSystem: string, label: string) =>
+    ipcRenderer.invoke('partmgr:create', { diskNumber, sizeMB, fileSystem, label }),
+
+  // Phase 6: Memory Diagnostics
+  memDiagDiagnose: () => ipcRenderer.invoke('memdiag:diagnose'),
+  runMemPatternTest: (testSizeMB: number) =>
+    ipcRenderer.invoke('memdiag:runPatternTest', { testSizeMB }),
+  scheduleWinMemTest: () => ipcRenderer.invoke('memdiag:scheduleWinTest'),
+
+  // Phase 6: Firmware & BIOS
+  firmwareDiagnose: () => ipcRenderer.invoke('firmware:diagnose'),
+  checkFirmwareUpdates: () => ipcRenderer.invoke('firmware:checkUpdates'),
+  updateDrivers: () => ipcRenderer.invoke('firmware:updateDrivers'),
+
+  // Phase 6: Remote Access
+  remoteDiagnose: () => ipcRenderer.invoke('remote:diagnose'),
+  enableRemoteDesktop: () => ipcRenderer.invoke('remote:enableRdp'),
+  disableRemoteDesktop: () => ipcRenderer.invoke('remote:disableRdp'),
+  generateRemoteInvite: () => ipcRenderer.invoke('remote:generateInvite'),
+  configureWakeOnLan: () => ipcRenderer.invoke('remote:configureWol'),
+
   // Phase 5: Production Hardening - Error Logging
   logError: (data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) =>
     ipcRenderer.invoke('app:logError', data),

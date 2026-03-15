@@ -5,7 +5,8 @@ import {
   HardDrive, KeyRound, Volume2, Bluetooth, Printer,
   MonitorSpeaker, Camera, Usb, Globe,
   Thermometer, Cpu, Keyboard, Gamepad2, Mail, Smartphone,
-  Receipt, QrCode, MessageCircle, Users, ClipboardList, Database, Languages
+  Receipt, QrCode, MessageCircle, Users, ClipboardList, Database, Languages,
+  DiscAlbum, MemoryStick, CircuitBoard, Radio
 } from 'lucide-react'
 import { useAppStore } from '../store/app-store'
 import { cn } from '../lib/utils'
@@ -44,7 +45,12 @@ const NAV_ITEMS: { path: string; i18nKey: string; fallback: string; icon: Lucide
   { path: '/customers', i18nKey: 'nav.customers', fallback: 'Customers', icon: Users, group: 'phase4' },
   { path: '/jobs', i18nKey: 'nav.repairJobs', fallback: 'Repair Jobs', icon: ClipboardList, group: 'phase4' },
   { path: '/backup', i18nKey: 'nav.backup', fallback: 'Backup Wizard', icon: Database, group: 'phase4' },
-  { path: '/language', i18nKey: 'settings.language', fallback: 'Language', icon: Languages, group: 'phase4' }
+  { path: '/language', i18nKey: 'settings.language', fallback: 'Language', icon: Languages, group: 'phase4' },
+  { path: '/disk-imaging', i18nKey: 'nav.diskImaging', fallback: 'Disk Imaging', icon: DiscAlbum, group: 'phase6' },
+  { path: '/partition-mgr', i18nKey: 'nav.partitionMgr', fallback: 'Partition Manager', icon: HardDrive, group: 'phase6' },
+  { path: '/memory-diag', i18nKey: 'nav.memoryDiag', fallback: 'Memory Diagnostics', icon: MemoryStick, group: 'phase6' },
+  { path: '/firmware', i18nKey: 'nav.firmware', fallback: 'Firmware / BIOS', icon: CircuitBoard, group: 'phase6' },
+  { path: '/remote-access', i18nKey: 'nav.remoteAccess', fallback: 'Remote Access', icon: Radio, group: 'phase6' }
 ]
 
 export function Sidebar(): JSX.Element {
