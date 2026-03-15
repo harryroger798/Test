@@ -156,8 +156,8 @@ export interface FixResult {
 }
 
 export interface FixChange {
-  type: 'service' | 'registry' | 'file' | 'process' | 'network' | 'system' | 'driver'
-  action: 'disabled' | 'enabled' | 'modified' | 'deleted' | 'created' | 'restored' | 'killed'
+  type: 'service' | 'registry' | 'file' | 'process' | 'network' | 'system' | 'driver' | 'device' | 'application'
+  action: 'disabled' | 'enabled' | 'modified' | 'deleted' | 'created' | 'restored' | 'killed' | 'reinstalled' | 'restarted' | 'repaired' | 'cleared' | 'reloaded' | 'power-cycled'
   target: string
   before?: string
   after?: string
@@ -320,6 +320,67 @@ export interface IPCChannels {
   // Disk Health
   'disk:getSmartData': { request: { device: string }; response: SmartData }
   'disk:runChkdsk': { request: { drive: string }; response: FixResult }
+
+  // Data Recovery (Phase 2)
+  'recovery:diagnose': { request: void; response: DiagnosticResult[] }
+  'recovery:restoreShadowCopy': { request: { filePath: string; outputDir: string }; response: FixResult }
+  'recovery:restoreRecycleBin': { request: void; response: FixResult }
+  'recovery:runPhotorec': { request: { sourceDrive: string; outputDir: string }; response: FixResult }
+  'recovery:repairFilesystem': { request: { drive: string }; response: FixResult }
+
+  // Password Recovery (Phase 2)
+  'password:diagnose': { request: void; response: DiagnosticResult[] }
+  'password:enableAdmin': { request: void; response: FixResult }
+  'password:disableAdmin': { request: void; response: FixResult }
+
+  // Audio Fixer (Phase 2)
+  'audio:diagnose': { request: void; response: DiagnosticResult[] }
+  'audio:restartServices': { request: void; response: FixResult }
+  'audio:reinstallDrivers': { request: void; response: FixResult }
+  'audio:enableMicPrivacy': { request: void; response: FixResult }
+  'audio:disableEnhancements': { request: void; response: FixResult }
+
+  // Bluetooth Fixer (Phase 2)
+  'bluetooth:diagnose': { request: void; response: DiagnosticResult[] }
+  'bluetooth:restartService': { request: void; response: FixResult }
+  'bluetooth:clearCache': { request: void; response: FixResult }
+  'bluetooth:reinstallDrivers': { request: void; response: FixResult }
+  'bluetooth:fixAudio': { request: void; response: FixResult }
+
+  // Printer Fixer (Phase 2)
+  'printer:diagnose': { request: void; response: DiagnosticResult[] }
+  'printer:restartSpooler': { request: void; response: FixResult }
+  'printer:clearQueue': { request: void; response: FixResult }
+  'printer:convertWsdToTcpIp': { request: { printerName: string; ipAddress: string }; response: FixResult }
+  'printer:enableDiscovery': { request: void; response: FixResult }
+
+  // Display Fixer (Phase 2)
+  'display:diagnose': { request: void; response: DiagnosticResult[] }
+  'display:reinstallDrivers': { request: void; response: FixResult }
+  'display:fixTdr': { request: void; response: FixResult }
+  'display:disableHwAccel': { request: void; response: FixResult }
+  'display:detectMonitors': { request: void; response: FixResult }
+
+  // Webcam Fixer (Phase 2)
+  'webcam:diagnose': { request: void; response: DiagnosticResult[] }
+  'webcam:enablePrivacy': { request: void; response: FixResult }
+  'webcam:reinstallDrivers': { request: void; response: FixResult }
+  'webcam:powerCycle': { request: void; response: FixResult }
+
+  // USB Fixer (Phase 2)
+  'usb:diagnose': { request: void; response: DiagnosticResult[] }
+  'usb:disableSelectiveSuspend': { request: void; response: FixResult }
+  'usb:reinstallDrivers': { request: void; response: FixResult }
+  'usb:repairRawDrive': { request: { driveLetter: string }; response: FixResult }
+  'usb:disablePowerMgmt': { request: void; response: FixResult }
+
+  // India Apps (Phase 2)
+  'india:diagnose': { request: void; response: DiagnosticResult[] }
+  'india:repairOffice': { request: void; response: FixResult }
+  'india:repairPst': { request: void; response: FixResult }
+  'india:fixJavaBanking': { request: void; response: FixResult }
+  'india:cleanChrome': { request: void; response: FixResult }
+  'india:enableDotNet35': { request: void; response: FixResult }
 
   // Full Scan
   'scan:full': { request: ScanConfig; response: ScanResult }

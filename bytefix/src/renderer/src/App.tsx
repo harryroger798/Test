@@ -7,6 +7,15 @@ import { MalwarePage } from './pages/MalwarePage'
 import { NetworkPage } from './pages/NetworkPage'
 import { OSRepairPage } from './pages/OSRepairPage'
 import { BatteryPage } from './pages/BatteryPage'
+import { DataRecoveryPage } from './pages/DataRecoveryPage'
+import { PasswordRecoveryPage } from './pages/PasswordRecoveryPage'
+import { AudioFixerPage } from './pages/AudioFixerPage'
+import { BluetoothFixerPage } from './pages/BluetoothFixerPage'
+import { PrinterFixerPage } from './pages/PrinterFixerPage'
+import { DisplayFixerPage } from './pages/DisplayFixerPage'
+import { WebcamFixerPage } from './pages/WebcamFixerPage'
+import { UsbFixerPage } from './pages/UsbFixerPage'
+import { IndiaAppsPage } from './pages/IndiaAppsPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
@@ -29,6 +38,15 @@ export default function App(): JSX.Element {
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/os-repair" element={<OSRepairPage />} />
             <Route path="/battery" element={<BatteryPage />} />
+            <Route path="/data-recovery" element={<DataRecoveryPage />} />
+            <Route path="/password" element={<PasswordRecoveryPage />} />
+            <Route path="/audio" element={<AudioFixerPage />} />
+            <Route path="/bluetooth" element={<BluetoothFixerPage />} />
+            <Route path="/printer" element={<PrinterFixerPage />} />
+            <Route path="/display" element={<DisplayFixerPage />} />
+            <Route path="/webcam" element={<WebcamFixerPage />} />
+            <Route path="/usb" element={<UsbFixerPage />} />
+            <Route path="/india-apps" element={<IndiaAppsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

@@ -47,6 +47,17 @@ import { quickScan, fullScan, cleanBrowsers, runMalwareDiagnostics } from './mod
 import { diagnoseNetwork, resetAdapter, flushDns, resetWinsock, resetTcpIp, runNetworkDiagnostics } from './modules/network-diagnostics'
 import { getBatteryReport, optimizePower, runBatteryDiagnostics } from './modules/battery-diagnostics'
 
+// Phase 2 module imports
+import { runDataRecoveryDiagnostics, restoreFromShadowCopy, restoreFromRecycleBin, runPhotorecRecovery, repairFilesystem } from './modules/data-recovery'
+import { runPasswordRecoveryDiagnostics, enableAdminAccount, disableAdminAccount } from './modules/password-recovery'
+import { runAudioDiagnostics, restartAudioServices, reinstallAudioDrivers, enableMicrophonePrivacy, disableAudioEnhancements } from './modules/audio-fixer'
+import { runBluetoothDiagnostics, restartBluetoothService, clearBluetoothCache, reinstallBluetoothDrivers, fixBluetoothAudio } from './modules/bluetooth-fixer'
+import { runPrinterDiagnostics, restartSpooler, clearPrintQueue, convertWsdToTcpIp, enablePrinterDiscovery } from './modules/printer-fixer'
+import { runDisplayDiagnostics, reinstallDisplayDrivers, fixTdrTimeout, disableHardwareAcceleration, detectExternalMonitors } from './modules/display-fixer'
+import { runWebcamDiagnostics, enableCameraPrivacy, reinstallCameraDrivers, powerCycleCamera } from './modules/webcam-fixer'
+import { runUsbDiagnostics, disableSelectiveSuspend, reinstallUsbDrivers, repairRawDrive, disableUsbPowerManagement } from './modules/usb-fixer'
+import { runIndiaAppsDiagnostics, repairOffice, repairOutlookPst, fixJavaBanking, cleanChrome, enableDotNet35 } from './modules/india-apps'
+
 import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem } from '../shared/types'
 
 const logger = createLogger('ipc-handler')
@@ -253,6 +264,207 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   // ============================================================
+  // Phase 2: Data Recovery
+  // ============================================================
+  ipcMain.handle('recovery:diagnose', async () => {
+    return await runDataRecoveryDiagnostics()
+  })
+
+  ipcMain.handle('recovery:restoreShadowCopy', async (_event, args: { filePath: string; outputDir: string }) => {
+    return await restoreFromShadowCopy(args.filePath, args.outputDir)
+  })
+
+  ipcMain.handle('recovery:restoreRecycleBin', async () => {
+    return await restoreFromRecycleBin()
+  })
+
+  ipcMain.handle('recovery:runPhotorec', async (_event, args: { sourceDrive: string; outputDir: string }) => {
+    const safeDrive = sanitizeDriveLetter(args.sourceDrive);
+    return await runPhotorecRecovery(safeDrive, args.outputDir)
+  })
+
+  ipcMain.handle('recovery:repairFilesystem', async (_event, args: { drive: string }) => {
+    const safeDrive = sanitizeDriveLetter(args.drive);
+    return await repairFilesystem(safeDrive)
+  })
+
+  // ============================================================
+  // Phase 2: Password Recovery
+  // ============================================================
+  ipcMain.handle('password:diagnose', async () => {
+    return await runPasswordRecoveryDiagnostics()
+  })
+
+  ipcMain.handle('password:enableAdmin', async () => {
+    return await enableAdminAccount()
+  })
+
+  ipcMain.handle('password:disableAdmin', async () => {
+    return await disableAdminAccount()
+  })
+
+  // ============================================================
+  // Phase 2: Audio Fixer
+  // ============================================================
+  ipcMain.handle('audio:diagnose', async () => {
+    return await runAudioDiagnostics()
+  })
+
+  ipcMain.handle('audio:restartServices', async () => {
+    return await restartAudioServices()
+  })
+
+  ipcMain.handle('audio:reinstallDrivers', async () => {
+    return await reinstallAudioDrivers()
+  })
+
+  ipcMain.handle('audio:enableMicPrivacy', async () => {
+    return await enableMicrophonePrivacy()
+  })
+
+  ipcMain.handle('audio:disableEnhancements', async () => {
+    return await disableAudioEnhancements()
+  })
+
+  // ============================================================
+  // Phase 2: Bluetooth Fixer
+  // ============================================================
+  ipcMain.handle('bluetooth:diagnose', async () => {
+    return await runBluetoothDiagnostics()
+  })
+
+  ipcMain.handle('bluetooth:restartService', async () => {
+    return await restartBluetoothService()
+  })
+
+  ipcMain.handle('bluetooth:clearCache', async () => {
+    return await clearBluetoothCache()
+  })
+
+  ipcMain.handle('bluetooth:reinstallDrivers', async () => {
+    return await reinstallBluetoothDrivers()
+  })
+
+  ipcMain.handle('bluetooth:fixAudio', async () => {
+    return await fixBluetoothAudio()
+  })
+
+  // ============================================================
+  // Phase 2: Printer Fixer
+  // ============================================================
+  ipcMain.handle('printer:diagnose', async () => {
+    return await runPrinterDiagnostics()
+  })
+
+  ipcMain.handle('printer:restartSpooler', async () => {
+    return await restartSpooler()
+  })
+
+  ipcMain.handle('printer:clearQueue', async () => {
+    return await clearPrintQueue()
+  })
+
+  ipcMain.handle('printer:convertWsdToTcpIp', async (_event, args: { printerName: string; ipAddress: string }) => {
+    return await convertWsdToTcpIp(args.printerName, args.ipAddress)
+  })
+
+  ipcMain.handle('printer:enableDiscovery', async () => {
+    return await enablePrinterDiscovery()
+  })
+
+  // ============================================================
+  // Phase 2: Display Fixer
+  // ============================================================
+  ipcMain.handle('display:diagnose', async () => {
+    return await runDisplayDiagnostics()
+  })
+
+  ipcMain.handle('display:reinstallDrivers', async () => {
+    return await reinstallDisplayDrivers()
+  })
+
+  ipcMain.handle('display:fixTdr', async () => {
+    return await fixTdrTimeout()
+  })
+
+  ipcMain.handle('display:disableHwAccel', async () => {
+    return await disableHardwareAcceleration()
+  })
+
+  ipcMain.handle('display:detectMonitors', async () => {
+    return await detectExternalMonitors()
+  })
+
+  // ============================================================
+  // Phase 2: Webcam Fixer
+  // ============================================================
+  ipcMain.handle('webcam:diagnose', async () => {
+    return await runWebcamDiagnostics()
+  })
+
+  ipcMain.handle('webcam:enablePrivacy', async () => {
+    return await enableCameraPrivacy()
+  })
+
+  ipcMain.handle('webcam:reinstallDrivers', async () => {
+    return await reinstallCameraDrivers()
+  })
+
+  ipcMain.handle('webcam:powerCycle', async () => {
+    return await powerCycleCamera()
+  })
+
+  // ============================================================
+  // Phase 2: USB Fixer
+  // ============================================================
+  ipcMain.handle('usb:diagnose', async () => {
+    return await runUsbDiagnostics()
+  })
+
+  ipcMain.handle('usb:disableSelectiveSuspend', async () => {
+    return await disableSelectiveSuspend()
+  })
+
+  ipcMain.handle('usb:reinstallDrivers', async () => {
+    return await reinstallUsbDrivers()
+  })
+
+  ipcMain.handle('usb:repairRawDrive', async (_event, args: { driveLetter: string }) => {
+    return await repairRawDrive(args.driveLetter)
+  })
+
+  ipcMain.handle('usb:disablePowerMgmt', async () => {
+    return await disableUsbPowerManagement()
+  })
+
+  // ============================================================
+  // Phase 2: India Apps
+  // ============================================================
+  ipcMain.handle('india:diagnose', async () => {
+    return await runIndiaAppsDiagnostics()
+  })
+
+  ipcMain.handle('india:repairOffice', async () => {
+    return await repairOffice()
+  })
+
+  ipcMain.handle('india:repairPst', async () => {
+    return await repairOutlookPst()
+  })
+
+  ipcMain.handle('india:fixJavaBanking', async () => {
+    return await fixJavaBanking()
+  })
+
+  ipcMain.handle('india:cleanChrome', async () => {
+    return await cleanChrome()
+  })
+
+  ipcMain.handle('india:enableDotNet35', async () => {
+    return await enableDotNet35()
+  })
+
+  // ============================================================
   // Full Scan
   // ============================================================
   ipcMain.handle('scan:quick', async () => {
@@ -299,16 +511,30 @@ async function runQuickScan(): Promise<ScanResult> {
   logger.info(`Starting quick scan ${scanId}...`)
 
   // Run all diagnostic modules in parallel
-  const [perfResults, osResults, malwareResults, networkResults, batteryResults] = await Promise.allSettled([
+  const [perfResults, osResults, malwareResults, networkResults, batteryResults,
+    recoveryResults, audioResults, btResults, printerResults, displayResults,
+    webcamResults, usbResults, indiaResults
+  ] = await Promise.allSettled([
     runPerformanceDiagnostics(),
     runOSRepairDiagnostics(),
     runMalwareDiagnostics(),
     runNetworkDiagnostics(),
-    runBatteryDiagnostics()
+    runBatteryDiagnostics(),
+    runDataRecoveryDiagnostics(),
+    runAudioDiagnostics(),
+    runBluetoothDiagnostics(),
+    runPrinterDiagnostics(),
+    runDisplayDiagnostics(),
+    runWebcamDiagnostics(),
+    runUsbDiagnostics(),
+    runIndiaAppsDiagnostics()
   ])
 
-  const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery']
-  const allResults = [perfResults, osResults, malwareResults, networkResults, batteryResults]
+  const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
+    'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps']
+  const allResults = [perfResults, osResults, malwareResults, networkResults, batteryResults,
+    recoveryResults, audioResults, btResults, printerResults, displayResults,
+    webcamResults, usbResults, indiaResults]
   for (let i = 0; i < allResults.length; i++) {
     const result = allResults[i]
     if (result.status === 'fulfilled') {
@@ -341,7 +567,7 @@ async function runQuickScan(): Promise<ScanResult> {
     startTime,
     endTime,
     duration: endTime - startTime,
-    modulesRun: ['performance', 'os-repair', 'malware', 'network', 'battery'],
+    modulesRun: moduleNames,
     diagnostics,
     fixes: [],
     systemSnapshot,

@@ -1,19 +1,30 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Monitor, Zap, Shield, Wifi,
-  Wrench, Battery, ChevronLeft, ChevronRight
+  Wrench, Battery, ChevronLeft, ChevronRight,
+  HardDrive, KeyRound, Volume2, Bluetooth, Printer,
+  MonitorSpeaker, Camera, Usb, Globe
 } from 'lucide-react'
 import { useAppStore } from '../store/app-store'
 import { cn } from '../lib/utils'
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/system', label: 'System Info', icon: Monitor },
-  { path: '/performance', label: 'Performance', icon: Zap },
-  { path: '/malware', label: 'Malware Scan', icon: Shield },
-  { path: '/network', label: 'Network', icon: Wifi },
-  { path: '/os-repair', label: 'OS Repair', icon: Wrench },
-  { path: '/battery', label: 'Battery', icon: Battery }
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, group: 'core' },
+  { path: '/system', label: 'System Info', icon: Monitor, group: 'core' },
+  { path: '/performance', label: 'Performance', icon: Zap, group: 'core' },
+  { path: '/malware', label: 'Malware Scan', icon: Shield, group: 'core' },
+  { path: '/network', label: 'Network', icon: Wifi, group: 'core' },
+  { path: '/os-repair', label: 'OS Repair', icon: Wrench, group: 'core' },
+  { path: '/battery', label: 'Battery', icon: Battery, group: 'core' },
+  { path: '/data-recovery', label: 'Data Recovery', icon: HardDrive, group: 'phase2' },
+  { path: '/password', label: 'Password Recovery', icon: KeyRound, group: 'phase2' },
+  { path: '/audio', label: 'Audio Fixer', icon: Volume2, group: 'phase2' },
+  { path: '/bluetooth', label: 'Bluetooth', icon: Bluetooth, group: 'phase2' },
+  { path: '/printer', label: 'Printer', icon: Printer, group: 'phase2' },
+  { path: '/display', label: 'Display / GPU', icon: MonitorSpeaker, group: 'phase2' },
+  { path: '/webcam', label: 'Webcam', icon: Camera, group: 'phase2' },
+  { path: '/usb', label: 'USB / Peripherals', icon: Usb, group: 'phase2' },
+  { path: '/india-apps', label: 'India Apps', icon: Globe, group: 'phase2' }
 ]
 
 export function Sidebar(): JSX.Element {
