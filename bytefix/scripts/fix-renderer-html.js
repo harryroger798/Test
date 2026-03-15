@@ -57,7 +57,7 @@ if (fs.existsSync(assetsDir)) {
 
     // Check if bundle uses React$1 (Vite's renamed React) but also has
     // bare React. references (from compiled JSX)
-    if (js.includes('React$1') && /[^$]React\./.test(js)) {
+    if (js.includes('React$1') && /(?<!\$)React\./.test(js)) {
       // Assign React to window/globalThis so it's accessible everywhere,
       // even inside Vite's IIFE wrapper where var would be scoped locally.
       // Also prepend a placeholder so any early references don't crash.
@@ -66,6 +66,8 @@ if (fs.existsSync(assetsDir)) {
       if (idx !== -1) {
         const insertPos = idx + marker.length
         js = js.slice(0, insertPos) + '\nwindow.React = React$1;' + js.slice(insertPos)
+      } else {
+        console.warn(`\u26a0\ufe0f  ${file}: React$1 marker not found — alias not inserted. Vite output may have changed.`)
       }
       // Prepend empty React object so any code before the real assignment doesn't crash
       js = 'window.React = window.React || {};\n' + js

@@ -1,6 +1,5 @@
-import { app, shell, BrowserWindow, ipcMain, protocol } from 'electron'
-import { join, resolve, sep, extname } from 'path'
-import { readFile } from 'fs/promises'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerAllHandlers } from './ipc-handler'
 import { initDatabase } from './database'
@@ -8,23 +7,6 @@ import { createLogger } from './logger'
 import { setupGlobalErrorHandlers, logToFile, getLogPath, getLogDir } from './error-handler'
 import { setupAutoUpdater } from './auto-updater'
 import { setupOfflineManager } from './offline-manager'
-
-// Register custom 'bytefix' protocol BEFORE app.ready
-// This protocol serves renderer files with proper CORS headers so that
-// ES modules (type="module") work correctly in packaged builds.
-// (file:// protocol blocks ES module loading due to CORS restrictions)
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'bytefix',
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-      stream: true
-    }
-  }
-])
 
 const logger = createLogger('main')
 
@@ -90,69 +72,6 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   // Setup global error handlers after app is ready (needs app.getPath)
   setupGlobalErrorHandlers()
-
-  // Register custom protocol handler for serving renderer files
-  // with proper CORS headers so ES modules work in production builds
-  const rendererRoot = resolve(__dirname, '../renderer')
-
-  const mimeTypes: Record<string, string> = {
-    '.html': 'text/html',
-    '.js': 'application/javascript',
-    '.css': 'text/css',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.ico': 'image/x-icon',
-    '.woff': 'font/woff',
-    '.woff2': 'font/woff2',
-    '.ttf': 'font/ttf',
-    '.eot': 'application/vnd.ms-fontobject',
-    '.map': 'application/json'
-  }
-
-  protocol.handle('bytefix', async (request) => {
-    try {
-      const reqUrl = new URL(request.url)
-      if (reqUrl.host !== 'app') return new Response('Not Found', { status: 404 })
-
-      const pathname =
-        reqUrl.pathname === '/' ? '/index.html' : decodeURIComponent(reqUrl.pathname)
-      const filePath = resolve(rendererRoot, `.${pathname}`)
-
-      // Prevent path traversal outside renderer directory
-      if (filePath !== rendererRoot && !filePath.startsWith(`${rendererRoot}${sep}`)) {
-        return new Response('Forbidden', { status: 403 })
-      }
-
-      // Read file asynchronously to avoid blocking the event loop
-      const data = await readFile(filePath)
-      const ext = extname(filePath).toLowerCase()
-      const mimeType = mimeTypes[ext] || 'application/octet-stream'
-
-      return new Response(data, {
-        status: 200,
-        headers: {
-          'Content-Type': mimeType,
-          'Access-Control-Allow-Origin': 'bytefix://app'
-        }
-      })
-    } catch (error: unknown) {
-      if (error instanceof URIError) {
-        return new Response('Bad Request', { status: 400 })
-      }
-      const code = (error as NodeJS.ErrnoException).code
-      if (code === 'ENOENT' || code === 'ENOTDIR') {
-        return new Response('Not Found', { status: 404 })
-      }
-      if (code === 'EACCES' || code === 'EPERM') {
-        return new Response('Forbidden', { status: 403 })
-      }
-      return new Response('Internal Server Error', { status: 500 })
-    }
-  })
 
   electronApp.setAppUserModelId('com.bytefix.app')
 

@@ -12,8 +12,9 @@ const nativeRequire = createRequire(__filename)
 let Database: any
 try {
   Database = nativeRequire('better-sqlite3')
-} catch {
+} catch (err1) {
   // Fallback: try loading from app.asar.unpacked
+  console.error('Primary better-sqlite3 load failed:', err1)
   try {
     const unpackedPath = join(
       __dirname,
@@ -21,7 +22,7 @@ try {
     ).replace('app.asar', 'app.asar.unpacked')
     Database = nativeRequire(unpackedPath)
   } catch (err2) {
-    console.error('Failed to load better-sqlite3:', err2)
+    console.error('Failed to load better-sqlite3. Primary error:', err1, 'Fallback error:', err2)
   }
 }
 
