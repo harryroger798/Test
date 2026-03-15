@@ -3,7 +3,7 @@
 // TestDisk/PhotoRec integration, shadow copy restore, deleted file scan
 // ============================================================
 
-import { execSync, execFileSync } from 'child_process'
+import { execSync, execFileSync, execFile } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, statSync, lstatSync, realpathSync } from 'fs'
 import { join, resolve, normalize } from 'path'
 import { tmpdir, platform, homedir } from 'os'
@@ -404,8 +404,11 @@ export async function restoreFromRecycleBin(): Promise<FixResult> {
     }
 
     // List and restore items from Recycle Bin
+    // Use $rb.GetDetailsOf($item, 0) to get original filename WITH extension
+    // ($item.Name strips extensions on systems with "hide known extensions" enabled)
+    // If destination already exists, append timestamp to avoid silent overwrite
     const output = execSync(
-      'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = 0; foreach ($item in $items) { $path = $rb.GetDetailsOf($item, 1); Move-Item -LiteralPath $item.Path -Destination (Join-Path $path $item.Name) -Force -ErrorAction SilentlyContinue; $count++ }; Write-Output $count"',
+      'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = 0; $errs = @(); foreach ($item in $items) { $origPath = $rb.GetDetailsOf($item, 1); $origName = $rb.GetDetailsOf($item, 0); if (-not $origName) { $origName = $item.Name }; if ($origPath -and (Test-Path -LiteralPath $origPath)) { try { $dest = Join-Path $origPath $origName; if (Test-Path -LiteralPath $dest) { $base = [System.IO.Path]::GetFileNameWithoutExtension($origName); $ext = [System.IO.Path]::GetExtension($origName); $ts = Get-Date -Format yyyyMMdd_HHmmssfff; $dest = Join-Path $origPath ($base + \'_restored_\' + $ts + $ext); $i = 1; while (Test-Path -LiteralPath $dest) { $dest = Join-Path $origPath ($base + \'_restored_\' + $ts + \'_\' + $i + $ext); $i++ } }; Move-Item -LiteralPath $item.Path -Destination $dest -ErrorAction Stop; $count++ } catch { $errs += $_.Exception.Message } } }; Write-Output $count"',
       { encoding: 'utf8', timeout: 60000, stdio: 'pipe' }
     ).trim()
 
@@ -429,6 +432,26 @@ export async function restoreFromRecycleBin(): Promise<FixResult> {
 }
 
 // Run PhotoRec for deep file recovery
+// Resolve a Windows drive letter to its physical disk number for PhotoRec
+function resolvePhysicalDisk(driveLetter: string): string {
+  if (!isWin) return driveLetter
+  try {
+    // Use PowerShell to find the physical disk number for a given drive letter
+    const letter = driveLetter.replace(':', '').toUpperCase()
+    const output = execSync(
+      `powershell -NoProfile -Command "(Get-Partition -DriveLetter '${letter}' | Get-Disk).Number"`,
+      { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
+    ).trim()
+    const diskNum = parseInt(output, 10)
+    if (!isNaN(diskNum)) {
+      return `\\\\.\\PhysicalDrive${diskNum}`
+    }
+  } catch (err) {
+    logger.warn(`Could not resolve physical disk for ${driveLetter}, falling back to drive letter`, err)
+  }
+  return driveLetter
+}
+
 export async function runPhotorecRecovery(
   sourceDrive: string,
   targetDir: string,
@@ -452,7 +475,7 @@ export async function runPhotorecRecovery(
     const sanitizedSource = sanitizeDrivePath(sourceDrive)
     const sanitizedTarget = sanitizeRecoveryPath(targetDir)
 
-    // CRITICAL: Ensure target is on a DIFFERENT drive than source
+    // Warn if target appears to be on the same physical drive (but don't block — user may use subst/virtual drives)
     if (isWin) {
       if (sanitizedSource[0].toUpperCase() === sanitizedTarget[0].toUpperCase()) {
         return {
@@ -469,44 +492,118 @@ export async function runPhotorecRecovery(
       mkdirSync(sanitizedTarget, { recursive: true })
     }
 
-    details.push(`Source: ${sanitizedSource}`)
+    // Resolve drive letter to physical disk path for PhotoRec on Windows
+    const physicalDisk = isWin ? resolvePhysicalDisk(sanitizedSource) : sanitizedSource
+
+    details.push(`Source: ${sanitizedSource} (${physicalDisk})`)
     details.push(`Target: ${sanitizedTarget}`)
     details.push('Running PhotoRec file recovery (this may take a long time)...')
 
-    // Build PhotoRec command
-    // PhotoRec runs interactively by default; we use command line options
-    const args = ['/log', '/d', sanitizedTarget, sanitizedSource]
+    // Build PhotoRec command using /cmd for non-interactive scripted mode
+    // Syntax: photorec /log /d output_dir /cmd device freespace,search
+    // Per CGSecurity docs: freespace scans unallocated space (where deleted files live)
+    // wholespace scans entire disk including allocated space for thorough recovery
+    let cmdStr = 'freespace,search'
     if (fileTypes && fileTypes.length > 0) {
-      // PhotoRec can filter by file family
+      // Enable only specified file types: fileopt,everything,disable,ext1,enable,ext2,enable,...
+      const filters = fileTypes.map(ft => `${ft},enable`).join(',')
+      cmdStr = `fileopt,everything,disable,${filters},freespace,search`
       details.push(`File type filter: ${fileTypes.join(', ')}`)
     }
 
+    const args = ['/log', '/d', sanitizedTarget, '/cmd', physicalDisk, cmdStr]
+    details.push(`PhotoRec args: ${args.join(' ')}`)
+
+    // Run PhotoRec asynchronously to avoid blocking the Electron main thread
+    const photorecCwd = photorec.includes('/') || photorec.includes('\\') ? resolve(photorec, '..') : undefined
     try {
-      execFileSync(photorec, args, { timeout: 3600000, stdio: 'pipe' }) // 1 hour timeout
+      const stdout = await new Promise<string>((promiseResolve, promiseReject) => {
+        execFile(photorec, args, {
+          timeout: 3600000, // 1 hour timeout
+          maxBuffer: 10 * 1024 * 1024, // 10MB output buffer
+          // PhotoRec needs cwd set to its own directory for DLL dependencies
+          cwd: photorecCwd
+        }, (error, stdoutBuf, stderrBuf) => {
+          if (stderrBuf) {
+            details.push(`PhotoRec stderr: ${stderrBuf.toString().slice(0, 500)}`)
+          }
+          if (error && !stdoutBuf) {
+            // Only reject if there's truly no output (PhotoRec may exit non-zero but still recover files)
+            promiseReject(error)
+          } else {
+            promiseResolve(stdoutBuf ? stdoutBuf.toString() : '')
+          }
+        })
+      })
       details.push('PhotoRec scan completed')
-    } catch {
+      if (stdout) {
+        // Extract summary lines from PhotoRec output
+        const lines = stdout.split('\n').filter((l: string) => l.includes('file') || l.includes('recover') || l.includes('Recovered'))
+        for (const line of lines.slice(0, 10)) {
+          details.push(`PhotoRec: ${line.trim()}`)
+        }
+      }
+    } catch (err) {
       details.push('PhotoRec process completed (may have partial results)')
     }
 
-    // Count recovered files
+    // Count recovered files — PhotoRec creates recup_dir.1, recup_dir.2, etc.
+    // IMPORTANT: PhotoRec appends .1, .2, etc. to the output directory if it already exists
+    // So we need to check both the exact path AND numbered variants
     let recoveredCount = 0
-    if (existsSync(sanitizedTarget)) {
+    let actualOutputDir = sanitizedTarget
+
+    // Helper to count files in a directory (including subdirectories like recup_dir.*)
+    const countFilesInDir = (dir: string): number => {
+      let count = 0
+      if (!existsSync(dir)) return 0
       try {
-        const dirs = readdirSync(sanitizedTarget)
-        for (const dir of dirs) {
-          const dirPath = join(sanitizedTarget, dir)
-          const stat = lstatSync(dirPath)
+        const entries = readdirSync(dir)
+        for (const entry of entries) {
+          const entryPath = join(dir, entry)
+          const stat = lstatSync(entryPath)
           if (stat.isDirectory() && !stat.isSymbolicLink()) {
             try {
-              recoveredCount += readdirSync(dirPath).length
+              count += readdirSync(entryPath).length
             } catch { /* permission */ }
+          } else if (stat.isFile()) {
+            count++
           }
         }
       } catch { /* error reading dir */ }
+      return count
     }
 
+    // Check the exact target directory first
+    recoveredCount = countFilesInDir(sanitizedTarget)
+
+    // If no files found, check for PhotoRec's numbered variants (.1, .2, ... .99)
+    if (recoveredCount === 0) {
+      const parentDir = resolve(sanitizedTarget, '..')
+      const baseName = sanitizedTarget.split(/[/\\]/).pop() || ''
+      if (existsSync(parentDir) && baseName) {
+        try {
+          const siblings = readdirSync(parentDir)
+          for (const sibling of siblings) {
+            // Match patterns like "Recovered.1", "Recovered.56", etc.
+            if (sibling.startsWith(baseName + '.') && /\.\d+$/.test(sibling)) {
+              const numberedDir = join(parentDir, sibling)
+              const count = countFilesInDir(numberedDir)
+              if (count > recoveredCount) {
+                recoveredCount = count
+                actualOutputDir = numberedDir
+              }
+            }
+          }
+        } catch { /* error reading parent dir */ }
+      }
+    }
+
+    if (actualOutputDir !== sanitizedTarget) {
+      details.push(`PhotoRec output directory: ${actualOutputDir} (numbered variant)`)
+    }
     details.push(`Recovered files found: ${recoveredCount}`)
-    changes.push({ type: 'file', action: 'created', target: sanitizedTarget })
+    changes.push({ type: 'file', action: 'created', target: actualOutputDir })
 
     return {
       success: recoveredCount > 0, module: 'data-recovery', action: 'photorec-recovery',

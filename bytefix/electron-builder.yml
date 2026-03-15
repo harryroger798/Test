@@ -7,11 +7,24 @@ files:
   - out/**/*
   - package.json
   - node_modules/**/*
+extraResources:
+  - from: tools/
+    to: tools/
+    filter:
+      - "**/*.exe"
+      - "**/*.dll"
+      - "**/platforms/**"
+      - "**/63/**"
+  - from: models/
+    to: models/
+    filter:
+      - "**/*.onnx"
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**/*
   - node_modules/bindings/**/*
   - node_modules/file-uri-to-path/**/*
+  - node_modules/onnxruntime-node/**/*
 publish:
   provider: github
   owner: harryroger798

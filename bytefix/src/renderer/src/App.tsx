@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -33,10 +34,22 @@ import { CustomersPage } from './pages/CustomersPage'
 import { RepairJobsPage } from './pages/RepairJobsPage'
 import { BackupWizardPage } from './pages/BackupWizardPage'
 import { LanguageSettingsPage } from './pages/LanguageSettingsPage'
+import { DiskImagingPage } from './pages/DiskImagingPage'
+import { PartitionManagerPage } from './pages/PartitionManagerPage'
+import { MemoryDiagnosticsPage } from './pages/MemoryDiagnosticsPage'
+import { FirmwareBiosPage } from './pages/FirmwareBiosPage'
+import { RemoteAccessPage } from './pages/RemoteAccessPage'
+import { AIDiagnosticsPage } from './pages/AIDiagnosticsPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
+  const loadLanguage = useAppStore((s) => s.loadLanguage)
+
+  // Load saved language preference and translations on startup
+  useEffect(() => {
+    loadLanguage()
+  }, [loadLanguage])
 
   return (
     <ErrorBoundary module="app-root">
@@ -80,6 +93,12 @@ export default function App(): JSX.Element {
               <Route path="/jobs" element={<ErrorBoundary module="jobs"><RepairJobsPage /></ErrorBoundary>} />
               <Route path="/backup" element={<ErrorBoundary module="backup"><BackupWizardPage /></ErrorBoundary>} />
               <Route path="/language" element={<ErrorBoundary module="language"><LanguageSettingsPage /></ErrorBoundary>} />
+              <Route path="/disk-imaging" element={<ErrorBoundary module="disk-imaging"><DiskImagingPage /></ErrorBoundary>} />
+              <Route path="/partition-mgr" element={<ErrorBoundary module="partition-mgr"><PartitionManagerPage /></ErrorBoundary>} />
+              <Route path="/memory-diag" element={<ErrorBoundary module="memory-diag"><MemoryDiagnosticsPage /></ErrorBoundary>} />
+              <Route path="/firmware" element={<ErrorBoundary module="firmware"><FirmwareBiosPage /></ErrorBoundary>} />
+              <Route path="/remote-access" element={<ErrorBoundary module="remote-access"><RemoteAccessPage /></ErrorBoundary>} />
+              <Route path="/ai-diagnostics" element={<ErrorBoundary module="ai-diagnostics"><AIDiagnosticsPage /></ErrorBoundary>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

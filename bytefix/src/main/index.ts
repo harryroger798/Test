@@ -36,6 +36,12 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  // Log renderer console messages to main process for debugging
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levelStr = ['VERBOSE', 'INFO', 'WARNING', 'ERROR'][level] || 'UNKNOWN'
+    logger.info(`[Renderer ${levelStr}] ${message} (${sourceId}:${line})`)
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -44,6 +50,9 @@ function createWindow(): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
+    // Load renderer HTML directly via file:// protocol.
+    // The postbuild script strips type="module" from HTML (the bundle has no
+    // import/export statements) and moves scripts after <div id="root">.
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 

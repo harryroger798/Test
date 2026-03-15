@@ -89,6 +89,14 @@ import { runActivationDiagnostics, runActivationTroubleshooter } from './modules
 import { runEmailDiagnostics, autoConfigureEmail, repairOutlookProfile, clearEmailCredentials } from './modules/email-account-setup'
 import { runPhoneTransferDiagnostics, guideUsbDebugging, pullFilesViaAdb } from './modules/phone-data-transfer'
 
+// Phase 6: New tool integration imports
+import { runDiskImagingDiagnostics, createSystemImage, clonePartition, rescueFailingDrive } from './modules/disk-imaging'
+import { runPartitionManagerDiagnostics, resizePartition, formatPartition, createPartition } from './modules/partition-manager'
+import { runMemoryDiagnostics, runBuiltInMemTest, scheduleWindowsMemDiag } from './modules/memory-diagnostics'
+import { runFirmwareDiagnostics, checkFirmwareUpdates, updateDrivers } from './modules/firmware-manager'
+import { runRemoteAccessDiagnostics, enableRemoteDesktop, disableRemoteDesktop, generateRemoteAssistInvite, configureWakeOnLan } from './modules/remote-access'
+import { runAIDiagnosis, getHealthScore, collectSystemMetrics } from './modules/ai-diagnostics'
+
 // Phase 4 module imports
 import { createInvoice, getInvoice, getInvoicesByCustomer, getAllInvoices, updatePaymentStatus, getInvoiceStats, getHsnCodes, getIndianStates } from './modules/gst-billing'
 import { generateUPIPayment, generateInvoiceUPI, validateUPIAddress } from './modules/upi-payment'
@@ -104,7 +112,7 @@ import { discoverBackupTargets, createBackupPlan, executeBackup, discoverBrowser
 import { setLanguage, getLanguage, getSupportedLanguages, getTranslationsForLanguage } from './modules/i18n-config'
 import type { SupportedLanguage } from './modules/i18n-config'
 
-import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem } from '../shared/types'
+import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem, FixResult } from '../shared/types'
 
 const logger = createLogger('ipc-handler')
 
@@ -904,12 +912,214 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     // Placeholder
   })
 
+  // ============================================================
+  // Phase 6: Disk Imaging
+  // ============================================================
+  ipcMain.handle('diskimg:diagnose', async () => {
+    return await runDiskImagingDiagnostics()
+  })
+
+  ipcMain.handle('diskimg:createSystemImage', async (_event, args: { destinationPath: string }) => {
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    return await createSystemImage(safeDest)
+  })
+
+  ipcMain.handle('diskimg:clonePartition', async (_event, args: { sourceDrive: string; destDrive: string }) => {
+    const safeSource = sanitizeDevicePath(args.sourceDrive)
+    const safeDest = sanitizeDevicePath(args.destDrive)
+    return await clonePartition(safeSource, safeDest)
+  })
+
+  ipcMain.handle('diskimg:rescueDrive', async (_event, args: { sourceDrive: string; destinationPath: string }) => {
+    const safeSource = sanitizeDevicePath(args.sourceDrive)
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    return await rescueFailingDrive(safeSource, safeDest)
+  })
+
+  // ============================================================
+  // Phase 6: Partition Manager
+  // ============================================================
+  ipcMain.handle('partmgr:diagnose', async () => {
+    return await runPartitionManagerDiagnostics()
+  })
+
+  ipcMain.handle('partmgr:resize', async (_event, args: { driveLetter: string; newSizeMB: number }) => {
+    const safeDrive = sanitizeDriveLetter(args.driveLetter)
+    const safeSizeMB = Math.max(1, Math.min(Math.round(args.newSizeMB), 1048576))
+    return await resizePartition(safeDrive, safeSizeMB)
+  })
+
+  ipcMain.handle('partmgr:format', async (_event, args: { driveLetter: string; fileSystem: string; label: string }) => {
+    const safeDrive = sanitizeDriveLetter(args.driveLetter)
+    const allowedFS = ['NTFS', 'FAT32', 'exFAT', 'ext4', 'APFS', 'HFS+']
+    const safeFS = allowedFS.includes(args.fileSystem) ? args.fileSystem : 'NTFS'
+    const safeLabel = args.label.replace(/[^a-zA-Z0-9_\- ]/g, '').slice(0, 32)
+    return await formatPartition(safeDrive, safeFS, safeLabel)
+  })
+
+  ipcMain.handle('partmgr:create', async (_event, args: { diskNumber: number; sizeMB: number; fileSystem: string; label: string }) => {
+    const safeDiskNum = Math.max(0, Math.min(Math.round(args.diskNumber), 99))
+    const safeSizeMB = Math.max(1, Math.min(Math.round(args.sizeMB), 1048576))
+    const allowedFS = ['NTFS', 'FAT32', 'exFAT', 'ext4', 'APFS', 'HFS+']
+    const safeFS = allowedFS.includes(args.fileSystem) ? args.fileSystem : 'NTFS'
+    const safeLabel = args.label.replace(/[^a-zA-Z0-9_\- ]/g, '').slice(0, 32)
+    return await createPartition(safeDiskNum, safeSizeMB, safeFS, safeLabel)
+  })
+
+  // ============================================================
+  // Phase 6: Memory Diagnostics
+  // ============================================================
+  ipcMain.handle('memdiag:diagnose', async () => {
+    return await runMemoryDiagnostics()
+  })
+
+  ipcMain.handle('memdiag:runPatternTest', async (_event, args: { testSizeMB: number }) => {
+    const sizeMB = Math.min(Math.max(32, args.testSizeMB || 128), 512)
+    const testResult = await runBuiltInMemTest(sizeMB)
+    return {
+      success: testResult.overallPassed,
+      module: 'memory',
+      action: 'pattern-test',
+      description: testResult.overallPassed
+        ? `Memory pattern test PASSED (${testResult.testedMB}MB, ${testResult.patterns.length} patterns, ${testResult.durationMs}ms)`
+        : `Memory pattern test FAILED — ${testResult.errors} error(s) detected`,
+      details: testResult.patterns.map(p => `${p.name}: ${p.passed ? 'PASS' : 'FAIL'} (${p.durationMs}ms)`),
+      changes: [],
+      rollbackAvailable: false,
+      error: testResult.overallPassed ? undefined : `${testResult.errors} memory error(s) detected`
+    } as FixResult
+  })
+
+  ipcMain.handle('memdiag:scheduleWinTest', async () => {
+    return await scheduleWindowsMemDiag()
+  })
+
+  // ============================================================
+  // Phase 6: Firmware & BIOS
+  // ============================================================
+  ipcMain.handle('firmware:diagnose', async () => {
+    return await runFirmwareDiagnostics()
+  })
+
+  ipcMain.handle('firmware:checkUpdates', async () => {
+    return await checkFirmwareUpdates()
+  })
+
+  ipcMain.handle('firmware:updateDrivers', async () => {
+    return await updateDrivers()
+  })
+
+  // ============================================================
+  // Phase 6: Remote Access
+  // ============================================================
+  ipcMain.handle('remote:diagnose', async () => {
+    return await runRemoteAccessDiagnostics()
+  })
+
+  ipcMain.handle('remote:enableRdp', async () => {
+    return await enableRemoteDesktop()
+  })
+
+  ipcMain.handle('remote:disableRdp', async () => {
+    return await disableRemoteDesktop()
+  })
+
+  ipcMain.handle('remote:generateInvite', async () => {
+    return await generateRemoteAssistInvite()
+  })
+
+  ipcMain.handle('remote:configureWol', async () => {
+    return await configureWakeOnLan()
+  })
+
+  // ============================================================
+  // AI Diagnostics (ONNX-powered local AI)
+  // ============================================================
+  ipcMain.handle('ai:runDiagnosis', async () => {
+    return await runAIDiagnosis()
+  })
+
+  ipcMain.handle('ai:getHealthScore', async () => {
+    return await getHealthScore()
+  })
+
+  ipcMain.handle('ai:collectMetrics', async () => {
+    return await collectSystemMetrics()
+  })
+
   logger.info('All IPC handlers registered successfully')
 }
 
 // ============================================================
 // Scan Orchestration
 // ============================================================
+// Helper: yield to the event loop so the Electron renderer stays responsive
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+// Helper: run a diagnostic function with a per-module timeout and event loop yielding
+async function runDiagnosticSafe(
+  name: string,
+  fn: () => Promise<DiagnosticResult[]>,
+  timeoutMs: number
+): Promise<{ name: string; results: DiagnosticResult[] }> {
+  await yieldToEventLoop()
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<DiagnosticResult[]>((_, reject) =>
+        setTimeout(() => reject(new Error(`Module ${name} timed out`)), timeoutMs)
+      )
+    ])
+    return { name, results: result }
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    logger.warn(`Module ${name} scan failed: ${errorMsg}`)
+    // Return an explicit failure diagnostic instead of silently swallowing errors
+    return {
+      name,
+      results: [{
+        module: name,
+        issue: `${name} scan failed`,
+        severity: 'warning' as const,
+        description: `The ${name} module encountered an error: ${errorMsg}`,
+        recommendation: 'Try running the scan again. If the issue persists, check system permissions.',
+        autoFixable: false
+      }]
+    }
+  }
+}
+
+// Helper: run multiple diagnostic functions with bounded concurrency
+async function runWithConcurrency<T>(
+  tasks: Array<{ name: string; fn: () => Promise<T> }>,
+  concurrency: number,
+  timeoutMs: number
+): Promise<Array<{ name: string; results: T }>> {
+  const results: Array<{ name: string; results: T }> = []
+  let index = 0
+
+  async function runNext(): Promise<void> {
+    while (index < tasks.length) {
+      const currentIndex = index++
+      const task = tasks[currentIndex]
+      await yieldToEventLoop()
+      const result = await runDiagnosticSafe(
+        task.name,
+        task.fn as () => Promise<DiagnosticResult[]>,
+        timeoutMs
+      )
+      results.push(result as { name: string; results: T })
+    }
+  }
+
+  // Launch `concurrency` number of workers
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => runNext())
+  await Promise.all(workers)
+  return results
+}
+
 async function runQuickScan(): Promise<ScanResult> {
   const startTime = Date.now()
   const scanId = nanoid()
@@ -917,54 +1127,46 @@ async function runQuickScan(): Promise<ScanResult> {
 
   logger.info(`Starting quick scan ${scanId}...`)
 
-  // Run all diagnostic modules in parallel with a global 120s timeout
-  const QUICK_SCAN_TIMEOUT_MS = 120000
-  const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
-    'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps',
-    'thermal', 'hardware', 'keyboard', 'gaming', 'partition', 'activation', 'email', 'phone']
+  // Run diagnostic modules with bounded concurrency (5 at a time) to keep scan fast
+  // while still yielding to the event loop between batches to prevent UI freezes.
+  // Each module has its own timeout to prevent any single module from hanging.
+  const PER_MODULE_TIMEOUT_MS = 30000 // 30s per module
+  const CONCURRENCY = 5
 
-  const allSettledPromise = Promise.allSettled([
-    runPerformanceDiagnostics(),
-    runOSRepairDiagnostics(),
-    runMalwareDiagnostics(),
-    runNetworkDiagnostics(),
-    runBatteryDiagnostics(),
-    runDataRecoveryDiagnostics(),
-    runAudioDiagnostics(),
-    runBluetoothDiagnostics(),
-    runPrinterDiagnostics(),
-    runDisplayDiagnostics(),
-    runWebcamDiagnostics(),
-    runUsbDiagnostics(),
-    runIndiaAppsDiagnostics(),
-    runOverheatingDiagnostics(),
-    runHardwareDiagnostics(),
-    runKeyboardTouchpadDiagnostics(),
-    runGamingDiagnostics(),
-    runPartitionBootDiagnostics(),
-    runActivationDiagnostics(),
-    runEmailDiagnostics(),
-    runPhoneTransferDiagnostics()
-  ])
-  const timeoutPromise = new Promise<PromiseSettledResult<DiagnosticResult[]>[]>((resolve) =>
-    setTimeout(() => {
-      logger.warn('Quick scan timed out after 120s — returning partial results')
-      resolve(moduleNames.map(() => ({ status: 'rejected' as const, reason: 'Timed out' })))
-    }, QUICK_SCAN_TIMEOUT_MS)
-  )
+  const moduleTasks = [
+    { name: 'performance', fn: runPerformanceDiagnostics },
+    { name: 'os-repair', fn: runOSRepairDiagnostics },
+    { name: 'malware', fn: runMalwareDiagnostics },
+    { name: 'network', fn: runNetworkDiagnostics },
+    { name: 'battery', fn: runBatteryDiagnostics },
+    { name: 'data-recovery', fn: runDataRecoveryDiagnostics },
+    { name: 'audio', fn: runAudioDiagnostics },
+    { name: 'bluetooth', fn: runBluetoothDiagnostics },
+    { name: 'printer', fn: runPrinterDiagnostics },
+    { name: 'display', fn: runDisplayDiagnostics },
+    { name: 'webcam', fn: runWebcamDiagnostics },
+    { name: 'usb', fn: runUsbDiagnostics },
+    { name: 'india-apps', fn: runIndiaAppsDiagnostics },
+    { name: 'thermal', fn: runOverheatingDiagnostics },
+    { name: 'hardware', fn: runHardwareDiagnostics },
+    { name: 'keyboard', fn: runKeyboardTouchpadDiagnostics },
+    { name: 'gaming', fn: runGamingDiagnostics },
+    { name: 'partition', fn: runPartitionBootDiagnostics },
+    { name: 'activation', fn: runActivationDiagnostics },
+    { name: 'email', fn: runEmailDiagnostics },
+    { name: 'phone', fn: runPhoneTransferDiagnostics },
+    { name: 'disk-imaging', fn: runDiskImagingDiagnostics },
+    { name: 'partition-mgr', fn: runPartitionManagerDiagnostics },
+    { name: 'memory-diag', fn: runMemoryDiagnostics },
+    { name: 'firmware', fn: runFirmwareDiagnostics },
+    { name: 'remote-access', fn: runRemoteAccessDiagnostics }
+  ]
 
-  // Suppress potential unhandled rejections from the losing promise
-  allSettledPromise.catch(() => {})
-  const allResults = await Promise.race([allSettledPromise, timeoutPromise])
-
-  for (let i = 0; i < allResults.length; i++) {
-    const result = allResults[i]
-    if (result.status === 'fulfilled') {
-      diagnostics.push(...result.value)
-    } else {
-      logger.warn(`Module ${moduleNames[i]} scan failed: ${result.reason}`)
-    }
+  const moduleResults = await runWithConcurrency(moduleTasks, CONCURRENCY, PER_MODULE_TIMEOUT_MS)
+  for (const { results } of moduleResults) {
+    diagnostics.push(...results)
   }
+  const moduleNames = moduleTasks.map(m => m.name)
 
   const endTime = Date.now()
   let systemSnapshot: SystemInfo | undefined

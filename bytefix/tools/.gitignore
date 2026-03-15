@@ -1,0 +1,12 @@
+# Tool binaries are downloaded at build time via scripts/download-tools.js
+# Do not commit these large binaries to git
+*.exe
+*.dll
+*.zip
+platforms/
+63/
+*.txt
+*.pdf
+*.html
+INFO
+qt.conf

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Languages, Loader2, CheckCircle } from 'lucide-react'
+import { useAppStore } from '../store/app-store'
 
 interface LanguageInfo {
   code: string
@@ -11,12 +12,12 @@ interface LanguageInfo {
 export function LanguageSettingsPage(): JSX.Element {
   const [loading, setLoading] = useState('')
   const [languages, setLanguages] = useState<LanguageInfo[]>([])
-  const [currentLang, setCurrentLang] = useState('en')
+  const currentLang = useAppStore((s) => s.language)
+  const storeChangeLanguage = useAppStore((s) => s.changeLanguage)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     loadLanguages()
-    loadCurrentLanguage()
   }, [])
 
   async function loadLanguages(): Promise<void> {
@@ -24,17 +25,11 @@ export function LanguageSettingsPage(): JSX.Element {
     catch (err) { console.error(err) }
   }
 
-  async function loadCurrentLanguage(): Promise<void> {
-    try { setCurrentLang(await window.bytefix.getLanguage() as string) }
-    catch (err) { console.error(err) }
-  }
-
   async function changeLanguage(lang: string): Promise<void> {
     setLoading(lang)
     setSaved(false)
     try {
-      await window.bytefix.setLanguage(lang)
-      setCurrentLang(lang)
+      await storeChangeLanguage(lang)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) { console.error(err) }
@@ -100,7 +95,7 @@ export function LanguageSettingsPage(): JSX.Element {
             <li>Tamil ({'\u0BA4\u0BAE\u0BBF\u0BB4\u0BCD'}) - Tamil Nadu, Puducherry</li>
             <li>Telugu ({'\u0C24\u0C46\u0C32\u0C41\u0C17\u0C41'}) - Andhra Pradesh, Telangana</li>
             <li>Bengali ({'\u09AC\u09BE\u0982\u09B2\u09BE'}) - West Bengal</li>
-            <li>Marathi ({'\u092E\u0930\u09BE\u0920\u0940'}) - Maharashtra</li>
+            <li>Marathi ({'\u092E\u0930\u093E\u0920\u0940'}) - Maharashtra</li>
             <li>Kannada ({'\u0C95\u0CA8\u0CCD\u0CA8\u0CA1'}) - Karnataka</li>
           </ul>
           <p className="text-xs text-gray-500 mt-2">Language preference is saved locally and persists across sessions.</p>

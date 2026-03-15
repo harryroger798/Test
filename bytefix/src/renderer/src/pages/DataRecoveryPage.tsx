@@ -6,6 +6,8 @@ export function DataRecoveryPage(): JSX.Element {
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult[]>([])
   const [loading, setLoading] = useState('')
   const [result, setResult] = useState<FixResult | null>(null)
+  const [sourceDrive, setSourceDrive] = useState('')
+  const [outputDir, setOutputDir] = useState('')
 
   async function runDiagnostics(): Promise<void> {
     setLoading('diagnose')
@@ -82,6 +84,19 @@ export function DataRecoveryPage(): JSX.Element {
           ))}
         </div>
       )}
+
+      <div className="card">
+        <h3 className="font-medium text-white mb-2">Deep File Recovery (PhotoRec)</h3>
+        <p className="text-sm text-gray-400 mb-3">Recover permanently deleted files (Shift+Delete, emptied Recycle Bin, formatted drives) using PhotoRec file carving. Scans raw disk sectors to find recoverable data.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <input value={sourceDrive} onChange={(e) => setSourceDrive(e.target.value)} placeholder="Source drive (e.g., C:)" className="bg-gray-800 text-white rounded px-3 py-2 text-sm border border-gray-700" />
+          <input value={outputDir} onChange={(e) => setOutputDir(e.target.value)} placeholder="Recovery output folder (e.g., D:\\Recovered)" className="bg-gray-800 text-white rounded px-3 py-2 text-sm border border-gray-700" />
+        </div>
+        <button onClick={() => runFix('photorec', () => window.bytefix.runPhotorec(sourceDrive, outputDir))} disabled={!!loading || !sourceDrive || !outputDir} className="btn-primary flex items-center gap-2">
+          {loading === 'photorec' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          Run Deep Recovery (PhotoRec)
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="card">
