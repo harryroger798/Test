@@ -12,10 +12,11 @@
     "preview": "electron-vite preview",
     "lint": "eslint . --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
-    "package": "electron-vite build && node scripts/fix-renderer-html.js && electron-builder --config electron-builder.yml",
-    "package:win": "electron-vite build && node scripts/fix-renderer-html.js && electron-builder --win --config electron-builder.yml",
-    "package:mac": "electron-vite build && node scripts/fix-renderer-html.js && electron-builder --mac --config electron-builder.yml",
-    "package:linux": "electron-vite build && node scripts/fix-renderer-html.js && electron-builder --linux --config electron-builder.yml"
+    "download-tools": "node scripts/download-tools.js",
+    "package": "node scripts/download-tools.js && electron-vite build && node scripts/fix-renderer-html.js && electron-builder --config electron-builder.yml",
+    "package:win": "node scripts/download-tools.js && electron-vite build && node scripts/fix-renderer-html.js && electron-builder --win --config electron-builder.yml",
+    "package:mac": "node scripts/download-tools.js && electron-vite build && node scripts/fix-renderer-html.js && electron-builder --mac --config electron-builder.yml",
+    "package:linux": "node scripts/download-tools.js && electron-vite build && node scripts/fix-renderer-html.js && electron-builder --linux --config electron-builder.yml"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

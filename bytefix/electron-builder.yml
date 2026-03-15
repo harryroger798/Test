@@ -7,6 +7,14 @@ files:
   - out/**/*
   - package.json
   - node_modules/**/*
+extraResources:
+  - from: tools/
+    to: tools/
+    filter:
+      - "**/*.exe"
+      - "**/*.dll"
+      - "**/platforms/**"
+      - "**/63/**"
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**/*
