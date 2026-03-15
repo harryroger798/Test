@@ -1298,6 +1298,11 @@ Instead of querying S3 CSVs on every search:
 - API repo: `bytepassperks/snapleads-search-api` (PRIVATE, mirrored from harryroger798)
 - Render URL: https://snapleads-search-api.onrender.com
 - PR: https://github.com/harryroger798/social-lead-extractor-pro/pull/109
+- Platform PR: https://github.com/harryroger798/snapleads-platform/pull/99
+- **SHA256 Hashes:**
+  - Windows: `354e0edc073d142a5a9492d1ab40e0e5e9d44fab156ee699daf17e9c41a7c52b`
+  - Mac: `9cbbe7105e53f5f8f901fd7189d784bf2c675a40ffa6610ee9205df5d1887ee0`
+- VirusTotal: [Windows](https://www.virustotal.com/gui/file/354e0edc073d142a5a9492d1ab40e0e5e9d44fab156ee699daf17e9c41a7c52b) | [Mac](https://www.virustotal.com/gui/file/9cbbe7105e53f5f8f901fd7189d784bf2c675a40ffa6610ee9205df5d1887ee0)
 
 ### v3.5.24 (March 15, 2026)
 - **S3 query timeout fix for residential internet** (Claude Opus 4.6 validated)
