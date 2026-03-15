@@ -244,7 +244,9 @@ export async function repairWindowsUpdate(): Promise<FixResult> {
       details.push('Catroot2 folder already clean or locked')
     }
 
-    // Re-register DLLs
+    // Re-register DLLs (use absolute System32 paths to prevent DLL search order hijacking)
+    const systemRoot = process.env.WINDIR || 'C:\\Windows'
+    const system32 = `${systemRoot}\\System32`
     const dlls = ['atl.dll', 'urlmon.dll', 'mshtml.dll', 'shdocvw.dll', 'browseui.dll',
       'jscript.dll', 'vbscript.dll', 'scrrun.dll', 'msxml.dll', 'msxml3.dll',
       'msxml6.dll', 'actxprxy.dll', 'softpub.dll', 'wintrust.dll', 'dssenh.dll',
@@ -255,7 +257,7 @@ export async function repairWindowsUpdate(): Promise<FixResult> {
 
     for (const dll of dlls) {
       try {
-        await runCommand('regsvr32.exe', ['/s', dll], 5000)
+        await runCommand('regsvr32.exe', ['/s', `${system32}\\${dll}`], 5000)
       } catch { /* DLL might not exist */ }
     }
     details.push(`Re-registered ${dlls.length} Windows Update DLLs`)
@@ -303,14 +305,13 @@ export async function cleanRegistry(): Promise<FixResult> {
   }
 
   try {
-    // Clean invalid file associations
+    // Check invalid file associations (diagnostic only — no deletions performed)
     try {
-      const psScript = "$count = 0; $classes = Get-ChildItem 'HKCU:\\Software\\Classes' -ErrorAction SilentlyContinue; foreach ($c in $classes) { $openCmd = Get-ItemProperty -Path ($c.PSPath + '\\shell\\open\\command') -ErrorAction SilentlyContinue; if ($openCmd -and $openCmd.'(default)') { $exe = $openCmd.'(default)' -replace '\"',''; $exe = $exe.Split(' ')[0]; if ($exe -and !(Test-Path $exe -ErrorAction SilentlyContinue) -and $exe -notmatch '%') { $count++ } } }; Write-Output $count"
+      const psScript = "$count = 0; $classes = Get-ChildItem 'HKCU:\\Software\\Classes' -ErrorAction SilentlyContinue; foreach ($c in $classes) { $openCmd = Get-ItemProperty -Path ($c.PSPath + '\\shell\\open\\command') -ErrorAction SilentlyContinue; if ($openCmd -and $openCmd.'(default)') { $cmd = $openCmd.'(default)'; if ($cmd.StartsWith('\"')) { $exe = ($cmd -split '\"')[1] } else { $exe = $cmd.Split(' ')[0] }; if ($exe -and !(Test-Path $exe -ErrorAction SilentlyContinue) -and $exe -notmatch '%') { $count++ } } }; Write-Output $count"
       const output = await runCommand('powershell', ['-NoProfile', '-Command', psScript], 30000)
       const invalidCount = parseInt(output.trim()) || 0
       if (invalidCount > 0) {
-        details.push(`Found ${invalidCount} invalid file association entries`)
-        changes.push({ type: 'registry', action: 'modified', target: 'HKCU\\Software\\Classes', before: `${invalidCount} invalid entries` })
+        details.push(`Found ${invalidCount} invalid file association entries (diagnostic only)`)
       }
     } catch {
       details.push('File association check completed')

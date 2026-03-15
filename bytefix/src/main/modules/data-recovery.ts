@@ -406,8 +406,9 @@ export async function restoreFromRecycleBin(): Promise<FixResult> {
     // List and restore items from Recycle Bin
     // Use $rb.GetDetailsOf($item, 0) to get original filename WITH extension
     // ($item.Name strips extensions on systems with "hide known extensions" enabled)
+    // If destination already exists, append timestamp to avoid silent overwrite
     const output = execSync(
-      'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = 0; foreach ($item in $items) { $origPath = $rb.GetDetailsOf($item, 1); $origName = $rb.GetDetailsOf($item, 0); if (-not $origName) { $origName = $item.Name }; if ($origPath -and (Test-Path -LiteralPath $origPath)) { try { Move-Item -LiteralPath $item.Path -Destination (Join-Path $origPath $origName) -Force -ErrorAction Stop; $count++ } catch { } } }; Write-Output $count"',
+      'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = 0; foreach ($item in $items) { $origPath = $rb.GetDetailsOf($item, 1); $origName = $rb.GetDetailsOf($item, 0); if (-not $origName) { $origName = $item.Name }; if ($origPath -and (Test-Path -LiteralPath $origPath)) { try { $dest = Join-Path $origPath $origName; if (Test-Path -LiteralPath $dest) { $base = [System.IO.Path]::GetFileNameWithoutExtension($origName); $ext = [System.IO.Path]::GetExtension($origName); $ts = Get-Date -Format yyyyMMdd_HHmmss; $dest = Join-Path $origPath ($base + \'_restored_\' + $ts + $ext) }; Move-Item -LiteralPath $item.Path -Destination $dest -ErrorAction Stop; $count++ } catch { } } }; Write-Output $count"',
       { encoding: 'utf8', timeout: 60000, stdio: 'pipe' }
     ).trim()
 

@@ -371,7 +371,7 @@ export async function optimizeRam(): Promise<FixResult> {
 
     for (const svc of servicesToDisable) {
       try {
-        await runShellSafe(`sc config "${svc.name}" start=disabled 2>nul`, 5000)
+        await runShellSafe(`sc config "${svc.name}" start= disabled 2>nul`, 5000)
         await runShellSafe(`sc stop "${svc.name}" 2>nul`, 5000)
         changes.push({ type: 'service', action: 'disabled', target: svc.name })
         details.push(`Disabled ${svc.desc} (${svc.name})`)
