@@ -189,10 +189,11 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   const processCount = processes.all || 0
 
   // Disk IO latency (average of read + write wait times)
-  const ioData = disksIO as Record<string, number>
-  const diskIOLatencyMs = Math.round(
-    ((ioData.rWaitTime || 0) + (ioData.wWaitTime || 0)) / 2
-  )
+  // disksIO may return null/undefined properties on some Windows versions
+  const ioData = (disksIO ?? {}) as Record<string, number | null | undefined>
+  const rWait = Number(ioData.rWaitTime) || 0
+  const wWait = Number(ioData.wWaitTime) || 0
+  const diskIOLatencyMs = Math.round((rWait + wWait) / 2)
 
   // Network latency estimation
   const netStats = Array.isArray(networkStats) ? networkStats : []
