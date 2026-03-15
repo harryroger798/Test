@@ -1,5 +1,12 @@
-import { useState, useEffect } from 'react'
-import { ClipboardList, Loader2, Plus, Search, ArrowRight } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { ClipboardList, Loader2, Plus, Search, ArrowRight, Users } from 'lucide-react'
+
+interface Customer {
+  id: string
+  phone: string
+  name: string
+  email?: string
+}
 
 interface RepairJob {
   id: string
@@ -53,9 +60,27 @@ export function RepairJobsPage(): JSX.Element {
 
   // Create form
   const [customerId, setCustomerId] = useState('')
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const [selectedCustomerName, setSelectedCustomerName] = useState('')
   const [deviceBrand, setDeviceBrand] = useState('')
   const [deviceModel, setDeviceModel] = useState('')
   const [complaint, setComplaint] = useState('')
+
+  const searchCustomers = useCallback(async (query: string) => {
+    try {
+      if (query.trim().length === 0) {
+        setCustomers(await window.bytefix.getAllCustomers(20) as Customer[])
+      } else {
+        setCustomers(await window.bytefix.searchCustomers(query) as Customer[])
+      }
+    } catch (err) { console.error(err) }
+  }, [])
+
+  useEffect(() => {
+    if (showCreate) { searchCustomers('') }
+  }, [showCreate, searchCustomers])
 
   useEffect(() => { loadJobs(); loadStats() }, [])
 
@@ -84,7 +109,8 @@ export function RepairJobsPage(): JSX.Element {
     try {
       await window.bytefix.createRepairJob({ customerId, deviceBrand, deviceModel, complaint })
       setShowCreate(false)
-      setCustomerId(''); setDeviceBrand(''); setDeviceModel(''); setComplaint('')
+      setCustomerId(''); setCustomerSearch(''); setSelectedCustomerName('')
+      setDeviceBrand(''); setDeviceModel(''); setComplaint('')
       await loadJobs(); await loadStats()
     } catch (err) { console.error(err) }
     finally { setLoading('') }
@@ -143,9 +169,44 @@ export function RepairJobsPage(): JSX.Element {
         <div className="card border-bytefix-500/30">
           <h3 className="font-medium text-white mb-3">New Repair Job</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="text-xs text-gray-400">Customer ID (required)</label>
-              <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full mt-1 px-3 py-2 bg-surface rounded-lg border border-gray-700 text-white text-sm" placeholder="Customer ID" />
+            <div className="relative">
+              <label className="text-xs text-gray-400">Customer (required)</label>
+              {selectedCustomerName ? (
+                <div className="w-full mt-1 px-3 py-2 bg-surface rounded-lg border border-bytefix-500/50 text-white text-sm flex items-center justify-between">
+                  <span className="flex items-center gap-2"><Users className="w-3 h-3 text-bytefix-400" /> {selectedCustomerName}</span>
+                  <button onClick={() => { setCustomerId(''); setSelectedCustomerName(''); setCustomerSearch(''); setShowCustomerDropdown(true) }} className="text-xs text-gray-400 hover:text-white">Change</button>
+                </div>
+              ) : (
+                <input
+                  value={customerSearch}
+                  onChange={(e) => { setCustomerSearch(e.target.value); searchCustomers(e.target.value); setShowCustomerDropdown(true) }}
+                  onFocus={() => { setShowCustomerDropdown(true); searchCustomers(customerSearch) }}
+                  className="w-full mt-1 px-3 py-2 bg-surface rounded-lg border border-gray-700 text-white text-sm"
+                  placeholder="Search by name or phone..."
+                />
+              )}
+              {showCustomerDropdown && !selectedCustomerName && (
+                <div className="absolute z-10 w-full mt-1 bg-surface-lighter border border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  {customers.length === 0 ? (
+                    <p className="text-xs text-gray-400 p-3">No customers found. Create one first in the Customers page.</p>
+                  ) : (
+                    customers.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => {
+                          setCustomerId(c.id)
+                          setSelectedCustomerName(`${c.name} (${c.phone})`)
+                          setShowCustomerDropdown(false)
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-bytefix-600/20 text-sm"
+                      >
+                        <span className="text-white">{c.name}</span>
+                        <span className="text-gray-400 ml-2">{c.phone}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs text-gray-400">Device Brand</label>
