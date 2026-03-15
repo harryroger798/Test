@@ -341,20 +341,23 @@ export async function reinstallCameraDrivers(): Promise<FixResult> {
         details.push('Windows Camera app reset skipped (not available)')
       }
     } else if (isMac) {
-      execSync('sudo killall VDCAssistant 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      execSync('sudo killall AppleCameraAssistant 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-      details.push('Camera processes restarted (VDCAssistant, AppleCameraAssistant)')
-      changes.push({ type: 'service', action: 'restarted', target: 'Camera services' })
+      try {
+        execSync('osascript -e \'do shell script "killall VDCAssistant 2>/dev/null; killall AppleCameraAssistant 2>/dev/null" with administrator privileges\'', { timeout: 30000, stdio: 'pipe' })
+        details.push('Camera processes restarted (VDCAssistant, AppleCameraAssistant)')
+        changes.push({ type: 'service', action: 'restarted', target: 'Camera services' })
+      } catch {
+        details.push('Could not restart camera processes - administrator privileges required')
+      }
     } else {
       // Linux — reload UVC driver
       try {
-        execSync('sudo modprobe -r uvcvideo 2>/dev/null && sudo modprobe uvcvideo 2>/dev/null', {
-          timeout: 10000, stdio: 'pipe'
+        execSync('pkexec sh -c "modprobe -r uvcvideo && modprobe uvcvideo"', {
+          timeout: 30000, stdio: 'pipe'
         })
         details.push('UVC camera driver reloaded')
         changes.push({ type: 'driver', action: 'reloaded', target: 'uvcvideo' })
       } catch {
-        details.push('Could not reload camera driver')
+        details.push('Could not reload camera driver - elevated privileges required')
       }
     }
 
@@ -396,7 +399,7 @@ export async function powerCycleCamera(): Promise<FixResult> {
       details.push('Camera re-enabled')
       changes.push({ type: 'device', action: 'power-cycled', target: 'Camera' })
     } else if (isMac) {
-      execSync('sudo killall VDCAssistant 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
+      execSync('killall VDCAssistant 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
       details.push('Camera process restarted')
       changes.push({ type: 'service', action: 'restarted', target: 'VDCAssistant' })
     }

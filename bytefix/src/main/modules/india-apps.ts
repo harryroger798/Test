@@ -5,7 +5,7 @@
 // ============================================================
 
 import { execSync } from 'child_process'
-import { existsSync, readdirSync, statSync, lstatSync } from 'fs'
+import { existsSync, readdirSync, statSync, lstatSync, rmSync, mkdirSync, writeFileSync, appendFileSync } from 'fs'
 import { join, resolve, normalize } from 'path'
 import { platform, homedir } from 'os'
 import { createLogger } from '../logger'
@@ -683,15 +683,8 @@ export async function fixJavaBanking(): Promise<FixResult> {
     const exceptionFile = join(deploymentDir, 'exception.sites')
 
     try {
-      execSync(`powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path '${deploymentDir}'"`, {
-        timeout: 5000, stdio: 'pipe'
-      })
-
-      const siteList = bankingSites.join('\\n')
-      execSync(
-        `powershell -NoProfile -Command "Set-Content -Path '${exceptionFile}' -Value '${siteList}'"`,
-        { timeout: 5000, stdio: 'pipe' }
-      )
+      mkdirSync(deploymentDir, { recursive: true })
+      writeFileSync(exceptionFile, bankingSites.join('\n'), 'utf8')
       details.push('Added Indian banking sites to Java exception list:')
       details.push(...bankingSites.map(s => `  ${s}`))
       changes.push({ type: 'file', action: 'created', target: exceptionFile })
@@ -702,10 +695,7 @@ export async function fixJavaBanking(): Promise<FixResult> {
     // Set Java security to Medium
     try {
       const deploymentConfig = join(deploymentDir, '..', 'deployment.properties')
-      execSync(
-        `powershell -NoProfile -Command "Add-Content -Path '${deploymentConfig}' -Value 'deployment.security.level=MEDIUM' -Force"`,
-        { timeout: 5000, stdio: 'pipe' }
-      )
+      appendFileSync(deploymentConfig, '\ndeployment.security.level=MEDIUM\n', 'utf8')
       details.push('Java security level set to MEDIUM for banking compatibility')
       changes.push({ type: 'file', action: 'modified', target: 'Java deployment.properties' })
     } catch {
@@ -750,9 +740,12 @@ export async function cleanChrome(): Promise<FixResult> {
       }
     }
 
-    // Ensure Chrome is closed first
+    // Gracefully close Chrome first (warn user)
     if (isWin) {
-      execSync('taskkill /IM chrome.exe /F 2>nul', { timeout: 5000, stdio: 'pipe' })
+      try {
+        execSync('taskkill /IM chrome.exe 2>nul', { timeout: 5000, stdio: 'pipe' })
+        details.push('Chrome was closed to allow cache cleaning')
+      } catch { /* Chrome may not be running */ }
     }
 
     // Clean caches
@@ -770,12 +763,11 @@ export async function cleanChrome(): Promise<FixResult> {
         const cachePath = join(profilePath, cacheDir)
         if (existsSync(cachePath)) {
           try {
-            if (isWin) {
-              execSync(`powershell -NoProfile -Command "Remove-Item '${cachePath}\\*' -Recurse -Force -ErrorAction SilentlyContinue"`, {
-                timeout: 30000, stdio: 'pipe'
-              })
-            } else {
-              execSync(`rm -rf "${cachePath}"/*`, { timeout: 30000, stdio: 'pipe' })
+            const entries = readdirSync(cachePath)
+            for (const entry of entries) {
+              try {
+                rmSync(join(cachePath, entry), { recursive: true, force: true })
+              } catch { /* individual file in use */ }
             }
             totalCleaned++
           } catch { /* cache in use */ }

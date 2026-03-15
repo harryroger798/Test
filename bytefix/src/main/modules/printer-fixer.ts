@@ -249,15 +249,23 @@ export async function restartSpooler(): Promise<FixResult> {
       details.push('Print Spooler service restarted')
       changes.push({ type: 'service', action: 'restarted', target: 'Spooler' })
     } else if (isMac) {
-      execSync('sudo launchctl stop org.cups.cupsd 2>/dev/null && sudo launchctl start org.cups.cupsd 2>/dev/null', {
-        timeout: 10000, stdio: 'pipe'
-      })
-      details.push('CUPS service restarted')
-      changes.push({ type: 'service', action: 'restarted', target: 'cupsd' })
+      try {
+        execSync('osascript -e \'do shell script "launchctl stop org.cups.cupsd && launchctl start org.cups.cupsd" with administrator privileges\'', {
+          timeout: 30000, stdio: 'pipe'
+        })
+        details.push('CUPS service restarted')
+        changes.push({ type: 'service', action: 'restarted', target: 'cupsd' })
+      } catch {
+        details.push('Could not restart CUPS - administrator privileges required')
+      }
     } else {
-      execSync('sudo systemctl restart cups 2>/dev/null', { timeout: 10000, stdio: 'pipe' })
-      details.push('CUPS service restarted')
-      changes.push({ type: 'service', action: 'restarted', target: 'cups' })
+      try {
+        execSync('pkexec systemctl restart cups', { timeout: 30000, stdio: 'pipe' })
+        details.push('CUPS service restarted')
+        changes.push({ type: 'service', action: 'restarted', target: 'cups' })
+      } catch {
+        details.push('Could not restart CUPS - elevated privileges required')
+      }
     }
 
     return {

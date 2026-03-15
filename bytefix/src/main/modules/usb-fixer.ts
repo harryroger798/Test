@@ -343,8 +343,9 @@ export async function reinstallUsbDrivers(): Promise<FixResult> {
     } else if (isMac) {
       // Reset USB controller on macOS
       try {
-        execSync('sudo killall -STOP -c usbd 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
-        execSync('sudo killall -CONT -c usbd 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
+        execSync('osascript -e \'do shell script "killall -STOP -c usbd 2>/dev/null; killall -CONT -c usbd 2>/dev/null" with administrator privileges\'', {
+          timeout: 30000, stdio: 'pipe'
+        })
         details.push('USB daemon reset')
         changes.push({ type: 'service', action: 'restarted', target: 'usbd' })
       } catch {
@@ -355,8 +356,8 @@ export async function reinstallUsbDrivers(): Promise<FixResult> {
     } else {
       // Linux USB reset
       try {
-        execSync('echo 1 | sudo tee /sys/bus/usb/devices/usb*/authorized 2>/dev/null', {
-          timeout: 5000, stdio: 'pipe'
+        execSync('pkexec sh -c "echo 1 | tee /sys/bus/usb/devices/usb*/authorized" 2>/dev/null', {
+          timeout: 30000, stdio: 'pipe'
         })
         details.push('USB devices re-authorized')
         changes.push({ type: 'system', action: 'modified', target: 'USB authorization' })

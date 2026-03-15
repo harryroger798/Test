@@ -3,6 +3,7 @@ import { execSync, execFileSync } from 'child_process'
 import { nanoid } from 'nanoid'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { isIP } from 'net'
 
 // Input sanitization helpers to prevent command injection
 function sanitizeDevicePath(device: string): string {
@@ -49,13 +50,7 @@ function sanitizePrinterName(name: string): string {
 }
 
 function sanitizeIpAddress(ip: string): string {
-  // IPv4
-  if (/^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
-    const parts = ip.split('.').map(Number)
-    if (parts.every(n => n >= 0 && n <= 255)) return ip;
-  }
-  // IPv6
-  if (/^[a-fA-F0-9:]+$/.test(ip) && ip.includes(':')) return ip;
+  if (isIP(ip) > 0) return ip;
   throw new Error(`Invalid IP address: ${ip}`);
 }
 import { createLogger } from './logger'
@@ -569,6 +564,8 @@ async function runQuickScan(): Promise<ScanResult> {
     }, QUICK_SCAN_TIMEOUT_MS)
   )
 
+  // Suppress potential unhandled rejections from the losing promise
+  allSettledPromise.catch(() => {})
   const allResults = await Promise.race([allSettledPromise, timeoutPromise])
 
   for (let i = 0; i < allResults.length; i++) {

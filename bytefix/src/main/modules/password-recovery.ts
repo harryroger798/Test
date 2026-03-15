@@ -4,7 +4,7 @@
 // IMPORTANT: This module provides GUIDANCE only — never touches SAM/hashes directly
 // ============================================================
 
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 import { existsSync } from 'fs'
 import { platform } from 'os'
 import { createLogger } from '../logger'
@@ -322,8 +322,8 @@ function getSavedWifiPasswords(): { ssid: string; password: string }[] {
       const ssid = line.replace(/All User Profile\s*:\s*/, '').trim()
       if (!ssid) continue
       try {
-        const detail = execSync(
-          `netsh wlan show profile name="${ssid}" key=clear`,
+        const detail = execFileSync(
+          'netsh', ['wlan', 'show', 'profile', `name=${ssid}`, 'key=clear'],
           { encoding: 'utf8', timeout: 5000, stdio: 'pipe' }
         )
         const keyMatch = detail.match(/Key Content\s*:\s*(.+)/)
@@ -440,7 +440,12 @@ export async function runPasswordRecoveryDiagnostics(): Promise<DiagnosticResult
           title: `${wifiPasswords.length} Saved WiFi Passwords Found`,
           severity: 'info',
           description: 'WiFi passwords recovered from system. Save these before format/reset.',
-          details: wifiPasswords.map(w => `${w.ssid}: ${w.password}`),
+          details: wifiPasswords.map(w => {
+            const masked = w.password.length > 3
+              ? w.password.slice(0, 2) + '*'.repeat(w.password.length - 3) + w.password.slice(-1)
+              : '***'
+            return `${w.ssid}: ${masked}`
+          }),
           fixAvailable: false,
           fixRisk: 'none',
           autoFixable: false,
@@ -554,9 +559,13 @@ export async function enableAdminAccount(): Promise<FixResult> {
       }
     }
 
-    execSync('net user Administrator /active:yes', { timeout: 10000, stdio: 'pipe' })
+    // Use PowerShell Start-Process -Verb RunAs for UAC elevation in Electron GUI
+    execSync(
+      'powershell -NoProfile -Command "Start-Process -FilePath net.exe -ArgumentList \'user\',\'Administrator\',\'/active:yes\' -Verb RunAs -Wait"',
+      { timeout: 30000, stdio: 'pipe' }
+    )
     details.push('Built-in Administrator account has been enabled')
-    details.push('IMPORTANT: Disable it after use with: net user Administrator /active:no')
+    details.push('IMPORTANT: Disable it after use for security')
     changes.push({ type: 'system', action: 'enabled', target: 'Built-in Administrator account' })
 
     return {
@@ -583,7 +592,11 @@ export async function disableAdminAccount(): Promise<FixResult> {
         description: 'Windows only', details: [], changes: [], rollbackAvailable: false, error: 'Windows only'
       }
     }
-    execSync('net user Administrator /active:no', { timeout: 10000, stdio: 'pipe' })
+    // Use PowerShell Start-Process -Verb RunAs for UAC elevation in Electron GUI
+    execSync(
+      'powershell -NoProfile -Command "Start-Process -FilePath net.exe -ArgumentList \'user\',\'Administrator\',\'/active:no\' -Verb RunAs -Wait"',
+      { timeout: 30000, stdio: 'pipe' }
+    )
     return {
       success: true, module: 'password-recovery', action: 'disable-admin',
       description: 'Built-in Administrator account disabled',
