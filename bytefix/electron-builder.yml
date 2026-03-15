@@ -8,6 +8,11 @@ files:
   - '!node_modules/**/*'
 asarUnpack:
   - resources/**
+publish:
+  provider: github
+  owner: harryroger798
+  repo: Test
+  releaseType: release
 win:
   target:
     - target: nsis

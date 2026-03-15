@@ -228,6 +228,31 @@ const api = {
   getSupportedLanguages: () => ipcRenderer.invoke('i18n:getSupportedLanguages'),
   getTranslations: (lang: string) => ipcRenderer.invoke('i18n:getTranslations', { lang }),
 
+  // Phase 5: Production Hardening - Error Logging
+  logError: (data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) =>
+    ipcRenderer.invoke('app:logError', data),
+
+  // Phase 5: App Info
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  getAppLogPath: () => ipcRenderer.invoke('app:getLogPath'),
+  getAppLogDir: () => ipcRenderer.invoke('app:getLogDir'),
+  getAppPlatform: () => ipcRenderer.invoke('app:getPlatform'),
+  getAppArch: () => ipcRenderer.invoke('app:getArch'),
+
+  // Phase 5: Auto-Updater
+  checkForUpdate: () => ipcRenderer.invoke('updater:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+  installUpdate: () => ipcRenderer.invoke('updater:install'),
+  getVersion: () => ipcRenderer.invoke('updater:getVersion'),
+
+  // Phase 5: Offline Manager
+  getOfflineStatus: () => ipcRenderer.invoke('offline:getStatus'),
+  queueOfflineAction: (action: { type: string; payload: Record<string, unknown> }) =>
+    ipcRenderer.invoke('offline:queueAction', action),
+  getOfflineQueue: () => ipcRenderer.invoke('offline:getQueue'),
+  clearOfflineQueue: () => ipcRenderer.invoke('offline:clearQueue'),
+  forceConnectivityCheck: () => ipcRenderer.invoke('offline:forceCheck'),
+
   // Scan
   quickScan: () => ipcRenderer.invoke('scan:quick'),
   fullScan: (config: unknown) => ipcRenderer.invoke('scan:full', config),
@@ -239,6 +264,40 @@ const api = {
   getJobs: () => ipcRenderer.invoke('job:getAll'),
   cancelJob: (jobId: string) => ipcRenderer.invoke('job:cancel', { jobId })
 }
+
+// Forward main process events to renderer as custom DOM events
+// Remove existing listeners first to prevent leaks on renderer reload
+const eventChannels = [
+  'updater:status',
+  'offline:statusChanged',
+  'offline:processingQueue',
+  'offline:replayAction',
+  'offline:actionFailed'
+] as const
+
+for (const channel of eventChannels) {
+  ipcRenderer.removeAllListeners(channel)
+}
+
+ipcRenderer.on('updater:status', (_event, data) => {
+  window.dispatchEvent(new CustomEvent('bytefix:updater-status', { detail: data }))
+})
+
+ipcRenderer.on('offline:statusChanged', (_event, data) => {
+  window.dispatchEvent(new CustomEvent('bytefix:offline-status', { detail: data }))
+})
+
+ipcRenderer.on('offline:processingQueue', (_event, data) => {
+  window.dispatchEvent(new CustomEvent('bytefix:queue-update', { detail: data }))
+})
+
+ipcRenderer.on('offline:replayAction', (_event, data) => {
+  window.dispatchEvent(new CustomEvent('bytefix:replay-action', { detail: data }))
+})
+
+ipcRenderer.on('offline:actionFailed', (_event, data) => {
+  window.dispatchEvent(new CustomEvent('bytefix:action-failed', { detail: data }))
+})
 
 contextBridge.exposeInMainWorld('bytefix', api)
 

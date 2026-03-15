@@ -4,10 +4,16 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerAllHandlers } from './ipc-handler'
 import { initDatabase } from './database'
 import { createLogger } from './logger'
+import { setupGlobalErrorHandlers, logToFile, getLogPath, getLogDir } from './error-handler'
+import { setupAutoUpdater } from './auto-updater'
+import { setupOfflineManager } from './offline-manager'
 
 const logger = createLogger('main')
 
 let mainWindow: BrowserWindow | null = null
+
+// Setup global error handlers before anything else
+setupGlobalErrorHandlers()
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -41,6 +47,14 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Setup auto-updater (only in production builds)
+  if (!is.dev) {
+    setupAutoUpdater(mainWindow)
+  }
+
+  // Setup offline manager
+  setupOfflineManager(mainWindow)
 }
 
 app.whenReady().then(async () => {
@@ -60,6 +74,21 @@ app.whenReady().then(async () => {
   registerAllHandlers(ipcMain)
   logger.info('IPC handlers registered')
 
+  // Register error logging IPC handler
+  ipcMain.handle('app:logError', (_event, data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) => {
+    logToFile('ERROR', `renderer/${data.module}`, data.message, {
+      stack: data.stack,
+      componentStack: data.componentStack
+    })
+  })
+
+  // App info handlers
+  ipcMain.handle('app:getVersion', () => app.getVersion())
+  ipcMain.handle('app:getLogPath', () => getLogPath())
+  ipcMain.handle('app:getLogDir', () => getLogDir())
+  ipcMain.handle('app:getPlatform', () => process.platform)
+  ipcMain.handle('app:getArch', () => process.arch)
+
   createWindow()
 
   app.on('activate', () => {
@@ -73,10 +102,5 @@ app.on('window-all-closed', () => {
   }
 })
 
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught exception:', error)
-})
-
-process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled rejection:', reason)
-})
+// Note: Global uncaughtException and unhandledRejection handlers
+// are now managed by error-handler.ts (setupGlobalErrorHandlers)

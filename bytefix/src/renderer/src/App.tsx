@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { OfflineIndicator } from './components/OfflineIndicator'
 import { Dashboard } from './pages/Dashboard'
 import { SystemInfoPage } from './pages/SystemInfoPage'
 import { PerformancePage } from './pages/PerformancePage'
@@ -37,50 +39,53 @@ export default function App(): JSX.Element {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface">
-      <Sidebar />
-      <main
-        className={`flex-1 overflow-y-auto transition-all duration-300 ${
-          sidebarCollapsed ? 'ml-16' : 'ml-64'
-        }`}
-      >
-        <div className="p-6 max-w-7xl mx-auto">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/system" element={<SystemInfoPage />} />
-            <Route path="/performance" element={<PerformancePage />} />
-            <Route path="/malware" element={<MalwarePage />} />
-            <Route path="/network" element={<NetworkPage />} />
-            <Route path="/os-repair" element={<OSRepairPage />} />
-            <Route path="/battery" element={<BatteryPage />} />
-            <Route path="/data-recovery" element={<DataRecoveryPage />} />
-            <Route path="/password" element={<PasswordRecoveryPage />} />
-            <Route path="/audio" element={<AudioFixerPage />} />
-            <Route path="/bluetooth" element={<BluetoothFixerPage />} />
-            <Route path="/printer" element={<PrinterFixerPage />} />
-            <Route path="/display" element={<DisplayFixerPage />} />
-            <Route path="/webcam" element={<WebcamFixerPage />} />
-            <Route path="/usb" element={<UsbFixerPage />} />
-            <Route path="/india-apps" element={<IndiaAppsPage />} />
-            <Route path="/overheating" element={<OverheatingPage />} />
-            <Route path="/hardware" element={<HardwareDiagnosticsPage />} />
-            <Route path="/keyboard" element={<KeyboardTouchpadPage />} />
-            <Route path="/gaming" element={<GamingOptimizerPage />} />
-            <Route path="/partition" element={<PartitionBootPage />} />
-            <Route path="/activation" element={<WindowsActivationPage />} />
-            <Route path="/email" element={<EmailSetupPage />} />
-            <Route path="/phone" element={<PhoneTransferPage />} />
-            <Route path="/billing" element={<GSTBillingPage />} />
-            <Route path="/upi" element={<UPIPaymentPage />} />
-            <Route path="/whatsapp" element={<WhatsAppPage />} />
-            <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/jobs" element={<RepairJobsPage />} />
-            <Route path="/backup" element={<BackupWizardPage />} />
-            <Route path="/language" element={<LanguageSettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </main>
-    </div>
+    <ErrorBoundary module="app-root">
+      <div className="flex h-screen overflow-hidden bg-surface">
+        <Sidebar />
+        <main
+          className={`flex-1 overflow-y-auto transition-all duration-300 ${
+            sidebarCollapsed ? 'ml-16' : 'ml-64'
+          }`}
+        >
+          <div className="p-6 max-w-7xl mx-auto">
+            <Routes>
+              <Route path="/" element={<ErrorBoundary module="dashboard"><Dashboard /></ErrorBoundary>} />
+              <Route path="/system" element={<ErrorBoundary module="system-info"><SystemInfoPage /></ErrorBoundary>} />
+              <Route path="/performance" element={<ErrorBoundary module="performance"><PerformancePage /></ErrorBoundary>} />
+              <Route path="/malware" element={<ErrorBoundary module="malware"><MalwarePage /></ErrorBoundary>} />
+              <Route path="/network" element={<ErrorBoundary module="network"><NetworkPage /></ErrorBoundary>} />
+              <Route path="/os-repair" element={<ErrorBoundary module="os-repair"><OSRepairPage /></ErrorBoundary>} />
+              <Route path="/battery" element={<ErrorBoundary module="battery"><BatteryPage /></ErrorBoundary>} />
+              <Route path="/data-recovery" element={<ErrorBoundary module="data-recovery"><DataRecoveryPage /></ErrorBoundary>} />
+              <Route path="/password" element={<ErrorBoundary module="password-recovery"><PasswordRecoveryPage /></ErrorBoundary>} />
+              <Route path="/audio" element={<ErrorBoundary module="audio"><AudioFixerPage /></ErrorBoundary>} />
+              <Route path="/bluetooth" element={<ErrorBoundary module="bluetooth"><BluetoothFixerPage /></ErrorBoundary>} />
+              <Route path="/printer" element={<ErrorBoundary module="printer"><PrinterFixerPage /></ErrorBoundary>} />
+              <Route path="/display" element={<ErrorBoundary module="display"><DisplayFixerPage /></ErrorBoundary>} />
+              <Route path="/webcam" element={<ErrorBoundary module="webcam"><WebcamFixerPage /></ErrorBoundary>} />
+              <Route path="/usb" element={<ErrorBoundary module="usb"><UsbFixerPage /></ErrorBoundary>} />
+              <Route path="/india-apps" element={<ErrorBoundary module="india-apps"><IndiaAppsPage /></ErrorBoundary>} />
+              <Route path="/overheating" element={<ErrorBoundary module="overheating"><OverheatingPage /></ErrorBoundary>} />
+              <Route path="/hardware" element={<ErrorBoundary module="hardware"><HardwareDiagnosticsPage /></ErrorBoundary>} />
+              <Route path="/keyboard" element={<ErrorBoundary module="keyboard"><KeyboardTouchpadPage /></ErrorBoundary>} />
+              <Route path="/gaming" element={<ErrorBoundary module="gaming"><GamingOptimizerPage /></ErrorBoundary>} />
+              <Route path="/partition" element={<ErrorBoundary module="partition"><PartitionBootPage /></ErrorBoundary>} />
+              <Route path="/activation" element={<ErrorBoundary module="activation"><WindowsActivationPage /></ErrorBoundary>} />
+              <Route path="/email" element={<ErrorBoundary module="email"><EmailSetupPage /></ErrorBoundary>} />
+              <Route path="/phone" element={<ErrorBoundary module="phone"><PhoneTransferPage /></ErrorBoundary>} />
+              <Route path="/billing" element={<ErrorBoundary module="billing"><GSTBillingPage /></ErrorBoundary>} />
+              <Route path="/upi" element={<ErrorBoundary module="upi"><UPIPaymentPage /></ErrorBoundary>} />
+              <Route path="/whatsapp" element={<ErrorBoundary module="whatsapp"><WhatsAppPage /></ErrorBoundary>} />
+              <Route path="/customers" element={<ErrorBoundary module="customers"><CustomersPage /></ErrorBoundary>} />
+              <Route path="/jobs" element={<ErrorBoundary module="jobs"><RepairJobsPage /></ErrorBoundary>} />
+              <Route path="/backup" element={<ErrorBoundary module="backup"><BackupWizardPage /></ErrorBoundary>} />
+              <Route path="/language" element={<ErrorBoundary module="language"><LanguageSettingsPage /></ErrorBoundary>} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </main>
+        <OfflineIndicator />
+      </div>
+    </ErrorBoundary>
   )
 }
