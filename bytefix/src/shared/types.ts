@@ -427,6 +427,63 @@ export interface IPCChannels {
   'phone:guideUsbDebugging': { request: void; response: FixResult }
   'phone:pullFiles': { request: { sourcePath: string; destinationPath: string }; response: FixResult }
 
+  // Phase 4: GST Billing
+  'billing:createInvoice': { request: { jobId?: string; customerId: string; shopName: string; shopGstin?: string; shopAddress?: string; shopStateCode: string; customerGstin?: string; customerStateCode?: string; lineItems: { description: string; hsnCode: string; quantity: number; rate: number; amount: number; gstRate: number }[]; paymentMethod?: string; notes?: string }; response: unknown }
+  'billing:getInvoice': { request: { id: string }; response: unknown }
+  'billing:getInvoicesByCustomer': { request: { customerId: string }; response: unknown[] }
+  'billing:getAllInvoices': { request: { limit?: number }; response: unknown[] }
+  'billing:updatePaymentStatus': { request: { invoiceId: string; status: string; method?: string }; response: unknown }
+  'billing:getStats': { request: void; response: unknown }
+  'billing:getHsnCodes': { request: void; response: unknown }
+  'billing:getIndianStates': { request: void; response: unknown }
+
+  // Phase 4: UPI Payment
+  'upi:generatePayment': { request: { vpa: string; payeeName: string; amount: number; note?: string; invoiceNumber?: string }; response: unknown }
+  'upi:generateInvoiceQR': { request: { vpa: string; payeeName: string; invoiceNumber: string; amount: number }; response: unknown }
+  'upi:validateVPA': { request: { vpa: string }; response: { valid: boolean; error?: string } }
+
+  // Phase 4: WhatsApp Integration
+  'whatsapp:sendJobStatus': { request: { phone: string; status: string; customerName: string; ticketNumber: string; shopName: string; deviceInfo?: string; estimatedCost?: number; diagnosis?: string }; response: unknown }
+  'whatsapp:sendPaymentLink': { request: { phone: string; shopName: string; invoiceNumber: string; amount: number; upiLink?: string }; response: unknown }
+  'whatsapp:sendDiagnosticReport': { request: { phone: string; shopName: string; customerName: string; ticketNumber: string; issues: string[]; healthScore: number }; response: unknown }
+  'whatsapp:sendCustomMessage': { request: { phone: string; message: string }; response: unknown }
+  'whatsapp:validatePhone': { request: { phone: string }; response: { valid: boolean; error?: string; cleaned?: string } }
+
+  // Phase 4: CRM / Customer & Job Management
+  'crm:createCustomer': { request: { phone: string; name: string; email?: string; address?: string; gstin?: string; stateCode?: string; notes?: string }; response: unknown }
+  'crm:updateCustomer': { request: { id: string; data: { phone?: string; name?: string; email?: string; address?: string; gstin?: string; stateCode?: string; notes?: string } }; response: unknown }
+  'crm:getCustomer': { request: { id: string }; response: unknown }
+  'crm:getCustomerByPhone': { request: { phone: string }; response: unknown }
+  'crm:searchCustomers': { request: { query: string }; response: unknown[] }
+  'crm:getAllCustomers': { request: { limit?: number }; response: unknown[] }
+  'crm:deleteCustomer': { request: { id: string }; response: boolean }
+  'crm:createJob': { request: { customerId: string; deviceBrand?: string; deviceModel?: string; deviceSerial?: string; complaint: string; technician?: string; promisedDate?: number; notes?: string }; response: unknown }
+  'crm:updateJobStatus': { request: { jobId: string; status: string; notes?: string }; response: unknown }
+  'crm:updateJobDiagnosis': { request: { jobId: string; diagnosis: string; estimatedCost?: number; scanId?: string }; response: unknown }
+  'crm:getJob': { request: { id: string }; response: unknown }
+  'crm:getJobByTicket': { request: { ticketNumber: string }; response: unknown }
+  'crm:getJobsByCustomer': { request: { customerId: string }; response: unknown[] }
+  'crm:getJobsByStatus': { request: { status: string }; response: unknown[] }
+  'crm:getAllJobs': { request: { limit?: number }; response: unknown[] }
+  'crm:getActiveJobs': { request: void; response: unknown[] }
+  'crm:getJobStats': { request: void; response: unknown }
+  'crm:getCustomerWithJobs': { request: { customerId: string }; response: unknown }
+
+  // Phase 4: Backup Wizard
+  'backup:discoverTargets': { request: void; response: unknown[] }
+  'backup:createPlan': { request: { targetPaths?: string[]; destinationPath?: string }; response: unknown }
+  'backup:execute': { request: { targetPaths: string[]; destinationPath: string }; response: unknown }
+  'backup:discoverBrowsers': { request: void; response: unknown[] }
+  'backup:backupBrowser': { request: { browserName: string; destinationPath: string }; response: unknown }
+  'backup:getStatus': { request: void; response: unknown }
+  'backup:getMigrationGuide': { request: { type: string }; response: unknown }
+
+  // Phase 4: i18n
+  'i18n:setLanguage': { request: { lang: string }; response: void }
+  'i18n:getLanguage': { request: void; response: string }
+  'i18n:getSupportedLanguages': { request: void; response: unknown[] }
+  'i18n:getTranslations': { request: { lang: string }; response: Record<string, string> }
+
   // Full Scan
   'scan:full': { request: ScanConfig; response: ScanResult }
   'scan:quick': { request: void; response: ScanResult }

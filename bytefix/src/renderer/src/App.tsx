@@ -24,6 +24,13 @@ import { PartitionBootPage } from './pages/PartitionBootPage'
 import { WindowsActivationPage } from './pages/WindowsActivationPage'
 import { EmailSetupPage } from './pages/EmailSetupPage'
 import { PhoneTransferPage } from './pages/PhoneTransferPage'
+import { GSTBillingPage } from './pages/GSTBillingPage'
+import { UPIPaymentPage } from './pages/UPIPaymentPage'
+import { WhatsAppPage } from './pages/WhatsAppPage'
+import { CustomersPage } from './pages/CustomersPage'
+import { RepairJobsPage } from './pages/RepairJobsPage'
+import { BackupWizardPage } from './pages/BackupWizardPage'
+import { LanguageSettingsPage } from './pages/LanguageSettingsPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
@@ -63,6 +70,13 @@ export default function App(): JSX.Element {
             <Route path="/activation" element={<WindowsActivationPage />} />
             <Route path="/email" element={<EmailSetupPage />} />
             <Route path="/phone" element={<PhoneTransferPage />} />
+            <Route path="/billing" element={<GSTBillingPage />} />
+            <Route path="/upi" element={<UPIPaymentPage />} />
+            <Route path="/whatsapp" element={<WhatsAppPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/jobs" element={<RepairJobsPage />} />
+            <Route path="/backup" element={<BackupWizardPage />} />
+            <Route path="/language" element={<LanguageSettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>

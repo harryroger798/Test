@@ -89,6 +89,21 @@ import { runActivationDiagnostics, runActivationTroubleshooter } from './modules
 import { runEmailDiagnostics, autoConfigureEmail, repairOutlookProfile, clearEmailCredentials } from './modules/email-account-setup'
 import { runPhoneTransferDiagnostics, guideUsbDebugging, pullFilesViaAdb } from './modules/phone-data-transfer'
 
+// Phase 4 module imports
+import { createInvoice, getInvoice, getInvoicesByCustomer, getAllInvoices, updatePaymentStatus, getInvoiceStats, getHsnCodes, getIndianStates } from './modules/gst-billing'
+import { generateUPIPayment, generateInvoiceUPI, validateUPIAddress } from './modules/upi-payment'
+import { sendJobStatusMessage, sendPaymentLink as waSendPaymentLink, sendDiagnosticReport, sendCustomMessage, validateIndianPhone } from './modules/whatsapp-service'
+import type { JobStatus as WAJobStatus } from './modules/whatsapp-service'
+import {
+  createCustomer, updateCustomer, getCustomer, getCustomerByPhone, searchCustomers, getAllCustomers, deleteCustomer,
+  createRepairJob, updateJobStatus, updateJobDiagnosis, getRepairJob, getRepairJobByTicket, getJobsByCustomer,
+  getJobsByStatus, getAllJobs, getActiveJobs, getJobStats, getCustomerWithJobs
+} from './modules/crm-manager'
+import type { RepairJobStatus } from './modules/crm-manager'
+import { discoverBackupTargets, createBackupPlan, executeBackup, discoverBrowserProfiles, backupBrowserData, getBackupStatus, getPCToPCMigrationGuide, getWindowsReinstallGuide, getHDDToSSDGuide } from './modules/backup-wizard'
+import { setLanguage, getLanguage, getSupportedLanguages, getTranslationsForLanguage } from './modules/i18n-config'
+import type { SupportedLanguage } from './modules/i18n-config'
+
 import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem } from '../shared/types'
 
 const logger = createLogger('ipc-handler')
@@ -648,6 +663,212 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     const safeSrc = sanitizeFilePath(args.sourcePath)
     const safeDest = sanitizeFilePath(args.destinationPath)
     return await pullFilesViaAdb(safeSrc, safeDest)
+  })
+
+  // ============================================================
+  // Phase 4: GST Billing
+  // ============================================================
+  ipcMain.handle('billing:createInvoice', async (_event, args: { jobId?: string; customerId: string; shopName: string; shopGstin?: string; shopAddress?: string; shopStateCode: string; customerGstin?: string; customerStateCode?: string; lineItems: { description: string; hsnCode: string; quantity: number; rate: number; amount: number; gstRate: number }[]; paymentMethod?: string; notes?: string }) => {
+    return await createInvoice(args)
+  })
+
+  ipcMain.handle('billing:getInvoice', async (_event, args: { id: string }) => {
+    return await getInvoice(args.id)
+  })
+
+  ipcMain.handle('billing:getInvoicesByCustomer', async (_event, args: { customerId: string }) => {
+    return await getInvoicesByCustomer(args.customerId)
+  })
+
+  ipcMain.handle('billing:getAllInvoices', async (_event, args: { limit?: number }) => {
+    return await getAllInvoices(args?.limit)
+  })
+
+  ipcMain.handle('billing:updatePaymentStatus', async (_event, args: { invoiceId: string; status: string; method?: string }) => {
+    return await updatePaymentStatus(args.invoiceId, args.status as 'pending' | 'paid' | 'partial' | 'cancelled', args.method)
+  })
+
+  ipcMain.handle('billing:getStats', async () => {
+    return await getInvoiceStats()
+  })
+
+  ipcMain.handle('billing:getHsnCodes', async () => {
+    return getHsnCodes()
+  })
+
+  ipcMain.handle('billing:getIndianStates', async () => {
+    return getIndianStates()
+  })
+
+  // ============================================================
+  // Phase 4: UPI Payment
+  // ============================================================
+  ipcMain.handle('upi:generatePayment', async (_event, args: { vpa: string; payeeName: string; amount: number; note?: string; invoiceNumber?: string }) => {
+    return await generateUPIPayment(args)
+  })
+
+  ipcMain.handle('upi:generateInvoiceQR', async (_event, args: { vpa: string; payeeName: string; invoiceNumber: string; amount: number }) => {
+    return await generateInvoiceUPI(args.vpa, args.payeeName, args.invoiceNumber, args.amount)
+  })
+
+  ipcMain.handle('upi:validateVPA', async (_event, args: { vpa: string }) => {
+    return validateUPIAddress(args.vpa)
+  })
+
+  // ============================================================
+  // Phase 4: WhatsApp Integration
+  // ============================================================
+  ipcMain.handle('whatsapp:sendJobStatus', async (_event, args: { phone: string; status: string; customerName: string; ticketNumber: string; shopName: string; deviceInfo?: string; estimatedCost?: number; diagnosis?: string }) => {
+    return await sendJobStatusMessage(args.phone, args.status as WAJobStatus, args.customerName, args.ticketNumber, args.shopName, args.deviceInfo, args.estimatedCost, args.diagnosis)
+  })
+
+  ipcMain.handle('whatsapp:sendPaymentLink', async (_event, args: { phone: string; shopName: string; invoiceNumber: string; amount: number; upiLink?: string }) => {
+    return await waSendPaymentLink(args.phone, args.shopName, args.invoiceNumber, args.amount, args.upiLink)
+  })
+
+  ipcMain.handle('whatsapp:sendDiagnosticReport', async (_event, args: { phone: string; shopName: string; customerName: string; ticketNumber: string; issues: string[]; healthScore: number }) => {
+    return await sendDiagnosticReport(args.phone, args.shopName, args.customerName, args.ticketNumber, args.issues, args.healthScore)
+  })
+
+  ipcMain.handle('whatsapp:sendCustomMessage', async (_event, args: { phone: string; message: string }) => {
+    return await sendCustomMessage(args.phone, args.message)
+  })
+
+  ipcMain.handle('whatsapp:validatePhone', async (_event, args: { phone: string }) => {
+    return validateIndianPhone(args.phone)
+  })
+
+  // ============================================================
+  // Phase 4: CRM / Customer & Job Management
+  // ============================================================
+  ipcMain.handle('crm:createCustomer', async (_event, args: { phone: string; name: string; email?: string; address?: string; gstin?: string; stateCode?: string; notes?: string }) => {
+    return await createCustomer(args)
+  })
+
+  ipcMain.handle('crm:updateCustomer', async (_event, args: { id: string; data: { phone?: string; name?: string; email?: string; address?: string; gstin?: string; stateCode?: string; notes?: string } }) => {
+    return await updateCustomer(args.id, args.data)
+  })
+
+  ipcMain.handle('crm:getCustomer', async (_event, args: { id: string }) => {
+    return await getCustomer(args.id)
+  })
+
+  ipcMain.handle('crm:getCustomerByPhone', async (_event, args: { phone: string }) => {
+    return await getCustomerByPhone(args.phone)
+  })
+
+  ipcMain.handle('crm:searchCustomers', async (_event, args: { query: string }) => {
+    return await searchCustomers(args.query)
+  })
+
+  ipcMain.handle('crm:getAllCustomers', async (_event, args: { limit?: number }) => {
+    return await getAllCustomers(args?.limit)
+  })
+
+  ipcMain.handle('crm:deleteCustomer', async (_event, args: { id: string }) => {
+    return await deleteCustomer(args.id)
+  })
+
+  ipcMain.handle('crm:createJob', async (_event, args: { customerId: string; deviceBrand?: string; deviceModel?: string; deviceSerial?: string; complaint: string; technician?: string; promisedDate?: number; notes?: string }) => {
+    return await createRepairJob(args)
+  })
+
+  ipcMain.handle('crm:updateJobStatus', async (_event, args: { jobId: string; status: string; notes?: string }) => {
+    return await updateJobStatus(args.jobId, args.status as RepairJobStatus, args.notes)
+  })
+
+  ipcMain.handle('crm:updateJobDiagnosis', async (_event, args: { jobId: string; diagnosis: string; estimatedCost?: number; scanId?: string }) => {
+    return await updateJobDiagnosis(args.jobId, args.diagnosis, args.estimatedCost, args.scanId)
+  })
+
+  ipcMain.handle('crm:getJob', async (_event, args: { id: string }) => {
+    return await getRepairJob(args.id)
+  })
+
+  ipcMain.handle('crm:getJobByTicket', async (_event, args: { ticketNumber: string }) => {
+    return await getRepairJobByTicket(args.ticketNumber)
+  })
+
+  ipcMain.handle('crm:getJobsByCustomer', async (_event, args: { customerId: string }) => {
+    return await getJobsByCustomer(args.customerId)
+  })
+
+  ipcMain.handle('crm:getJobsByStatus', async (_event, args: { status: string }) => {
+    return await getJobsByStatus(args.status as RepairJobStatus)
+  })
+
+  ipcMain.handle('crm:getAllJobs', async (_event, args: { limit?: number }) => {
+    return await getAllJobs(args?.limit)
+  })
+
+  ipcMain.handle('crm:getActiveJobs', async () => {
+    return await getActiveJobs()
+  })
+
+  ipcMain.handle('crm:getJobStats', async () => {
+    return await getJobStats()
+  })
+
+  ipcMain.handle('crm:getCustomerWithJobs', async (_event, args: { customerId: string }) => {
+    return await getCustomerWithJobs(args.customerId)
+  })
+
+  // ============================================================
+  // Phase 4: Backup Wizard
+  // ============================================================
+  ipcMain.handle('backup:discoverTargets', async () => {
+    return await discoverBackupTargets()
+  })
+
+  ipcMain.handle('backup:createPlan', async (_event, args: { targetPaths?: string[]; destinationPath?: string }) => {
+    return await createBackupPlan(args?.targetPaths, args?.destinationPath)
+  })
+
+  ipcMain.handle('backup:execute', async (_event, args: { targetPaths: string[]; destinationPath: string }) => {
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    const safePaths = args.targetPaths.map(p => sanitizeFilePath(p))
+    return await executeBackup(safePaths, safeDest)
+  })
+
+  ipcMain.handle('backup:discoverBrowsers', async () => {
+    return await discoverBrowserProfiles()
+  })
+
+  ipcMain.handle('backup:backupBrowser', async (_event, args: { browserName: string; destinationPath: string }) => {
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    return await backupBrowserData(args.browserName, safeDest)
+  })
+
+  ipcMain.handle('backup:getStatus', async () => {
+    return await getBackupStatus()
+  })
+
+  ipcMain.handle('backup:getMigrationGuide', async (_event, args: { type: string }) => {
+    switch (args.type) {
+      case 'pc-to-pc': return getPCToPCMigrationGuide()
+      case 'windows-reinstall': return getWindowsReinstallGuide()
+      case 'hdd-to-ssd': return getHDDToSSDGuide()
+      default: return getPCToPCMigrationGuide()
+    }
+  })
+
+  // ============================================================
+  // Phase 4: i18n
+  // ============================================================
+  ipcMain.handle('i18n:setLanguage', async (_event, args: { lang: string }) => {
+    setLanguage(args.lang as SupportedLanguage)
+  })
+
+  ipcMain.handle('i18n:getLanguage', async () => {
+    return getLanguage()
+  })
+
+  ipcMain.handle('i18n:getSupportedLanguages', async () => {
+    return getSupportedLanguages()
+  })
+
+  ipcMain.handle('i18n:getTranslations', async (_event, args: { lang: string }) => {
+    return getTranslationsForLanguage(args.lang as SupportedLanguage)
   })
 
   // ============================================================

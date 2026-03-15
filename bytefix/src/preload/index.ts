@@ -156,6 +156,78 @@ const api = {
   pullPhoneFiles: (sourcePath: string, destinationPath: string) =>
     ipcRenderer.invoke('phone:pullFiles', { sourcePath, destinationPath }),
 
+  // Phase 4: GST Billing
+  createInvoice: (data: unknown) => ipcRenderer.invoke('billing:createInvoice', data),
+  getInvoice: (id: string) => ipcRenderer.invoke('billing:getInvoice', { id }),
+  getInvoicesByCustomer: (customerId: string) => ipcRenderer.invoke('billing:getInvoicesByCustomer', { customerId }),
+  getAllInvoices: (limit?: number) => ipcRenderer.invoke('billing:getAllInvoices', { limit }),
+  updatePaymentStatus: (invoiceId: string, status: string, method?: string) =>
+    ipcRenderer.invoke('billing:updatePaymentStatus', { invoiceId, status, method }),
+  getInvoiceStats: () => ipcRenderer.invoke('billing:getStats'),
+  getHsnCodes: () => ipcRenderer.invoke('billing:getHsnCodes'),
+  getIndianStates: () => ipcRenderer.invoke('billing:getIndianStates'),
+
+  // Phase 4: UPI Payment
+  generateUPIPayment: (data: { vpa: string; payeeName: string; amount: number; note?: string; invoiceNumber?: string }) =>
+    ipcRenderer.invoke('upi:generatePayment', data),
+  generateInvoiceQR: (vpa: string, payeeName: string, invoiceNumber: string, amount: number) =>
+    ipcRenderer.invoke('upi:generateInvoiceQR', { vpa, payeeName, invoiceNumber, amount }),
+  validateUPIAddress: (vpa: string) => ipcRenderer.invoke('upi:validateVPA', { vpa }),
+
+  // Phase 4: WhatsApp Integration
+  sendWhatsAppJobStatus: (data: { phone: string; status: string; customerName: string; ticketNumber: string; shopName: string; deviceInfo?: string; estimatedCost?: number; diagnosis?: string }) =>
+    ipcRenderer.invoke('whatsapp:sendJobStatus', data),
+  sendWhatsAppPaymentLink: (phone: string, shopName: string, invoiceNumber: string, amount: number, upiLink?: string) =>
+    ipcRenderer.invoke('whatsapp:sendPaymentLink', { phone, shopName, invoiceNumber, amount, upiLink }),
+  sendWhatsAppDiagnosticReport: (phone: string, shopName: string, customerName: string, ticketNumber: string, issues: string[], healthScore: number) =>
+    ipcRenderer.invoke('whatsapp:sendDiagnosticReport', { phone, shopName, customerName, ticketNumber, issues, healthScore }),
+  sendWhatsAppCustomMessage: (phone: string, message: string) =>
+    ipcRenderer.invoke('whatsapp:sendCustomMessage', { phone, message }),
+  validateIndianPhone: (phone: string) => ipcRenderer.invoke('whatsapp:validatePhone', { phone }),
+
+  // Phase 4: CRM / Customer & Job Management
+  createCustomer: (data: { phone: string; name: string; email?: string; address?: string; gstin?: string; stateCode?: string; notes?: string }) =>
+    ipcRenderer.invoke('crm:createCustomer', data),
+  updateCustomer: (id: string, data: unknown) =>
+    ipcRenderer.invoke('crm:updateCustomer', { id, data }),
+  getCustomer: (id: string) => ipcRenderer.invoke('crm:getCustomer', { id }),
+  getCustomerByPhone: (phone: string) => ipcRenderer.invoke('crm:getCustomerByPhone', { phone }),
+  searchCustomers: (query: string) => ipcRenderer.invoke('crm:searchCustomers', { query }),
+  getAllCustomers: (limit?: number) => ipcRenderer.invoke('crm:getAllCustomers', { limit }),
+  deleteCustomer: (id: string) => ipcRenderer.invoke('crm:deleteCustomer', { id }),
+  createRepairJob: (data: { customerId: string; deviceBrand?: string; deviceModel?: string; deviceSerial?: string; complaint: string; technician?: string; promisedDate?: number; notes?: string }) =>
+    ipcRenderer.invoke('crm:createJob', data),
+  updateJobStatus: (jobId: string, status: string, notes?: string) =>
+    ipcRenderer.invoke('crm:updateJobStatus', { jobId, status, notes }),
+  updateJobDiagnosis: (jobId: string, diagnosis: string, estimatedCost?: number, scanId?: string) =>
+    ipcRenderer.invoke('crm:updateJobDiagnosis', { jobId, diagnosis, estimatedCost, scanId }),
+  getRepairJob: (id: string) => ipcRenderer.invoke('crm:getJob', { id }),
+  getRepairJobByTicket: (ticketNumber: string) => ipcRenderer.invoke('crm:getJobByTicket', { ticketNumber }),
+  getJobsByCustomer: (customerId: string) => ipcRenderer.invoke('crm:getJobsByCustomer', { customerId }),
+  getJobsByStatus: (status: string) => ipcRenderer.invoke('crm:getJobsByStatus', { status }),
+  getAllJobs: (limit?: number) => ipcRenderer.invoke('crm:getAllJobs', { limit }),
+  getActiveJobs: () => ipcRenderer.invoke('crm:getActiveJobs'),
+  getJobStats: () => ipcRenderer.invoke('crm:getJobStats'),
+  getCustomerWithJobs: (customerId: string) => ipcRenderer.invoke('crm:getCustomerWithJobs', { customerId }),
+
+  // Phase 4: Backup Wizard
+  discoverBackupTargets: () => ipcRenderer.invoke('backup:discoverTargets'),
+  createBackupPlan: (targetPaths?: string[], destinationPath?: string) =>
+    ipcRenderer.invoke('backup:createPlan', { targetPaths, destinationPath }),
+  executeBackup: (targetPaths: string[], destinationPath: string) =>
+    ipcRenderer.invoke('backup:execute', { targetPaths, destinationPath }),
+  discoverBrowserProfiles: () => ipcRenderer.invoke('backup:discoverBrowsers'),
+  backupBrowserData: (browserName: string, destinationPath: string) =>
+    ipcRenderer.invoke('backup:backupBrowser', { browserName, destinationPath }),
+  getBackupStatus: () => ipcRenderer.invoke('backup:getStatus'),
+  getMigrationGuide: (type: string) => ipcRenderer.invoke('backup:getMigrationGuide', { type }),
+
+  // Phase 4: i18n
+  setLanguage: (lang: string) => ipcRenderer.invoke('i18n:setLanguage', { lang }),
+  getLanguage: () => ipcRenderer.invoke('i18n:getLanguage'),
+  getSupportedLanguages: () => ipcRenderer.invoke('i18n:getSupportedLanguages'),
+  getTranslations: (lang: string) => ipcRenderer.invoke('i18n:getTranslations', { lang }),
+
   // Scan
   quickScan: () => ipcRenderer.invoke('scan:quick'),
   fullScan: (config: unknown) => ipcRenderer.invoke('scan:full', config),

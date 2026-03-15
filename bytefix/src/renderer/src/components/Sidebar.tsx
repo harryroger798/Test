@@ -4,7 +4,8 @@ import {
   Wrench, Battery, ChevronLeft, ChevronRight,
   HardDrive, KeyRound, Volume2, Bluetooth, Printer,
   MonitorSpeaker, Camera, Usb, Globe,
-  Thermometer, Cpu, Keyboard, Gamepad2, Mail, Smartphone
+  Thermometer, Cpu, Keyboard, Gamepad2, Mail, Smartphone,
+  Receipt, QrCode, MessageCircle, Users, ClipboardList, Database, Languages
 } from 'lucide-react'
 import { useAppStore } from '../store/app-store'
 import { cn } from '../lib/utils'
@@ -33,7 +34,14 @@ const NAV_ITEMS = [
   { path: '/partition', label: 'Partition / Boot', icon: HardDrive, group: 'phase3' },
   { path: '/activation', label: 'Win Activation', icon: KeyRound, group: 'phase3' },
   { path: '/email', label: 'Email Setup', icon: Mail, group: 'phase3' },
-  { path: '/phone', label: 'Phone Transfer', icon: Smartphone, group: 'phase3' }
+  { path: '/phone', label: 'Phone Transfer', icon: Smartphone, group: 'phase3' },
+  { path: '/billing', label: 'GST Billing', icon: Receipt, group: 'phase4' },
+  { path: '/upi', label: 'UPI Payment', icon: QrCode, group: 'phase4' },
+  { path: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, group: 'phase4' },
+  { path: '/customers', label: 'Customers', icon: Users, group: 'phase4' },
+  { path: '/jobs', label: 'Repair Jobs', icon: ClipboardList, group: 'phase4' },
+  { path: '/backup', label: 'Backup Wizard', icon: Database, group: 'phase4' },
+  { path: '/language', label: 'Language', icon: Languages, group: 'phase4' }
 ]
 
 export function Sidebar(): JSX.Element {
