@@ -18,13 +18,13 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: resources/icon.png
+  icon: resources/icon.ico
   artifactName: ByteFix-Setup-${version}.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerIcon: resources/icon.png
-  uninstallerIcon: resources/icon.png
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
   createDesktopShortcut: always
   shortcutName: ByteFix
 mac:
@@ -33,7 +33,7 @@ mac:
       arch:
         - x64
         - arm64
-  icon: resources/icon.png
+  icon: resources/icon.icns
   artifactName: ByteFix-${version}-${arch}.${ext}
   category: public.app-category.utilities
   hardenedRuntime: true
