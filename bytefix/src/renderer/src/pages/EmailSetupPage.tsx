@@ -92,7 +92,7 @@ export function EmailSetupPage(): JSX.Element {
               className="flex-1 bg-surface-lighter border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500"
             />
           </div>
-          <button onClick={() => runFix('autoconfig', () => window.bytefix.autoConfigureEmail(email))} disabled={!!loading || !email.includes('@')} className="btn-primary flex items-center gap-2">
+          <button onClick={() => runFix('autoconfig', () => window.bytefix.autoConfigureEmail(email))} disabled={!!loading || !/^\S+@\S+\.\S+$/.test(email)} className="btn-primary flex items-center gap-2">
             {loading === 'autoconfig' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
             Auto-Configure
           </button>
