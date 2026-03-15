@@ -245,8 +245,9 @@ export async function repairWindowsUpdate(): Promise<FixResult> {
     }
 
     // Re-register DLLs (use absolute System32 paths to prevent DLL search order hijacking)
-    const systemRoot = process.env.WINDIR || 'C:\\Windows'
+    const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
     const system32 = `${systemRoot}\\System32`
+    const regsvr32 = `${system32}\\regsvr32.exe`
     const dlls = ['atl.dll', 'urlmon.dll', 'mshtml.dll', 'shdocvw.dll', 'browseui.dll',
       'jscript.dll', 'vbscript.dll', 'scrrun.dll', 'msxml.dll', 'msxml3.dll',
       'msxml6.dll', 'actxprxy.dll', 'softpub.dll', 'wintrust.dll', 'dssenh.dll',
@@ -257,7 +258,7 @@ export async function repairWindowsUpdate(): Promise<FixResult> {
 
     for (const dll of dlls) {
       try {
-        await runCommand('regsvr32.exe', ['/s', `${system32}\\${dll}`], 5000)
+        await runCommand(regsvr32, ['/s', `${system32}\\${dll}`], 5000)
       } catch { /* DLL might not exist */ }
     }
     details.push(`Re-registered ${dlls.length} Windows Update DLLs`)
