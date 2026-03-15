@@ -16,6 +16,14 @@ import { DisplayFixerPage } from './pages/DisplayFixerPage'
 import { WebcamFixerPage } from './pages/WebcamFixerPage'
 import { UsbFixerPage } from './pages/UsbFixerPage'
 import { IndiaAppsPage } from './pages/IndiaAppsPage'
+import { OverheatingPage } from './pages/OverheatingPage'
+import { HardwareDiagnosticsPage } from './pages/HardwareDiagnosticsPage'
+import { KeyboardTouchpadPage } from './pages/KeyboardTouchpadPage'
+import { GamingOptimizerPage } from './pages/GamingOptimizerPage'
+import { PartitionBootPage } from './pages/PartitionBootPage'
+import { WindowsActivationPage } from './pages/WindowsActivationPage'
+import { EmailSetupPage } from './pages/EmailSetupPage'
+import { PhoneTransferPage } from './pages/PhoneTransferPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
@@ -47,6 +55,14 @@ export default function App(): JSX.Element {
             <Route path="/webcam" element={<WebcamFixerPage />} />
             <Route path="/usb" element={<UsbFixerPage />} />
             <Route path="/india-apps" element={<IndiaAppsPage />} />
+            <Route path="/overheating" element={<OverheatingPage />} />
+            <Route path="/hardware" element={<HardwareDiagnosticsPage />} />
+            <Route path="/keyboard" element={<KeyboardTouchpadPage />} />
+            <Route path="/gaming" element={<GamingOptimizerPage />} />
+            <Route path="/partition" element={<PartitionBootPage />} />
+            <Route path="/activation" element={<WindowsActivationPage />} />
+            <Route path="/email" element={<EmailSetupPage />} />
+            <Route path="/phone" element={<PhoneTransferPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
