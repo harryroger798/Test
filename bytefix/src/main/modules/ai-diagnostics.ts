@@ -6,6 +6,11 @@ import { app } from 'electron'
 
 const logger = createLogger('ai-diagnostics')
 
+// Cached ONNX session to avoid recreating on every call
+let cachedOrtSession: unknown = null
+let cachedOrtModule: typeof import('onnxruntime-node') | null = null
+let cachedModelPath: string | null = null
+
 // Diagnostic labels matching the trained ONNX model
 const DIAGNOSTIC_LABELS = [
   'Healthy',
@@ -189,15 +194,17 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
     ((ioData.rWaitTime || 0) + (ioData.wWaitTime || 0)) / 2
   )
 
-  // Network latency estimation (from transfer rates — lower = potential issue)
+  // Network latency estimation
   const netStats = Array.isArray(networkStats) ? networkStats : []
   let networkLatencyMs = 5 // Default healthy
   if (netStats.length > 0) {
     const activeNet = netStats.find((n) => n.operstate === 'up') || netStats[0]
-    // If no data is flowing, assume possible network issue
-    if (activeNet.rx_sec === 0 && activeNet.tx_sec === 0) {
-      networkLatencyMs = 500
+    // Zero transfer rate just means network is idle, not broken
+    // Only flag as issue if interface is down or no active interfaces found
+    if (!activeNet || activeNet.operstate !== 'up') {
+      networkLatencyMs = 200 // Interface down = likely problem
     }
+    // Otherwise keep default healthy latency — idle network is normal
   }
 
   // Error count from event log (Windows) or syslog
@@ -251,11 +258,20 @@ async function runOnnxInference(
 
   try {
     // Dynamic import to handle environments where onnxruntime-node isn't available
-    const ort = await import('onnxruntime-node')
+    // Cache both the module and session for reuse across calls
+    if (!cachedOrtModule) {
+      cachedOrtModule = await import('onnxruntime-node')
+    }
+    const ort = cachedOrtModule
 
     const startTime = Date.now()
 
-    const session = await ort.InferenceSession.create(modelPath)
+    // Reuse cached session if model path hasn't changed
+    if (!cachedOrtSession || cachedModelPath !== modelPath) {
+      cachedOrtSession = await ort.InferenceSession.create(modelPath)
+      cachedModelPath = modelPath
+    }
+    const session = cachedOrtSession as import('onnxruntime-node').InferenceSession
 
     // Create input tensor: [1, 10] float32
     const inputArray = new Float32Array([

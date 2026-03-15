@@ -99,6 +99,7 @@ export function AIDiagnosticsPage(): JSX.Element {
 
   async function runFullDiagnosis(): Promise<void> {
     setLoading('diagnosis')
+    setHealthScore(null)
     try {
       const result = await window.bytefix.aiRunDiagnosis()
       setDiagnosis(result)
@@ -112,6 +113,8 @@ export function AIDiagnosticsPage(): JSX.Element {
 
   async function runHealthCheck(): Promise<void> {
     setLoading('health')
+    setDiagnosis(null)
+    setMetrics(null)
     try {
       setHealthScore(await window.bytefix.aiGetHealthScore())
     } catch (err) {
@@ -123,6 +126,8 @@ export function AIDiagnosticsPage(): JSX.Element {
 
   async function collectMetricsOnly(): Promise<void> {
     setLoading('metrics')
+    setDiagnosis(null)
+    setHealthScore(null)
     try {
       setMetrics(await window.bytefix.aiCollectMetrics())
     } catch (err) {
