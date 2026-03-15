@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, protocol } from 'electron'
 import { join, resolve, sep, extname } from 'path'
-import { readFileSync } from 'fs'
+import { readFile } from 'fs/promises'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerAllHandlers } from './ipc-handler'
 import { initDatabase } from './database'
@@ -9,8 +9,10 @@ import { setupGlobalErrorHandlers, logToFile, getLogPath, getLogDir } from './er
 import { setupAutoUpdater } from './auto-updater'
 import { setupOfflineManager } from './offline-manager'
 
-// Register custom 'app' protocol BEFORE app.ready
-// This fixes blank screen caused by type="module" scripts being blocked on file:// protocol
+// Register custom 'bytefix' protocol BEFORE app.ready
+// This protocol serves renderer files with proper CORS headers so that
+// ES modules (type="module") work correctly in packaged builds.
+// (file:// protocol blocks ES module loading due to CORS restrictions)
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'bytefix',
@@ -52,6 +54,12 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  // Log renderer console messages to main process for debugging
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levelStr = ['VERBOSE', 'INFO', 'WARNING', 'ERROR'][level] || 'UNKNOWN'
+    logger.info(`[Renderer ${levelStr}] ${message} (${sourceId}:${line})`)
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -60,9 +68,10 @@ function createWindow(): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    // Use custom protocol to serve renderer files with proper CORS headers
-    // This allows <script type="module"> to work (file:// blocks ES modules)
-    mainWindow.loadURL('bytefix://app/index.html')
+    // Load renderer HTML directly via file:// protocol.
+    // The postbuild script strips type="module" from HTML (the bundle has no
+    // import/export statements) and moves scripts after <div id="root">.
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
   // Setup auto-updater (only in production builds, once only)
@@ -82,9 +91,8 @@ app.whenReady().then(async () => {
   // Setup global error handlers after app is ready (needs app.getPath)
   setupGlobalErrorHandlers()
 
-  // Register custom protocol handler to serve renderer files with CORS support
-  // This fixes the blank screen issue where <script type="module"> is silently
-  // blocked on file:// protocol due to CORS restrictions in Chromium
+  // Register custom protocol handler for serving renderer files
+  // with proper CORS headers so ES modules work in production builds
   const rendererRoot = resolve(__dirname, '../renderer')
 
   const mimeTypes: Record<string, string> = {
@@ -105,7 +113,7 @@ app.whenReady().then(async () => {
     '.map': 'application/json'
   }
 
-  protocol.handle('bytefix', (request) => {
+  protocol.handle('bytefix', async (request) => {
     try {
       const reqUrl = new URL(request.url)
       if (reqUrl.host !== 'app') return new Response('Not Found', { status: 404 })
@@ -119,8 +127,8 @@ app.whenReady().then(async () => {
         return new Response('Forbidden', { status: 403 })
       }
 
-      // Read file directly from filesystem/asar and return with proper MIME type
-      const data = readFileSync(filePath)
+      // Read file asynchronously to avoid blocking the event loop
+      const data = await readFile(filePath)
       const ext = extname(filePath).toLowerCase()
       const mimeType = mimeTypes[ext] || 'application/octet-stream'
 
@@ -128,11 +136,21 @@ app.whenReady().then(async () => {
         status: 200,
         headers: {
           'Content-Type': mimeType,
-          'Access-Control-Allow-Origin': '*'
+          'Access-Control-Allow-Origin': 'bytefix://app'
         }
       })
-    } catch {
-      return new Response('Bad Request', { status: 400 })
+    } catch (error: unknown) {
+      if (error instanceof URIError) {
+        return new Response('Bad Request', { status: 400 })
+      }
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        return new Response('Not Found', { status: 404 })
+      }
+      if (code === 'EACCES' || code === 'EPERM') {
+        return new Response('Forbidden', { status: 403 })
+      }
+      return new Response('Internal Server Error', { status: 500 })
     }
   })
 

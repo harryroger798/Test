@@ -1,9 +1,32 @@
-import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
+import { createRequire } from 'module'
 
-let db: Database.Database | null = null
+// Use createRequire to load better-sqlite3 at runtime.
+// This bypasses Rollup's bundling which can't handle the native
+// module's dynamic require() for the .node addon file.
+const nativeRequire = createRequire(__filename)
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let Database: any
+try {
+  Database = nativeRequire('better-sqlite3')
+} catch {
+  // Fallback: try loading from app.asar.unpacked
+  try {
+    const unpackedPath = join(
+      __dirname,
+      '../../node_modules/better-sqlite3'
+    ).replace('app.asar', 'app.asar.unpacked')
+    Database = nativeRequire(unpackedPath)
+  } catch (err2) {
+    console.error('Failed to load better-sqlite3:', err2)
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let db: any = null
 
 function getDbPath(): string {
   const userDataPath = app?.isPackaged
@@ -16,6 +39,9 @@ function getDbPath(): string {
 }
 
 export async function initDatabase(): Promise<void> {
+  if (!Database) {
+    throw new Error('better-sqlite3 native module failed to load')
+  }
   const dbPath = getDbPath()
   db = new Database(dbPath)
 
@@ -154,7 +180,8 @@ export async function initDatabase(): Promise<void> {
   `)
 }
 
-export function getDb(): Database.Database {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getDb(): any {
   if (!db) throw new Error('Database not initialized')
   return db
 }
