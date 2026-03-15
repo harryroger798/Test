@@ -1,6 +1,35 @@
 import { IpcMain } from 'electron'
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 import { nanoid } from 'nanoid'
+
+// Input sanitization helpers to prevent command injection
+function sanitizeDevicePath(device: string): string {
+  if (process.platform === 'win32') {
+    if (!/^[a-zA-Z0-9\\.\-_:]+$/.test(device)) {
+      throw new Error(`Invalid device path: ${device}`);
+    }
+  } else {
+    if (!/^\/dev\/[a-zA-Z0-9]+$/.test(device)) {
+      throw new Error(`Invalid device path: ${device}`);
+    }
+  }
+  return device;
+}
+
+function sanitizeDriveLetter(drive: string): string {
+  const safe = drive.replace(/[^a-zA-Z:\\]/g, '');
+  if (!safe || safe.length > 3) {
+    throw new Error(`Invalid drive letter: ${drive}`);
+  }
+  return safe;
+}
+
+function sanitizeInterfaceName(iface: string): string {
+  if (!/^[a-zA-Z0-9_\-. ]+$/.test(iface)) {
+    throw new Error(`Invalid interface name: ${iface}`);
+  }
+  return iface;
+}
 import { createLogger } from './logger'
 import { resourceGovernor } from './resource-governor'
 import { saveScan } from './database'
@@ -74,7 +103,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('perf:optimizeDisk', async (_event, args: { drive: string }) => {
-    return await optimizeDisk(args.drive)
+    const safeDrive = sanitizeDriveLetter(args.drive);
+    return await optimizeDisk(safeDrive)
   })
 
   // ============================================================
@@ -104,7 +134,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('network:resetAdapter', async (_event, args: { iface: string }) => {
-    return await resetAdapter(args.iface)
+    const safeIface = sanitizeInterfaceName(args.iface);
+    return await resetAdapter(safeIface)
   })
 
   ipcMain.handle('network:flushDns', async () => {
@@ -154,7 +185,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   // ============================================================
   ipcMain.handle('disk:getSmartData', async (_event, args: { device: string }) => {
     try {
-      const output = execSync(`smartctl -a ${args.device} --json 2>/dev/null || echo "{}"`, {
+      const safeDevice = sanitizeDevicePath(args.device);
+      const output = execSync(`smartctl -a ${safeDevice} --json 2>/dev/null || echo "{}"`, {
         timeout: 30000, encoding: 'utf8'
       })
       const data = JSON.parse(output)
@@ -188,7 +220,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('disk:runChkdsk', async (_event, args: { drive: string }) => {
     try {
       if (process.platform === 'win32') {
-        const output = execSync(`chkdsk ${args.drive} /scan`, { timeout: 300000, encoding: 'utf8' })
+        const safeDrive = sanitizeDriveLetter(args.drive);
+        const output = execSync(`chkdsk ${safeDrive} /scan`, { timeout: 300000, encoding: 'utf8' })
         return {
           success: true, module: 'disk', action: 'chkdsk',
           description: 'Disk check completed', details: [output.substring(0, 500)],
@@ -271,17 +304,18 @@ async function runQuickScan(): Promise<ScanResult> {
   let systemSnapshot: SystemInfo | undefined
   try {
     systemSnapshot = await getFullSystemInfo()
-  } catch {
-    // Ignore
+  } catch (err) {
+    logger.warn('Failed to get system snapshot for scan', err)
   }
 
   // Calculate overall health
-  const criticalCount = diagnostics.filter(d => d.severity === 'critical').length
+  const criticalCount = diagnostics.filter(d => d.severity === 'critical' || d.severity === 'error').length
   const warningCount = diagnostics.filter(d => d.severity === 'warning').length
+  const infoCount = diagnostics.filter(d => d.severity === 'info').length
   const healthyCount = diagnostics.filter(d => d.severity === 'healthy').length
   const totalChecks = diagnostics.length || 1
   const overallHealth = Math.max(0, Math.round(
-    ((healthyCount * 100) + (warningCount * 50) + (criticalCount * 0)) / totalChecks
+    ((healthyCount * 100) + (infoCount * 100) + (warningCount * 50) + (criticalCount * 0)) / totalChecks
   ))
 
   const result: ScanResult = {
@@ -292,7 +326,7 @@ async function runQuickScan(): Promise<ScanResult> {
     modulesRun: ['performance', 'os-repair', 'malware', 'network', 'battery'],
     diagnostics,
     fixes: [],
-    systemSnapshot: systemSnapshot!,
+    systemSnapshot,
     overallHealth,
     summary: generateSummary(diagnostics, overallHealth)
   }

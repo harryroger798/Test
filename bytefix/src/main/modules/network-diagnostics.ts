@@ -182,11 +182,11 @@ export async function resetAdapter(iface: string): Promise<FixResult> {
       changes.push({ type: 'network', action: 'modified', target: iface, before: 'disabled', after: 'enabled' })
       details.push(`Reset network adapter: ${iface}`)
     } else if (isMac) {
-      execSync(`sudo ifconfig ${iface} down && sudo ifconfig ${iface} up`, { timeout: 5000 })
+      execSync(`sudo ifconfig "${iface}" down && sudo ifconfig "${iface}" up`, { timeout: 5000 })
       changes.push({ type: 'network', action: 'modified', target: iface })
       details.push(`Reset network interface: ${iface}`)
     } else {
-      execSync(`sudo ip link set ${iface} down && sudo ip link set ${iface} up`, { timeout: 5000 })
+      execSync(`sudo ip link set "${iface}" down && sudo ip link set "${iface}" up`, { timeout: 5000 })
       changes.push({ type: 'network', action: 'modified', target: iface })
       details.push(`Reset network interface: ${iface}`)
     }

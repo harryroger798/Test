@@ -179,7 +179,7 @@ export interface ScanResult {
   modulesRun: string[]
   diagnostics: DiagnosticResult[]
   fixes: FixResult[]
-  systemSnapshot: SystemInfo
+  systemSnapshot?: SystemInfo
   overallHealth: number
   summary: string
 }
