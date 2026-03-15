@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
-import { join } from 'path'
+import { join, resolve, sep } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerAllHandlers } from './ipc-handler'
@@ -85,14 +85,25 @@ app.whenReady().then(async () => {
   // Register custom protocol handler to serve renderer files with CORS support
   // This fixes the blank screen issue where <script type="module"> is silently
   // blocked on file:// protocol due to CORS restrictions in Chromium
+  const rendererRoot = resolve(__dirname, '../renderer')
   protocol.handle('bytefix', (request) => {
-    const url = new URL(request.url)
-    const filePath = join(
-      __dirname,
-      '../renderer',
-      decodeURIComponent(url.pathname)
-    )
-    return net.fetch(pathToFileURL(filePath).toString())
+    try {
+      const reqUrl = new URL(request.url)
+      if (reqUrl.host !== 'app') return new Response('Not Found', { status: 404 })
+
+      const pathname =
+        reqUrl.pathname === '/' ? '/index.html' : decodeURIComponent(reqUrl.pathname)
+      const filePath = resolve(rendererRoot, `.${pathname}`)
+
+      // Prevent path traversal outside renderer directory
+      if (filePath !== rendererRoot && !filePath.startsWith(`${rendererRoot}${sep}`)) {
+        return new Response('Forbidden', { status: 403 })
+      }
+
+      return net.fetch(pathToFileURL(filePath).toString())
+    } catch {
+      return new Response('Bad Request', { status: 400 })
+    }
   })
 
   electronApp.setAppUserModelId('com.bytefix.app')
