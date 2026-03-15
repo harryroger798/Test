@@ -1,0 +1,355 @@
+// ============================================================
+// ByteFix Shared Types - Used by Main, Preload, and Renderer
+// ============================================================
+
+// System Information
+export interface SystemInfo {
+  os: {
+    platform: string
+    distro: string
+    release: string
+    arch: string
+    hostname: string
+    build: string
+  }
+  cpu: {
+    manufacturer: string
+    brand: string
+    speed: number
+    cores: number
+    physicalCores: number
+    temperature?: number
+  }
+  memory: {
+    total: number
+    free: number
+    used: number
+    usedPercent: number
+    swapTotal: number
+    swapUsed: number
+  }
+  disk: DiskInfo[]
+  battery: BatteryInfo
+  graphics: {
+    controllers: GraphicsController[]
+    displays: DisplayInfo[]
+  }
+  network: NetworkInterface[]
+  uptime: number
+}
+
+export interface DiskInfo {
+  device: string
+  name: string
+  type: 'HDD' | 'SSD' | 'NVMe' | 'Unknown'
+  size: number
+  used: number
+  available: number
+  usedPercent: number
+  mount: string
+  fs: string
+  smart?: SmartData
+}
+
+export interface SmartData {
+  healthy: boolean
+  temperature: number
+  powerOnHours: number
+  reallocatedSectors: number
+  pendingSectors: number
+  uncorrectableSectors: number
+  powerCycleCount: number
+  wearLeveling?: number
+  attributes: SmartAttribute[]
+}
+
+export interface SmartAttribute {
+  id: number
+  name: string
+  value: number
+  worst: number
+  threshold: number
+  raw: string
+  status: 'ok' | 'warning' | 'critical'
+}
+
+export interface BatteryInfo {
+  hasBattery: boolean
+  isCharging: boolean
+  percent: number
+  cycleCount: number
+  designCapacity: number
+  currentCapacity: number
+  healthPercent: number
+  voltage: number
+  timeRemaining: number
+  manufacturer: string
+  model: string
+  powerSource: 'AC' | 'Battery'
+}
+
+export interface GraphicsController {
+  vendor: string
+  model: string
+  vram: number
+  driverVersion: string
+  temperature?: number
+}
+
+export interface DisplayInfo {
+  model: string
+  resolution: string
+  refreshRate: number
+  connection: string
+  primary: boolean
+}
+
+export interface NetworkInterface {
+  iface: string
+  type: string
+  ip4: string
+  ip6: string
+  mac: string
+  speed: number
+  operstate: 'up' | 'down'
+  ssid?: string
+  signalLevel?: number
+}
+
+// Diagnostic Results
+export type DiagnosticSeverity = 'healthy' | 'info' | 'warning' | 'critical' | 'error'
+
+export interface DiagnosticResult {
+  id: string
+  module: string
+  category: string
+  title: string
+  severity: DiagnosticSeverity
+  description: string
+  details: string[]
+  fixAvailable: boolean
+  fixDescription?: string
+  fixRisk: 'none' | 'low' | 'medium' | 'high'
+  autoFixable: boolean
+  timestamp: number
+}
+
+export interface DiagnosticProgress {
+  runId: string
+  module: string
+  phase: string
+  percent: number
+  message: string
+  currentAction: string
+}
+
+// Fix Operations
+export interface FixResult {
+  success: boolean
+  module: string
+  action: string
+  description: string
+  details: string[]
+  changes: FixChange[]
+  rollbackAvailable: boolean
+  error?: string
+}
+
+export interface FixChange {
+  type: 'service' | 'registry' | 'file' | 'process' | 'network' | 'system' | 'driver'
+  action: 'disabled' | 'enabled' | 'modified' | 'deleted' | 'created' | 'restored' | 'killed'
+  target: string
+  before?: string
+  after?: string
+}
+
+// Scan Types
+export interface ScanConfig {
+  modules: string[]
+  deepScan: boolean
+  autoFix: boolean
+  createBackup: boolean
+}
+
+export interface ScanResult {
+  id: string
+  startTime: number
+  endTime: number
+  duration: number
+  modulesRun: string[]
+  diagnostics: DiagnosticResult[]
+  fixes: FixResult[]
+  systemSnapshot: SystemInfo
+  overallHealth: number
+  summary: string
+}
+
+// Performance specific
+export interface StartupItem {
+  name: string
+  path: string
+  publisher: string
+  enabled: boolean
+  impact: 'high' | 'medium' | 'low' | 'none'
+  isBloatware: boolean
+  isSystem: boolean
+  recommendation: 'disable' | 'keep' | 'remove'
+}
+
+export interface ProcessInfo {
+  pid: number
+  name: string
+  cpu: number
+  memory: number
+  memoryMB: number
+  path: string
+  user: string
+  isSafe: boolean
+}
+
+export interface CleanupItem {
+  category: string
+  path: string
+  size: number
+  description: string
+  safe: boolean
+  selected: boolean
+}
+
+// Malware
+export interface MalwareScanResult {
+  scanType: 'quick' | 'full' | 'custom'
+  filesScanned: number
+  threatsFound: number
+  threats: MalwareThreat[]
+  duration: number
+  engineVersion: string
+}
+
+export interface MalwareThreat {
+  name: string
+  type: 'virus' | 'trojan' | 'adware' | 'pup' | 'spyware' | 'ransomware' | 'worm' | 'rootkit'
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  path: string
+  action: 'quarantined' | 'deleted' | 'detected' | 'failed'
+}
+
+// Network
+export interface NetworkDiagnostic {
+  internetConnected: boolean
+  dnsWorking: boolean
+  gatewayReachable: boolean
+  latency: number
+  downloadSpeed?: number
+  uploadSpeed?: number
+  dnsServer: string
+  gateway: string
+  publicIp?: string
+  issues: NetworkIssue[]
+}
+
+export interface NetworkIssue {
+  type: string
+  severity: DiagnosticSeverity
+  description: string
+  fixAvailable: boolean
+  fixDescription?: string
+}
+
+// OS Repair
+export interface OSRepairResult {
+  sfcResult?: { ran: boolean; issuesFound: number; issuesFixed: number; log: string }
+  dismResult?: { ran: boolean; issuesFound: number; issuesFixed: number; log: string }
+  windowsUpdate?: { status: string; pendingUpdates: number; failedUpdates: number }
+  registryIssues?: { found: number; fixed: number; details: string[] }
+  systemFiles?: { corrupted: number; repaired: number; details: string[] }
+}
+
+// Job/Task Management
+export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface Job {
+  id: string
+  type: 'scan' | 'fix' | 'report'
+  module: string
+  status: JobStatus
+  progress: number
+  message: string
+  startTime: number
+  endTime?: number
+  result?: unknown
+  error?: string
+}
+
+// IPC Channel definitions
+export interface IPCChannels {
+  // System
+  'system:getInfo': { request: void; response: SystemInfo }
+  'system:getProcesses': { request: void; response: ProcessInfo[] }
+  'system:getPlatform': { request: void; response: string }
+
+  // Performance
+  'perf:getStartupItems': { request: void; response: StartupItem[] }
+  'perf:disableStartupItem': { request: { name: string; path: string }; response: FixResult }
+  'perf:getCleanupItems': { request: void; response: CleanupItem[] }
+  'perf:runCleanup': { request: { items: CleanupItem[] }; response: FixResult }
+  'perf:optimizeRam': { request: void; response: FixResult }
+  'perf:optimizeDisk': { request: { drive: string }; response: FixResult }
+
+  // Malware
+  'malware:quickScan': { request: void; response: MalwareScanResult }
+  'malware:fullScan': { request: void; response: MalwareScanResult }
+
+  // Network
+  'network:diagnose': { request: void; response: NetworkDiagnostic }
+  'network:resetAdapter': { request: { iface: string }; response: FixResult }
+  'network:flushDns': { request: void; response: FixResult }
+  'network:resetWinsock': { request: void; response: FixResult }
+  'network:resetTcpIp': { request: void; response: FixResult }
+
+  // OS Repair
+  'os:runSfc': { request: void; response: FixResult }
+  'os:runDism': { request: void; response: FixResult }
+  'os:repairWindowsUpdate': { request: void; response: FixResult }
+  'os:cleanRegistry': { request: void; response: FixResult }
+
+  // Battery
+  'battery:getReport': { request: void; response: BatteryInfo }
+  'battery:optimizePower': { request: void; response: FixResult }
+
+  // Disk Health
+  'disk:getSmartData': { request: { device: string }; response: SmartData }
+  'disk:runChkdsk': { request: { drive: string }; response: FixResult }
+
+  // Full Scan
+  'scan:full': { request: ScanConfig; response: ScanResult }
+  'scan:quick': { request: void; response: ScanResult }
+
+  // Reports
+  'report:generate': { request: { scanId: string }; response: { filePath: string } }
+
+  // Jobs
+  'job:getAll': { request: void; response: Job[] }
+  'job:cancel': { request: { jobId: string }; response: void }
+}
+
+// App State
+export interface AppSettings {
+  theme: 'dark' | 'light' | 'system'
+  language: string
+  autoScan: boolean
+  scanInterval: number
+  notifications: boolean
+  backupBeforeFix: boolean
+  maxMemoryPercent: number
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  theme: 'dark',
+  language: 'en',
+  autoScan: false,
+  scanInterval: 24,
+  notifications: true,
+  backupBeforeFix: true,
+  maxMemoryPercent: 15
+}
