@@ -117,9 +117,11 @@ export async function diagnoseNetwork(): Promise<NetworkDiagnostic> {
           'reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings" /v ProxyServer 2>nul',
           { timeout: 5000, encoding: 'utf8' }
         )
+        const rawProxy = proxyServer.match(/ProxyServer\s+REG_SZ\s+(.*)/)?.[1] || 'Unknown'
+        const redactedProxy = rawProxy.replace(/\/\/[^/@]+@/, '//***@')
         issues.push({
           type: 'proxy', severity: 'warning',
-          description: `Proxy is enabled: ${proxyServer.match(/ProxyServer\s+REG_SZ\s+(.*)/)?.[1] || 'Unknown'}. This may be a hijacker.`,
+          description: `Proxy is enabled: ${redactedProxy}. This may be a hijacker.`,
           fixAvailable: true, fixDescription: 'Disable proxy settings'
         })
       }
@@ -242,12 +244,26 @@ export async function flushDns(): Promise<FixResult> {
         }
       } catch { /* DNS fallback is best-effort */ }
     } else if (isMac) {
-      execSync('sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder 2>/dev/null || true', { timeout: 5000 })
+      try {
+        execSync('sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
+        details.push('DNS cache flushed successfully')
+        changes.push({ type: 'network', action: 'modified', target: 'DNS cache' })
+      } catch {
+        details.push('DNS cache flush failed (may require sudo privileges)')
+      }
     } else {
-      execSync('sudo systemd-resolve --flush-caches 2>/dev/null || sudo resolvectl flush-caches 2>/dev/null || true', { timeout: 5000 })
+      try {
+        execSync('sudo systemd-resolve --flush-caches 2>/dev/null || sudo resolvectl flush-caches 2>/dev/null', { timeout: 5000, stdio: 'pipe' })
+        details.push('DNS cache flushed successfully')
+        changes.push({ type: 'network', action: 'modified', target: 'DNS cache' })
+      } catch {
+        details.push('DNS cache flush failed (may require sudo privileges)')
+      }
     }
-    details.push('DNS cache flushed successfully')
-    changes.push({ type: 'network', action: 'modified', target: 'DNS cache' })
+    if (isWindows) {
+      details.push('DNS cache flushed successfully')
+      changes.push({ type: 'network', action: 'modified', target: 'DNS cache' })
+    }
 
     return {
       success: true, module: 'network', action: 'flush_dns',
