@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ClipboardList, Loader2, Plus, Search, ArrowRight, Users } from 'lucide-react'
 
 interface Customer {
@@ -64,16 +64,20 @@ export function RepairJobsPage(): JSX.Element {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
   const [selectedCustomerName, setSelectedCustomerName] = useState('')
+  const customerSearchRequest = useRef(0)
   const [deviceBrand, setDeviceBrand] = useState('')
   const [deviceModel, setDeviceModel] = useState('')
   const [complaint, setComplaint] = useState('')
 
   const searchCustomers = useCallback(async (query: string) => {
+    const requestId = ++customerSearchRequest.current
     try {
-      if (query.trim().length === 0) {
-        setCustomers(await window.bytefix.getAllCustomers(20) as Customer[])
-      } else {
-        setCustomers(await window.bytefix.searchCustomers(query) as Customer[])
+      const normalizedQuery = query.trim()
+      const results = normalizedQuery.length === 0
+        ? await window.bytefix.getAllCustomers(20) as Customer[]
+        : await window.bytefix.searchCustomers(normalizedQuery) as Customer[]
+      if (requestId === customerSearchRequest.current) {
+        setCustomers(results)
       }
     } catch (err) { console.error(err) }
   }, [])

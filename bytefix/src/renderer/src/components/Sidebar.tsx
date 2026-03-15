@@ -73,7 +73,7 @@ export function Sidebar(): JSX.Element {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           const isActive = location.pathname === item.path
           const Icon = item.icon

@@ -20,8 +20,8 @@ const path = require('path')
 const htmlPath = path.join(__dirname, '..', 'out', 'renderer', 'index.html')
 
 if (!fs.existsSync(htmlPath)) {
-  console.log('⚠️  Renderer HTML not found, skipping fix')
-  process.exit(0)
+  console.error(`Renderer HTML not found: ${htmlPath}`)
+  process.exit(1)
 }
 
 let html = fs.readFileSync(htmlPath, 'utf8')
@@ -67,7 +67,8 @@ if (fs.existsSync(assetsDir)) {
         const insertPos = idx + marker.length
         js = js.slice(0, insertPos) + '\nwindow.React = React$1;' + js.slice(insertPos)
       } else {
-        console.warn(`\u26a0\ufe0f  ${file}: React$1 marker not found — alias not inserted. Vite output may have changed.`)
+        console.error(`${file}: React$1 marker not found — renderer bundle format changed`)
+        process.exit(1)
       }
       // Prepend empty React object so any code before the real assignment doesn't crash
       js = 'window.React = window.React || {};\n' + js
