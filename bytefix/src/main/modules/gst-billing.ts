@@ -236,9 +236,10 @@ export async function createInvoice(data: GSTInvoiceData): Promise<InvoiceRecord
 
   const invoiceNumber = createInvoiceTx(data, id)
 
-  logger.info('Invoice created', { id, invoiceNumber, total: gst.total })
+  const created = getDb().prepare('SELECT * FROM invoices WHERE id = ?').get(id) as InvoiceRecord
+  logger.info('Invoice created', { id, invoiceNumber, total: created.total })
 
-  return getDb().prepare('SELECT * FROM invoices WHERE id = ?').get(id) as InvoiceRecord
+  return created
 }
 
 export async function getInvoice(id: string): Promise<InvoiceRecord | undefined> {
