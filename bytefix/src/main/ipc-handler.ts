@@ -544,7 +544,10 @@ async function runQuickScan(): Promise<ScanResult> {
 
   // Run all diagnostic modules in parallel with a global 120s timeout
   const QUICK_SCAN_TIMEOUT_MS = 120000
-  const allSettledWithTimeout = Promise.allSettled([
+  const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
+    'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps']
+
+  const allSettledPromise = Promise.allSettled([
     runPerformanceDiagnostics(),
     runOSRepairDiagnostics(),
     runMalwareDiagnostics(),
@@ -559,20 +562,15 @@ async function runQuickScan(): Promise<ScanResult> {
     runUsbDiagnostics(),
     runIndiaAppsDiagnostics()
   ])
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('Quick scan timed out after 120s')), QUICK_SCAN_TIMEOUT_MS)
+  const timeoutPromise = new Promise<PromiseSettledResult<DiagnosticResult[]>[]>((resolve) =>
+    setTimeout(() => {
+      logger.warn('Quick scan timed out after 120s — returning partial results')
+      resolve(moduleNames.map(() => ({ status: 'rejected' as const, reason: 'Timed out' })))
+    }, QUICK_SCAN_TIMEOUT_MS)
   )
 
-  let [perfResults, osResults, malwareResults, networkResults, batteryResults,
-    recoveryResults, audioResults, btResults, printerResults, displayResults,
-    webcamResults, usbResults, indiaResults
-  ] = await Promise.race([allSettledWithTimeout, timeoutPromise]) as PromiseSettledResult<DiagnosticResult[]>[]
+  const allResults = await Promise.race([allSettledPromise, timeoutPromise])
 
-  const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
-    'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps']
-  const allResults = [perfResults, osResults, malwareResults, networkResults, batteryResults,
-    recoveryResults, audioResults, btResults, printerResults, displayResults,
-    webcamResults, usbResults, indiaResults]
   for (let i = 0; i < allResults.length; i++) {
     const result = allResults[i]
     if (result.status === 'fulfilled') {

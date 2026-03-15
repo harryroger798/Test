@@ -4,7 +4,8 @@
 // ============================================================
 
 import { execSync, execFileSync } from 'child_process'
-import { platform } from 'os'
+import { platform, tmpdir } from 'os'
+import { join } from 'path'
 import { createLogger } from '../logger'
 import type { DiagnosticResult, FixResult, FixChange } from '../../shared/types'
 
@@ -324,8 +325,7 @@ export async function clearBluetoothCache(): Promise<FixResult> {
 
       // Backup before clearing
       try {
-        const { tmpdir } = require('os')
-        const backupPath = require('path').join(tmpdir(), `bytefix-bt-backup-${Date.now()}.reg`)
+        const backupPath = join(tmpdir(), `bytefix-bt-backup-${Date.now()}.reg`)
         execSync(
           `reg export "HKLM\\SYSTEM\\CurrentControlSet\\Services\\BTHPORT\\Parameters\\Devices" "${backupPath}" /y 2>nul`,
           { timeout: 10000, stdio: 'pipe' }
