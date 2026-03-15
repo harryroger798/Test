@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerAllHandlers } from './ipc-handler'
 import { initDatabase } from './database'
@@ -7,6 +8,21 @@ import { createLogger } from './logger'
 import { setupGlobalErrorHandlers, logToFile, getLogPath, getLogDir } from './error-handler'
 import { setupAutoUpdater } from './auto-updater'
 import { setupOfflineManager } from './offline-manager'
+
+// Register custom 'app' protocol BEFORE app.ready
+// This fixes blank screen caused by type="module" scripts being blocked on file:// protocol
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'bytefix',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true
+    }
+  }
+])
 
 const logger = createLogger('main')
 
@@ -44,7 +60,9 @@ function createWindow(): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    // Use custom protocol to serve renderer files with proper CORS headers
+    // This allows <script type="module"> to work (file:// blocks ES modules)
+    mainWindow.loadURL('bytefix://app/index.html')
   }
 
   // Setup auto-updater (only in production builds, once only)
@@ -63,6 +81,19 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   // Setup global error handlers after app is ready (needs app.getPath)
   setupGlobalErrorHandlers()
+
+  // Register custom protocol handler to serve renderer files with CORS support
+  // This fixes the blank screen issue where <script type="module"> is silently
+  // blocked on file:// protocol due to CORS restrictions in Chromium
+  protocol.handle('bytefix', (request) => {
+    const url = new URL(request.url)
+    const filePath = join(
+      __dirname,
+      '../renderer',
+      decodeURIComponent(url.pathname)
+    )
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
 
   electronApp.setAppUserModelId('com.bytefix.app')
 
