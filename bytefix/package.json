@@ -4,6 +4,7 @@
   "description": "ByteFix - Professional Computer Repair & Diagnostics Tool for Indian Repair Shops",
   "main": "./out/main/index.js",
   "author": "ByteFix Team",
+  "homepage": "https://github.com/harryroger798/Test",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
