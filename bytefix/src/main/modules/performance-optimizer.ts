@@ -1,8 +1,8 @@
-import { execSync, execFileSync, exec } from 'child_process'
 import { platform } from 'os'
 import { existsSync, statSync, lstatSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
 import { join } from 'path'
 import { createLogger } from '../logger'
+import { runShellSafe, runCommandSafe } from './async-command'
 import type { StartupItem, CleanupItem, FixResult, FixChange, DiagnosticResult } from '../../shared/types'
 
 const logger = createLogger('performance-optimizer')
@@ -67,7 +67,7 @@ export async function getStartupItems(): Promise<StartupItem[]> {
         }
         $items | ConvertTo-Json -Depth 3
       "`
-      const output = execSync(cmd, { timeout: 15000, encoding: 'utf8' })
+      const output = await runShellSafe(cmd, 15000)
       const parsed = JSON.parse(output || '[]')
       const startupEntries = Array.isArray(parsed) ? parsed : [parsed]
 
@@ -194,7 +194,7 @@ export async function disableStartupItem(name: string, path: string): Promise<Fi
       ]
       for (const regPath of regPaths) {
         try {
-          execFileSync('reg', ['delete', regPath, '/v', safeName, '/f'], { timeout: 5000, encoding: 'utf8' })
+          await runCommandSafe('reg', ['delete', regPath, '/v', safeName, '/f'], 5000)
           changes.push({
             type: 'registry',
             action: 'deleted',
@@ -209,14 +209,14 @@ export async function disableStartupItem(name: string, path: string): Promise<Fi
       }
     } else if (isMac) {
       if (existsSync(safePath)) {
-        execFileSync('launchctl', ['unload', safePath], { timeout: 5000 })
+        await runCommandSafe('launchctl', ['unload', safePath], 5000)
         changes.push({ type: 'service', action: 'disabled', target: safePath })
       }
     } else {
       // Linux - rename .desktop file
       if (existsSync(safePath)) {
         const disabledPath = safePath + '.disabled'
-        execFileSync('mv', [safePath, disabledPath], { timeout: 5000 })
+        await runCommandSafe('mv', [safePath, disabledPath], 5000)
         changes.push({ type: 'file', action: 'modified', target: safePath, after: disabledPath })
       }
     }
@@ -371,8 +371,8 @@ export async function optimizeRam(): Promise<FixResult> {
 
     for (const svc of servicesToDisable) {
       try {
-        execSync(`sc config "${svc.name}" start=disabled 2>nul`, { timeout: 5000, encoding: 'utf8' })
-        execSync(`sc stop "${svc.name}" 2>nul`, { timeout: 5000, encoding: 'utf8' })
+        await runShellSafe(`sc config "${svc.name}" start=disabled 2>nul`, 5000)
+        await runShellSafe(`sc stop "${svc.name}" 2>nul`, 5000)
         changes.push({ type: 'service', action: 'disabled', target: svc.name })
         details.push(`Disabled ${svc.desc} (${svc.name})`)
       } catch {
@@ -382,14 +382,14 @@ export async function optimizeRam(): Promise<FixResult> {
 
     // Clear standby memory
     try {
-      execSync('powershell -NoProfile -Command "[System.GC]::Collect()"', { timeout: 5000 })
+      await runShellSafe('powershell -NoProfile -Command "[System.GC]::Collect()"', 5000)
       details.push('Triggered garbage collection')
     } catch {
       // Ignore
     }
   } else if (isMac) {
     try {
-      execSync('purge 2>/dev/null || true', { timeout: 10000 })
+      await runShellSafe('purge 2>/dev/null || true', 10000)
       details.push('Purged inactive memory')
     } catch {
       // Ignore
@@ -397,7 +397,7 @@ export async function optimizeRam(): Promise<FixResult> {
   } else {
     // Linux
     try {
-      execSync('sync && echo 3 | sudo tee /proc/sys/vm/drop_caches 2>/dev/null || true', { timeout: 5000 })
+      await runShellSafe('sync && echo 3 | sudo tee /proc/sys/vm/drop_caches 2>/dev/null || true', 5000)
       details.push('Cleared filesystem cache')
     } catch {
       // Ignore
@@ -425,19 +425,19 @@ export async function optimizeDisk(drive: string): Promise<FixResult> {
   if (isWindows) {
     try {
       // Check if SSD or HDD
-      const mediaType = execSync(
-        `powershell -NoProfile -Command "(Get-PhysicalDisk | Select-Object MediaType).MediaType"`,
-        { timeout: 10000, encoding: 'utf8' }
-      ).trim()
+      const mediaType = (await runShellSafe(
+        'powershell -NoProfile -Command "(Get-PhysicalDisk | Select-Object MediaType).MediaType"',
+        10000
+      )).trim()
 
       if (mediaType.includes('SSD')) {
         // TRIM for SSD
-        execFileSync('defrag', [drive, '/L', '/U'], { timeout: 120000, encoding: 'utf8' })
+        await runCommandSafe('defrag', [drive, '/L', '/U'], 120000)
         details.push(`TRIM optimization run on ${drive} (SSD)`)
         changes.push({ type: 'system', action: 'modified', target: `${drive} TRIM` })
       } else {
         // Defrag for HDD
-        execFileSync('defrag', [drive, '/O', '/U'], { timeout: 300000, encoding: 'utf8' })
+        await runCommandSafe('defrag', [drive, '/O', '/U'], 300000)
         details.push(`Defragmentation run on ${drive} (HDD)`)
         changes.push({ type: 'system', action: 'modified', target: `${drive} defrag` })
       }

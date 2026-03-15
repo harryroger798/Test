@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Languages, Loader2, CheckCircle } from 'lucide-react'
+import { useAppStore } from '../store/app-store'
 
 interface LanguageInfo {
   code: string
@@ -11,12 +12,12 @@ interface LanguageInfo {
 export function LanguageSettingsPage(): JSX.Element {
   const [loading, setLoading] = useState('')
   const [languages, setLanguages] = useState<LanguageInfo[]>([])
-  const [currentLang, setCurrentLang] = useState('en')
+  const currentLang = useAppStore((s) => s.language)
+  const storeChangeLanguage = useAppStore((s) => s.changeLanguage)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     loadLanguages()
-    loadCurrentLanguage()
   }, [])
 
   async function loadLanguages(): Promise<void> {
@@ -24,17 +25,11 @@ export function LanguageSettingsPage(): JSX.Element {
     catch (err) { console.error(err) }
   }
 
-  async function loadCurrentLanguage(): Promise<void> {
-    try { setCurrentLang(await window.bytefix.getLanguage() as string) }
-    catch (err) { console.error(err) }
-  }
-
   async function changeLanguage(lang: string): Promise<void> {
     setLoading(lang)
     setSaved(false)
     try {
-      await window.bytefix.setLanguage(lang)
-      setCurrentLang(lang)
+      await storeChangeLanguage(lang)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) { console.error(err) }

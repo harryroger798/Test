@@ -404,8 +404,10 @@ export async function restoreFromRecycleBin(): Promise<FixResult> {
     }
 
     // List and restore items from Recycle Bin
+    // Use $rb.GetDetailsOf($item, 0) to get original filename WITH extension
+    // ($item.Name strips extensions on systems with "hide known extensions" enabled)
     const output = execSync(
-      'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = 0; foreach ($item in $items) { $path = $rb.GetDetailsOf($item, 1); Move-Item -LiteralPath $item.Path -Destination (Join-Path $path $item.Name) -Force -ErrorAction SilentlyContinue; $count++ }; Write-Output $count"',
+      'powershell -NoProfile -Command "$shell = New-Object -ComObject Shell.Application; $rb = $shell.NameSpace(0x0a); $items = $rb.Items(); $count = 0; foreach ($item in $items) { $origPath = $rb.GetDetailsOf($item, 1); $origName = $rb.GetDetailsOf($item, 0); if (-not $origName) { $origName = $item.Name }; Move-Item -LiteralPath $item.Path -Destination (Join-Path $origPath $origName) -Force -ErrorAction SilentlyContinue; $count++ }; Write-Output $count"',
       { encoding: 'utf8', timeout: 60000, stdio: 'pipe' }
     ).trim()
 

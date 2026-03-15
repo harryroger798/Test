@@ -910,6 +910,32 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 // ============================================================
 // Scan Orchestration
 // ============================================================
+// Helper: yield to the event loop so the Electron renderer stays responsive
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
+// Helper: run a diagnostic function with a per-module timeout and event loop yielding
+async function runDiagnosticSafe(
+  name: string,
+  fn: () => Promise<DiagnosticResult[]>,
+  timeoutMs: number
+): Promise<{ name: string; results: DiagnosticResult[] }> {
+  await yieldToEventLoop()
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<DiagnosticResult[]>((_, reject) =>
+        setTimeout(() => reject(new Error(`Module ${name} timed out`)), timeoutMs)
+      )
+    ])
+    return { name, results: result }
+  } catch (err) {
+    logger.warn(`Module ${name} scan failed: ${err instanceof Error ? err.message : String(err)}`)
+    return { name, results: [] }
+  }
+}
+
 async function runQuickScan(): Promise<ScanResult> {
   const startTime = Date.now()
   const scanId = nanoid()
@@ -917,53 +943,42 @@ async function runQuickScan(): Promise<ScanResult> {
 
   logger.info(`Starting quick scan ${scanId}...`)
 
-  // Run all diagnostic modules in parallel with a global 120s timeout
-  const QUICK_SCAN_TIMEOUT_MS = 120000
+  // Run diagnostic modules sequentially with event loop yielding between each one.
+  // This prevents the Electron UI from showing "Not Responding" because setImmediate
+  // gives the renderer process a chance to process paint events between modules.
+  // Each module also has its own timeout to prevent any single module from hanging.
+  const PER_MODULE_TIMEOUT_MS = 30000 // 30s per module
   const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
     'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps',
     'thermal', 'hardware', 'keyboard', 'gaming', 'partition', 'activation', 'email', 'phone']
 
-  const allSettledPromise = Promise.allSettled([
-    runPerformanceDiagnostics(),
-    runOSRepairDiagnostics(),
-    runMalwareDiagnostics(),
-    runNetworkDiagnostics(),
-    runBatteryDiagnostics(),
-    runDataRecoveryDiagnostics(),
-    runAudioDiagnostics(),
-    runBluetoothDiagnostics(),
-    runPrinterDiagnostics(),
-    runDisplayDiagnostics(),
-    runWebcamDiagnostics(),
-    runUsbDiagnostics(),
-    runIndiaAppsDiagnostics(),
-    runOverheatingDiagnostics(),
-    runHardwareDiagnostics(),
-    runKeyboardTouchpadDiagnostics(),
-    runGamingDiagnostics(),
-    runPartitionBootDiagnostics(),
-    runActivationDiagnostics(),
-    runEmailDiagnostics(),
-    runPhoneTransferDiagnostics()
-  ])
-  const timeoutPromise = new Promise<PromiseSettledResult<DiagnosticResult[]>[]>((resolve) =>
-    setTimeout(() => {
-      logger.warn('Quick scan timed out after 120s — returning partial results')
-      resolve(moduleNames.map(() => ({ status: 'rejected' as const, reason: 'Timed out' })))
-    }, QUICK_SCAN_TIMEOUT_MS)
-  )
+  const moduleFns: Array<() => Promise<DiagnosticResult[]>> = [
+    runPerformanceDiagnostics,
+    runOSRepairDiagnostics,
+    runMalwareDiagnostics,
+    runNetworkDiagnostics,
+    runBatteryDiagnostics,
+    runDataRecoveryDiagnostics,
+    runAudioDiagnostics,
+    runBluetoothDiagnostics,
+    runPrinterDiagnostics,
+    runDisplayDiagnostics,
+    runWebcamDiagnostics,
+    runUsbDiagnostics,
+    runIndiaAppsDiagnostics,
+    runOverheatingDiagnostics,
+    runHardwareDiagnostics,
+    runKeyboardTouchpadDiagnostics,
+    runGamingDiagnostics,
+    runPartitionBootDiagnostics,
+    runActivationDiagnostics,
+    runEmailDiagnostics,
+    runPhoneTransferDiagnostics
+  ]
 
-  // Suppress potential unhandled rejections from the losing promise
-  allSettledPromise.catch(() => {})
-  const allResults = await Promise.race([allSettledPromise, timeoutPromise])
-
-  for (let i = 0; i < allResults.length; i++) {
-    const result = allResults[i]
-    if (result.status === 'fulfilled') {
-      diagnostics.push(...result.value)
-    } else {
-      logger.warn(`Module ${moduleNames[i]} scan failed: ${result.reason}`)
-    }
+  for (let i = 0; i < moduleFns.length; i++) {
+    const { results } = await runDiagnosticSafe(moduleNames[i], moduleFns[i], PER_MODULE_TIMEOUT_MS)
+    diagnostics.push(...results)
   }
 
   const endTime = Date.now()

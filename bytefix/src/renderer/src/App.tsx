@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Sidebar } from './components/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -37,6 +38,12 @@ import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
+  const loadLanguage = useAppStore((s) => s.loadLanguage)
+
+  // Load saved language preference and translations on startup
+  useEffect(() => {
+    loadLanguage()
+  }, [loadLanguage])
 
   return (
     <ErrorBoundary module="app-root">
