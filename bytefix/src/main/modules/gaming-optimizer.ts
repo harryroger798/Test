@@ -247,10 +247,12 @@ export async function cleanupRamForGaming(): Promise<FixResult> {
 
   if (isWindows) {
     // Kill known RAM-hungry non-essential processes
+    // NOTE: chrome.exe and msedge.exe are excluded because Electron (ByteFix) itself
+    // runs as a Chromium process — killing chrome.exe would crash this app.
     const processesToKill = [
       'OneDrive.exe', 'Teams.exe', 'Slack.exe', 'Discord.exe',
       'Spotify.exe', 'Steam.exe', 'EpicGamesLauncher.exe',
-      'chrome.exe', 'msedge.exe', 'firefox.exe',
+      'firefox.exe',
       'SearchApp.exe', 'YourPhone.exe', 'SkypeApp.exe',
       'GameBarPresenceWriter.exe'
     ]

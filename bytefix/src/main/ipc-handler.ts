@@ -628,7 +628,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('email:clearCredentials', async (_event, args: { target: string }) => {
-    const safeTarget = (args.target || '').replace(/[;&|`$]/g, '')
+    // Allowlist: only safe characters for credential target names
+    const safeTarget = (args.target || '').replace(/[^a-zA-Z0-9@._:\/ -]/g, '')
     return await clearEmailCredentials(safeTarget)
   })
 

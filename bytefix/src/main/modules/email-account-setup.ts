@@ -160,48 +160,66 @@ async function testPort(host: string, port: number, useTls: boolean, timeoutMs: 
   const startTime = Date.now()
 
   return new Promise<PortTestResult>((resolve) => {
-    const createConnection = useTls
-      ? () => tls.connect({ host, port, rejectUnauthorized: true, timeout: timeoutMs })
-      : () => net.createConnection({ host, port, timeout: timeoutMs })
+    let resolved = false
+    const done = (patch: Partial<PortTestResult>): void => {
+      if (resolved) return
+      resolved = true
+      Object.assign(result, patch)
+      resolve(result)
+    }
 
     try {
-      const socket = createConnection()
+      if (useTls) {
+        // For TLS: only listen for secureConnect (not connect, which fires before TLS handshake)
+        const tlsSocket = tls.connect({ host, port, rejectUnauthorized: true, timeout: timeoutMs })
 
-      socket.on('connect', () => {
-        result.reachable = true
-        result.responseTime = Date.now() - startTime
-        if (useTls) result.tlsValid = true
-        socket.destroy()
-        resolve(result)
-      })
+        tlsSocket.on('secureConnect', () => {
+          tlsSocket.destroy()
+          done({ reachable: true, tlsValid: true, responseTime: Date.now() - startTime })
+        })
 
-      socket.on('secureConnect', () => {
-        result.tlsValid = true
-      })
+        tlsSocket.on('error', (err: Error) => {
+          tlsSocket.destroy()
+          done({ error: err.message, responseTime: Date.now() - startTime })
+        })
 
-      socket.on('error', (err: Error) => {
-        result.error = err.message
-        result.responseTime = Date.now() - startTime
-        socket.destroy()
-        resolve(result)
-      })
+        tlsSocket.on('timeout', () => {
+          tlsSocket.destroy()
+          done({ error: 'Connection timed out', responseTime: Date.now() - startTime })
+        })
 
-      socket.on('timeout', () => {
-        result.error = 'Connection timed out'
-        result.responseTime = Date.now() - startTime
-        socket.destroy()
-        resolve(result)
-      })
+        // Hard backstop timeout
+        setTimeout(() => {
+          tlsSocket.destroy()
+          done({ error: result.error || 'Hard timeout', responseTime: Date.now() - startTime })
+        }, timeoutMs + 2000)
+      } else {
+        // For plain TCP: listen for connect
+        const socket = net.createConnection({ host, port, timeout: timeoutMs })
 
-      // Safety timeout
-      setTimeout(() => {
-        result.error = result.error || 'Timeout'
-        socket.destroy()
-        resolve(result)
-      }, timeoutMs + 1000)
+        socket.on('connect', () => {
+          socket.destroy()
+          done({ reachable: true, responseTime: Date.now() - startTime })
+        })
+
+        socket.on('error', (err: Error) => {
+          socket.destroy()
+          done({ error: err.message, responseTime: Date.now() - startTime })
+        })
+
+        socket.on('timeout', () => {
+          socket.destroy()
+          done({ error: 'Connection timed out', responseTime: Date.now() - startTime })
+        })
+
+        // Hard backstop timeout
+        setTimeout(() => {
+          socket.destroy()
+          done({ error: result.error || 'Hard timeout', responseTime: Date.now() - startTime })
+        }, timeoutMs + 2000)
+      }
     } catch (err) {
-      result.error = err instanceof Error ? err.message : String(err)
-      resolve(result)
+      done({ error: err instanceof Error ? err.message : String(err) })
     }
   })
 }

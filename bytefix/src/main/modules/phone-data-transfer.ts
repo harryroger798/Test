@@ -480,9 +480,18 @@ export async function pullFilesViaAdb(
     }
   }
 
-  // Sanitize paths - only allow safe characters
+  // Sanitize paths - block path traversal and shell metacharacters
   const safeSrc = sourcePath.replace(/[;&|`$]/g, '')
   const safeDest = destinationPath.replace(/[;&|`$]/g, '')
+
+  // Block path traversal in destination (source is on phone, dest is local filesystem)
+  if (safeDest.includes('..') || safeSrc.includes('..')) {
+    return {
+      success: false, module: 'phone-transfer', action: 'adb_pull',
+      description: 'Invalid path: path traversal ("..") not allowed',
+      details: ['Paths must not contain ".." segments'], changes, rollbackAvailable: false
+    }
+  }
 
   try {
     const output = execFileSync(adbStatus.path, ['pull', safeSrc, safeDest], {
