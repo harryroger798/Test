@@ -1,6 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
-import { join, resolve, sep } from 'path'
-import { pathToFileURL } from 'url'
+import { app, shell, BrowserWindow, ipcMain, protocol } from 'electron'
+import { join, resolve, sep, extname } from 'path'
+import { readFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerAllHandlers } from './ipc-handler'
 import { initDatabase } from './database'
@@ -86,6 +86,25 @@ app.whenReady().then(async () => {
   // This fixes the blank screen issue where <script type="module"> is silently
   // blocked on file:// protocol due to CORS restrictions in Chromium
   const rendererRoot = resolve(__dirname, '../renderer')
+
+  const mimeTypes: Record<string, string> = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.eot': 'application/vnd.ms-fontobject',
+    '.map': 'application/json'
+  }
+
   protocol.handle('bytefix', (request) => {
     try {
       const reqUrl = new URL(request.url)
@@ -100,7 +119,18 @@ app.whenReady().then(async () => {
         return new Response('Forbidden', { status: 403 })
       }
 
-      return net.fetch(pathToFileURL(filePath).toString())
+      // Read file directly from filesystem/asar and return with proper MIME type
+      const data = readFileSync(filePath)
+      const ext = extname(filePath).toLowerCase()
+      const mimeType = mimeTypes[ext] || 'application/octet-stream'
+
+      return new Response(data, {
+        status: 200,
+        headers: {
+          'Content-Type': mimeType,
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
     } catch {
       return new Response('Bad Request', { status: 400 })
     }
