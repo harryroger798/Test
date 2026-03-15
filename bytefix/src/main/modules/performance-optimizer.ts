@@ -449,7 +449,7 @@ export async function optimizeDisk(drive: string): Promise<FixResult> {
     details.push('macOS manages disk optimization automatically via APFS')
   } else {
     try {
-      execSync(`sudo fstrim -v / 2>/dev/null || true`, { timeout: 30000, encoding: 'utf8' })
+      await runShellSafe('sudo fstrim -v / 2>/dev/null || true', 30000)
       details.push('TRIM run on root filesystem')
     } catch {
       details.push('fstrim not available or not an SSD')
