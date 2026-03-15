@@ -64,7 +64,8 @@ function buildUPIDeepLink(request: UPIPaymentRequest): string {
     params.set('tr', sanitizeUPIParam(request.referenceId, 35))
   }
 
-  return `upi://pay?${params.toString()}`
+  // Replace '+' with '%20' — some UPI apps (Paytm, PhonePe) don't handle '+' as space
+  return `upi://pay?${params.toString().replace(/\+/g, '%20')}`
 }
 
 // ============================================================

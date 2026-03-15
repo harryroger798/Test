@@ -106,9 +106,10 @@ function generateInvoiceNumber(): string {
   const fy = getCurrentFinancialYear()
   const prefix = `BF/${fy}/`
 
+  // Use CAST to numeric for correct ordering beyond 9999
   const row = getDb().prepare(
-    `SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY invoice_number DESC LIMIT 1`
-  ).get(`${prefix}%`) as { invoice_number: string } | undefined
+    `SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY CAST(SUBSTR(invoice_number, LENGTH(?) + 1) AS INTEGER) DESC LIMIT 1`
+  ).get(`${prefix}%`, prefix) as { invoice_number: string } | undefined
 
   let nextNum = 1
   if (row) {
@@ -142,29 +143,38 @@ function calculateGST(
   // Default to intra-state if customer state not provided (B2C local)
   const isIntraState = !customerStateCode || shopStateCode === customerStateCode
 
-  // Use the average GST rate from line items, or default 18%
-  const avgGstRate = lineItems.length > 0
-    ? lineItems.reduce((sum, item) => sum + item.gstRate, 0) / lineItems.length
+  // Calculate GST per line item at its respective rate (legally required)
+  let totalCgst = 0
+  let totalSgst = 0
+  let totalIgst = 0
+
+  for (const item of lineItems) {
+    if (isIntraState) {
+      totalCgst += Math.round(item.amount * (item.gstRate / 2) / 100 * 100) / 100
+      totalSgst += Math.round(item.amount * (item.gstRate / 2) / 100 * 100) / 100
+    } else {
+      totalIgst += Math.round(item.amount * item.gstRate / 100 * 100) / 100
+    }
+  }
+
+  // Use dominant GST rate for the rate field (most common rate among items)
+  const dominantRate = lineItems.length > 0
+    ? lineItems.reduce((max, item) => item.amount > max.amount ? item : max, lineItems[0]).gstRate
     : 18
 
   if (isIntraState) {
-    // Split into CGST + SGST
-    const halfRate = avgGstRate / 2
-    const halfAmount = Math.round(subtotal * halfRate / 100 * 100) / 100
     return {
       subtotal,
       isIntraState: true,
-      cgstRate: halfRate,
-      cgstAmount: halfAmount,
-      sgstRate: halfRate,
-      sgstAmount: halfAmount,
+      cgstRate: dominantRate / 2,
+      cgstAmount: totalCgst,
+      sgstRate: dominantRate / 2,
+      sgstAmount: totalSgst,
       igstRate: 0,
       igstAmount: 0,
-      total: Math.round((subtotal + halfAmount * 2) * 100) / 100
+      total: Math.round((subtotal + totalCgst + totalSgst) * 100) / 100
     }
   } else {
-    // IGST for inter-state
-    const igstAmount = Math.round(subtotal * avgGstRate / 100 * 100) / 100
     return {
       subtotal,
       isIntraState: false,
@@ -172,9 +182,9 @@ function calculateGST(
       cgstAmount: 0,
       sgstRate: 0,
       sgstAmount: 0,
-      igstRate: avgGstRate,
-      igstAmount,
-      total: Math.round((subtotal + igstAmount) * 100) / 100
+      igstRate: dominantRate,
+      igstAmount: totalIgst,
+      total: Math.round((subtotal + totalIgst) * 100) / 100
     }
   }
 }
@@ -194,29 +204,37 @@ export function getIndianStates(): Record<string, string> {
 export async function createInvoice(data: GSTInvoiceData): Promise<InvoiceRecord> {
   logger.info('Creating GST invoice', { customerId: data.customerId, items: data.lineItems.length })
 
-  const invoiceNumber = generateInvoiceNumber()
-  const gst = calculateGST(data.lineItems, data.shopStateCode, data.customerStateCode)
   const id = nanoid()
 
-  const stmt = getDb().prepare(`
-    INSERT INTO invoices (
-      id, invoice_number, job_id, customer_id,
-      shop_name, shop_gstin, shop_address, shop_state_code,
-      customer_gstin, customer_state_code, is_intra_state,
-      subtotal, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
-      igst_rate, igst_amount, total, line_items,
-      payment_method, payment_status, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
+  // Wrap in transaction to prevent race condition on invoice number
+  const createInvoiceTx = getDb().transaction((txData: GSTInvoiceData, txId: string) => {
+    const invoiceNumber = generateInvoiceNumber()
+    const gst = calculateGST(txData.lineItems, txData.shopStateCode, txData.customerStateCode)
 
-  stmt.run(
-    id, invoiceNumber, data.jobId || null, data.customerId,
-    data.shopName, data.shopGstin || null, data.shopAddress || null, data.shopStateCode,
-    data.customerGstin || null, data.customerStateCode || null, gst.isIntraState ? 1 : 0,
-    gst.subtotal, gst.cgstRate, gst.cgstAmount, gst.sgstRate, gst.sgstAmount,
-    gst.igstRate, gst.igstAmount, gst.total, JSON.stringify(data.lineItems),
-    data.paymentMethod || null, 'pending', data.notes || null
-  )
+    const stmt = getDb().prepare(`
+      INSERT INTO invoices (
+        id, invoice_number, job_id, customer_id,
+        shop_name, shop_gstin, shop_address, shop_state_code,
+        customer_gstin, customer_state_code, is_intra_state,
+        subtotal, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
+        igst_rate, igst_amount, total, line_items,
+        payment_method, payment_status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    stmt.run(
+      txId, invoiceNumber, txData.jobId || null, txData.customerId,
+      txData.shopName, txData.shopGstin || null, txData.shopAddress || null, txData.shopStateCode,
+      txData.customerGstin || null, txData.customerStateCode || null, gst.isIntraState ? 1 : 0,
+      gst.subtotal, gst.cgstRate, gst.cgstAmount, gst.sgstRate, gst.sgstAmount,
+      gst.igstRate, gst.igstAmount, gst.total, JSON.stringify(txData.lineItems),
+      txData.paymentMethod || null, 'pending', txData.notes || null
+    )
+
+    return invoiceNumber
+  })
+
+  const invoiceNumber = createInvoiceTx(data, id)
 
   logger.info('Invoice created', { id, invoiceNumber, total: gst.total })
 

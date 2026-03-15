@@ -74,11 +74,12 @@ function generateTicketNumber(): string {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
-  const prefix = `BF-${year}${month}${day}`
+  const prefix = `BF-${year}${month}${day}-`
 
+  // Use CAST to numeric for correct ordering beyond 999
   const row = getDb().prepare(
-    `SELECT ticket_number FROM repair_jobs WHERE ticket_number LIKE ? ORDER BY ticket_number DESC LIMIT 1`
-  ).get(`${prefix}-%`) as { ticket_number: string } | undefined
+    `SELECT ticket_number FROM repair_jobs WHERE ticket_number LIKE ? ORDER BY CAST(SUBSTR(ticket_number, LENGTH(?) + 1) AS INTEGER) DESC LIMIT 1`
+  ).get(`${prefix}%`, prefix) as { ticket_number: string } | undefined
 
   let nextNum = 1
   if (row) {
@@ -87,7 +88,7 @@ function generateTicketNumber(): string {
     if (!isNaN(lastNum)) nextNum = lastNum + 1
   }
 
-  return `${prefix}-${String(nextNum).padStart(3, '0')}`
+  return `${prefix}${String(nextNum).padStart(3, '0')}`
 }
 
 // ============================================================
@@ -187,20 +188,27 @@ export async function createRepairJob(data: CreateJobData): Promise<RepairJobRec
   logger.info('Creating repair job', { customerId: data.customerId, complaint: data.complaint })
 
   const id = nanoid()
-  const ticketNumber = generateTicketNumber()
 
-  getDb().prepare(`
-    INSERT INTO repair_jobs (
-      id, ticket_number, customer_id, device_brand, device_model, device_serial,
-      complaint, status, technician, promised_date, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?)
-  `).run(
-    id, ticketNumber, data.customerId,
-    data.deviceBrand || null, data.deviceModel || null, data.deviceSerial || null,
-    data.complaint, data.technician || null,
-    data.promisedDate || null, data.notes || null
-  )
+  // Wrap in transaction to prevent race condition on ticket number
+  const createJobTx = getDb().transaction((txData: CreateJobData, txId: string) => {
+    const ticketNumber = generateTicketNumber()
 
+    getDb().prepare(`
+      INSERT INTO repair_jobs (
+        id, ticket_number, customer_id, device_brand, device_model, device_serial,
+        complaint, status, technician, promised_date, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?)
+    `).run(
+      txId, ticketNumber, txData.customerId,
+      txData.deviceBrand || null, txData.deviceModel || null, txData.deviceSerial || null,
+      txData.complaint, txData.technician || null,
+      txData.promisedDate || null, txData.notes || null
+    )
+
+    return ticketNumber
+  })
+
+  const ticketNumber = createJobTx(data, id)
   logger.info('Repair job created', { id, ticketNumber })
   return getDb().prepare('SELECT * FROM repair_jobs WHERE id = ?').get(id) as RepairJobRecord
 }

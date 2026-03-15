@@ -230,11 +230,14 @@ export async function executeBackup(
       targetsCopied++
       logger.info(`Backed up: ${dirName}`, { size: formatSize(copiedSize) })
     } catch (err) {
-      // Robocopy returns non-zero for partial success, check exit code
+      // Robocopy returns non-zero for partial success (codes 1-7 = success)
       const execErr = err as { code?: number; message?: string }
       if (os === 'win32' && execErr.code !== undefined && execErr.code < 8) {
-        // Robocopy codes 0-7 are success/partial
+        // Robocopy codes 0-7 are success/partial — calculate copied size
+        const copiedSize = getDirSize(destDir)
+        totalBytesCopied += copiedSize
         targetsCopied++
+        logger.info(`Backed up (robocopy): ${dirName}`, { size: formatSize(copiedSize) })
       } else {
         errors.push(`Failed to backup ${dirName}: ${execErr.message || 'Unknown error'}`)
         targetsFailed++
@@ -380,20 +383,19 @@ export async function backupBrowserData(
   const os = platform()
   const destDir = join(destinationPath, browserName.replace(/\s+/g, '_'))
 
+  // Exclude password databases by default for security — only backup bookmarks and history
   const filesToBackup = [
     { name: 'Bookmarks', file: profile.hasBookmarks ? 'Bookmarks' : null },
-    { name: 'History', file: profile.hasHistory ? 'History' : null },
-    { name: 'Login Data', file: profile.hasPasswords ? 'Login Data' : null }
+    { name: 'History', file: profile.hasHistory ? 'History' : null }
   ]
 
   // For Firefox, use different file names
   if (browserName === 'Mozilla Firefox') {
     filesToBackup.length = 0
     filesToBackup.push(
-      { name: 'Bookmarks & History', file: profile.hasBookmarks ? 'places.sqlite' : null },
-      { name: 'Passwords', file: profile.hasPasswords ? 'logins.json' : null },
-      { name: 'Password Key', file: existsSync(join(profile.profilePath, 'key4.db')) ? 'key4.db' : null }
+      { name: 'Bookmarks & History', file: profile.hasBookmarks ? 'places.sqlite' : null }
     )
+    // Note: Firefox password files (logins.json, key4.db) excluded for security
   }
 
   for (const item of filesToBackup) {
@@ -403,7 +405,8 @@ export async function backupBrowserData(
 
     try {
       if (os === 'win32') {
-        await execFileAsync('cmd', ['/c', 'xcopy', '/Y', '/I', src, dest])
+        // Create destination directory first, then use copy (not xcopy /I which mishandles files)
+        await execFileAsync('cmd', ['/c', 'mkdir', destDir, '&', 'copy', '/Y', src, dest])
       } else {
         await execFileAsync('mkdir', ['-p', destDir])
         await execFileAsync('cp', ['-f', src, dest])
