@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 import { platform } from 'os'
 import si from 'systeminformation'
 import { createLogger } from '../logger'
@@ -34,8 +34,9 @@ export async function diagnoseNetwork(): Promise<NetworkDiagnostic> {
   // Check gateway reachability
   if (gateway) {
     try {
-      const pingCmd = isWindows ? `ping -n 1 -w 3000 ${gateway}` : `ping -c 1 -W 3 ${gateway}`
-      const output = execSync(pingCmd, { timeout: 5000, encoding: 'utf8' })
+      const output = isWindows
+        ? execFileSync('ping', ['-n', '1', '-w', '3000', gateway], { timeout: 5000, encoding: 'utf8' })
+        : execFileSync('ping', ['-c', '1', '-W', '3', gateway], { timeout: 5000, encoding: 'utf8' })
       gatewayReachable = !output.includes('Request timed out') && !output.includes('100% packet loss')
 
       const timeMatch = output.match(/time[=<](\d+\.?\d*)/i)
@@ -77,8 +78,9 @@ export async function diagnoseNetwork(): Promise<NetworkDiagnostic> {
 
   // Check internet connectivity
   try {
-    const pingTarget = isWindows ? 'ping -n 1 -w 5000 8.8.8.8' : 'ping -c 1 -W 5 8.8.8.8'
-    execSync(pingTarget, { timeout: 8000, encoding: 'utf8' })
+    isWindows
+      ? execFileSync('ping', ['-n', '1', '-w', '5000', '8.8.8.8'], { timeout: 8000, encoding: 'utf8' })
+      : execFileSync('ping', ['-c', '1', '-W', '5', '8.8.8.8'], { timeout: 8000, encoding: 'utf8' })
     internetConnected = true
   } catch {
     internetConnected = false
@@ -170,25 +172,37 @@ export async function diagnoseNetwork(): Promise<NetworkDiagnostic> {
 // ============================================================
 // Network Fixes
 // ============================================================
+// Validate interface name: only allow alphanumeric, hyphens, underscores, dots, spaces
+function sanitizeInterfaceName(name: string): string {
+  const trimmed = name.trim()
+  if (!/^[a-zA-Z0-9 _\-\.]+$/.test(trimmed) || !trimmed) {
+    throw new Error(`Invalid network interface name: ${name}`)
+  }
+  return trimmed
+}
+
 export async function resetAdapter(iface: string): Promise<FixResult> {
   const changes: FixChange[] = []
   const details: string[] = []
 
   try {
+    const safeIface = sanitizeInterfaceName(iface)
     if (isWindows) {
-      execSync(`netsh interface set interface "${iface}" disable`, { timeout: 5000 })
+      execFileSync('netsh', ['interface', 'set', 'interface', safeIface, 'disable'], { timeout: 5000 })
       await new Promise(r => setTimeout(r, 2000))
-      execSync(`netsh interface set interface "${iface}" enable`, { timeout: 5000 })
-      changes.push({ type: 'network', action: 'modified', target: iface, before: 'disabled', after: 'enabled' })
-      details.push(`Reset network adapter: ${iface}`)
+      execFileSync('netsh', ['interface', 'set', 'interface', safeIface, 'enable'], { timeout: 5000 })
+      changes.push({ type: 'network', action: 'modified', target: safeIface, before: 'disabled', after: 'enabled' })
+      details.push(`Reset network adapter: ${safeIface}`)
     } else if (isMac) {
-      execSync(`sudo ifconfig "${iface}" down && sudo ifconfig "${iface}" up`, { timeout: 5000 })
-      changes.push({ type: 'network', action: 'modified', target: iface })
-      details.push(`Reset network interface: ${iface}`)
+      execFileSync('sudo', ['ifconfig', safeIface, 'down'], { timeout: 5000 })
+      execFileSync('sudo', ['ifconfig', safeIface, 'up'], { timeout: 5000 })
+      changes.push({ type: 'network', action: 'modified', target: safeIface })
+      details.push(`Reset network interface: ${safeIface}`)
     } else {
-      execSync(`sudo ip link set "${iface}" down && sudo ip link set "${iface}" up`, { timeout: 5000 })
-      changes.push({ type: 'network', action: 'modified', target: iface })
-      details.push(`Reset network interface: ${iface}`)
+      execFileSync('sudo', ['ip', 'link', 'set', safeIface, 'down'], { timeout: 5000 })
+      execFileSync('sudo', ['ip', 'link', 'set', safeIface, 'up'], { timeout: 5000 })
+      changes.push({ type: 'network', action: 'modified', target: safeIface })
+      details.push(`Reset network interface: ${safeIface}`)
     }
 
     return {
@@ -210,16 +224,21 @@ export async function flushDns(): Promise<FixResult> {
 
   try {
     if (isWindows) {
-      execSync('ipconfig /flushdns', { timeout: 5000, encoding: 'utf8' })
+      execFileSync('ipconfig', ['/flushdns'], { timeout: 5000, encoding: 'utf8' })
       // Detect active network interface and set Google DNS as fallback
       try {
-        const ifaceOutput = execSync(
-          'powershell -NoProfile -Command "(Get-NetAdapter | Where-Object { $_.Status -eq \'Up\' } | Select-Object -First 1).Name"',
+        const ifaceOutput = execFileSync(
+          'powershell', ['-NoProfile', '-Command', '(Get-NetAdapter | Where-Object { $_.Status -eq \'Up\' } | Select-Object -First 1).Name'],
           { timeout: 5000, encoding: 'utf8' }
         ).trim()
         if (ifaceOutput) {
-          execSync(`netsh interface ip set dns "${ifaceOutput}" static 8.8.8.8 primary 2>nul || true`, { timeout: 5000 })
-          execSync(`netsh interface ip add dns "${ifaceOutput}" 8.8.4.4 index=2 2>nul || true`, { timeout: 5000 })
+          const safeIfaceOutput = sanitizeInterfaceName(ifaceOutput)
+          try {
+            execFileSync('netsh', ['interface', 'ip', 'set', 'dns', safeIfaceOutput, 'static', '8.8.8.8', 'primary'], { timeout: 5000 })
+          } catch { /* best-effort */ }
+          try {
+            execFileSync('netsh', ['interface', 'ip', 'add', 'dns', safeIfaceOutput, '8.8.4.4', 'index=2'], { timeout: 5000 })
+          } catch { /* best-effort */ }
         }
       } catch { /* DNS fallback is best-effort */ }
     } else if (isMac) {
@@ -256,7 +275,7 @@ export async function resetWinsock(): Promise<FixResult> {
   }
 
   try {
-    execSync('netsh winsock reset', { timeout: 10000, encoding: 'utf8' })
+    execFileSync('netsh', ['winsock', 'reset'], { timeout: 10000, encoding: 'utf8' })
     details.push('Winsock catalog reset successfully')
     changes.push({ type: 'network', action: 'modified', target: 'Winsock catalog' })
 
@@ -279,8 +298,8 @@ export async function resetTcpIp(): Promise<FixResult> {
 
   try {
     if (isWindows) {
-      execSync('netsh int ip reset', { timeout: 10000, encoding: 'utf8' })
-      execSync('netsh int tcp reset', { timeout: 10000, encoding: 'utf8' })
+      execFileSync('netsh', ['int', 'ip', 'reset'], { timeout: 10000, encoding: 'utf8' })
+      execFileSync('netsh', ['int', 'tcp', 'reset'], { timeout: 10000, encoding: 'utf8' })
       details.push('TCP/IP stack reset successfully')
       changes.push({ type: 'network', action: 'modified', target: 'TCP/IP stack' })
     } else {
