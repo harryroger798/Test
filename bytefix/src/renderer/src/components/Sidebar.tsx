@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Monitor, Zap, Shield, Wifi,
   Wrench, Battery, ChevronLeft, ChevronRight,
   HardDrive, KeyRound, Volume2, Bluetooth, Printer,
-  MonitorSpeaker, Camera, Usb, Globe
+  MonitorSpeaker, Camera, Usb, Globe,
+  Thermometer, Cpu, Keyboard, Gamepad2, Mail, Smartphone
 } from 'lucide-react'
 import { useAppStore } from '../store/app-store'
 import { cn } from '../lib/utils'
@@ -24,7 +25,15 @@ const NAV_ITEMS = [
   { path: '/display', label: 'Display / GPU', icon: MonitorSpeaker, group: 'phase2' },
   { path: '/webcam', label: 'Webcam', icon: Camera, group: 'phase2' },
   { path: '/usb', label: 'USB / Peripherals', icon: Usb, group: 'phase2' },
-  { path: '/india-apps', label: 'India Apps', icon: Globe, group: 'phase2' }
+  { path: '/india-apps', label: 'India Apps', icon: Globe, group: 'phase2' },
+  { path: '/overheating', label: 'Overheating', icon: Thermometer, group: 'phase3' },
+  { path: '/hardware', label: 'Hardware Diag', icon: Cpu, group: 'phase3' },
+  { path: '/keyboard', label: 'Keyboard / Touchpad', icon: Keyboard, group: 'phase3' },
+  { path: '/gaming', label: 'Gaming Optimizer', icon: Gamepad2, group: 'phase3' },
+  { path: '/partition', label: 'Partition / Boot', icon: HardDrive, group: 'phase3' },
+  { path: '/activation', label: 'Win Activation', icon: KeyRound, group: 'phase3' },
+  { path: '/email', label: 'Email Setup', icon: Mail, group: 'phase3' },
+  { path: '/phone', label: 'Phone Transfer', icon: Smartphone, group: 'phase3' }
 ]
 
 export function Sidebar(): JSX.Element {

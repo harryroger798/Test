@@ -79,6 +79,16 @@ import { runWebcamDiagnostics, enableCameraPrivacy, reinstallCameraDrivers, powe
 import { runUsbDiagnostics, disableSelectiveSuspend, reinstallUsbDrivers, repairRawDrive, disableUsbPowerManagement } from './modules/usb-fixer'
 import { runIndiaAppsDiagnostics, repairOffice, repairOutlookPst, fixJavaBanking, cleanChrome, enableDotNet35 } from './modules/india-apps'
 
+// Phase 3 module imports
+import { runOverheatingDiagnostics, optimizeCooling, killHighCpuProcesses } from './modules/overheating-analyzer'
+import { runHardwareDiagnostics, runCpuStressTest, guideMemTest } from './modules/hardware-diagnostics'
+import { runKeyboardTouchpadDiagnostics, fixFilterKeys, toggleTouchpad, reinstallInputDrivers } from './modules/keyboard-touchpad-fixer'
+import { runGamingDiagnostics, enableGameMode, setHighPerformancePlan, cleanupRamForGaming, repairDirectX, optimizeGpuSettings } from './modules/gaming-optimizer'
+import { runPartitionBootDiagnostics, repairBcd, repairGrub, verifyBootDrive } from './modules/partition-boot-manager'
+import { runActivationDiagnostics, runActivationTroubleshooter } from './modules/windows-activation'
+import { runEmailDiagnostics, autoConfigureEmail, repairOutlookProfile, clearEmailCredentials } from './modules/email-account-setup'
+import { runPhoneTransferDiagnostics, guideUsbDebugging, pullFilesViaAdb } from './modules/phone-data-transfer'
+
 import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem } from '../shared/types'
 
 const logger = createLogger('ipc-handler')
@@ -492,6 +502,155 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   // ============================================================
+  // Phase 3: Overheating Analyzer
+  // ============================================================
+  ipcMain.handle('thermal:diagnose', async () => {
+    return await runOverheatingDiagnostics()
+  })
+
+  ipcMain.handle('thermal:optimizeCooling', async () => {
+    return await optimizeCooling()
+  })
+
+  ipcMain.handle('thermal:killHighCpu', async () => {
+    return await killHighCpuProcesses()
+  })
+
+  // ============================================================
+  // Phase 3: Hardware Deep Diagnostics
+  // ============================================================
+  ipcMain.handle('hardware:diagnose', async () => {
+    return await runHardwareDiagnostics()
+  })
+
+  ipcMain.handle('hardware:stressTest', async (_event, args: { durationSeconds: number }) => {
+    const duration = Math.min(Math.max(1, args.durationSeconds || 30), 300)
+    return await runCpuStressTest(duration)
+  })
+
+  ipcMain.handle('hardware:guideMemTest', async () => {
+    return await guideMemTest()
+  })
+
+  // ============================================================
+  // Phase 3: Keyboard/Touchpad Fixer
+  // ============================================================
+  ipcMain.handle('keyboard:diagnose', async () => {
+    return await runKeyboardTouchpadDiagnostics()
+  })
+
+  ipcMain.handle('keyboard:fixFilterKeys', async () => {
+    return await fixFilterKeys()
+  })
+
+  ipcMain.handle('keyboard:toggleTouchpad', async (_event, args: { enable: boolean }) => {
+    return await toggleTouchpad(args.enable)
+  })
+
+  ipcMain.handle('keyboard:reinstallDrivers', async () => {
+    return await reinstallInputDrivers()
+  })
+
+  // ============================================================
+  // Phase 3: Gaming Optimizer
+  // ============================================================
+  ipcMain.handle('gaming:diagnose', async () => {
+    return await runGamingDiagnostics()
+  })
+
+  ipcMain.handle('gaming:enableGameMode', async () => {
+    return await enableGameMode()
+  })
+
+  ipcMain.handle('gaming:setHighPerformance', async () => {
+    return await setHighPerformancePlan()
+  })
+
+  ipcMain.handle('gaming:cleanupRam', async () => {
+    return await cleanupRamForGaming()
+  })
+
+  ipcMain.handle('gaming:repairDirectX', async () => {
+    return await repairDirectX()
+  })
+
+  ipcMain.handle('gaming:optimizeGpu', async () => {
+    return await optimizeGpuSettings()
+  })
+
+  // ============================================================
+  // Phase 3: Partition/Boot Manager
+  // ============================================================
+  ipcMain.handle('partition:diagnose', async () => {
+    return await runPartitionBootDiagnostics()
+  })
+
+  ipcMain.handle('partition:repairBcd', async () => {
+    return await repairBcd()
+  })
+
+  ipcMain.handle('partition:repairGrub', async () => {
+    return await repairGrub()
+  })
+
+  ipcMain.handle('partition:verifyBootDrive', async () => {
+    return await verifyBootDrive()
+  })
+
+  // ============================================================
+  // Phase 3: Windows Activation
+  // ============================================================
+  ipcMain.handle('activation:diagnose', async () => {
+    return await runActivationDiagnostics()
+  })
+
+  ipcMain.handle('activation:troubleshoot', async () => {
+    return await runActivationTroubleshooter()
+  })
+
+  // ============================================================
+  // Phase 3: Email/Account Setup
+  // ============================================================
+  ipcMain.handle('email:diagnose', async () => {
+    return await runEmailDiagnostics()
+  })
+
+  ipcMain.handle('email:autoConfigure', async (_event, args: { email: string }) => {
+    const safeEmail = args.email.replace(/[^a-zA-Z0-9@._+-]/g, '')
+    if (!safeEmail.includes('@') || safeEmail.length < 5) {
+      throw new Error('Invalid email address')
+    }
+    return await autoConfigureEmail(safeEmail)
+  })
+
+  ipcMain.handle('email:repairOutlook', async () => {
+    return await repairOutlookProfile()
+  })
+
+  ipcMain.handle('email:clearCredentials', async (_event, args: { target: string }) => {
+    // Allowlist: only safe characters for credential target names
+    const safeTarget = (args.target || '').replace(/[^a-zA-Z0-9@._:\/ -]/g, '')
+    return await clearEmailCredentials(safeTarget)
+  })
+
+  // ============================================================
+  // Phase 3: Phone Data Transfer
+  // ============================================================
+  ipcMain.handle('phone:diagnose', async () => {
+    return await runPhoneTransferDiagnostics()
+  })
+
+  ipcMain.handle('phone:guideUsbDebugging', async () => {
+    return await guideUsbDebugging()
+  })
+
+  ipcMain.handle('phone:pullFiles', async (_event, args: { sourcePath: string; destinationPath: string }) => {
+    const safeSrc = sanitizeFilePath(args.sourcePath)
+    const safeDest = sanitizeFilePath(args.destinationPath)
+    return await pullFilesViaAdb(safeSrc, safeDest)
+  })
+
+  // ============================================================
   // Full Scan
   // ============================================================
   ipcMain.handle('scan:quick', async () => {
@@ -540,7 +699,8 @@ async function runQuickScan(): Promise<ScanResult> {
   // Run all diagnostic modules in parallel with a global 120s timeout
   const QUICK_SCAN_TIMEOUT_MS = 120000
   const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery',
-    'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps']
+    'data-recovery', 'audio', 'bluetooth', 'printer', 'display', 'webcam', 'usb', 'india-apps',
+    'thermal', 'hardware', 'keyboard', 'gaming', 'partition', 'activation', 'email', 'phone']
 
   const allSettledPromise = Promise.allSettled([
     runPerformanceDiagnostics(),
@@ -555,7 +715,15 @@ async function runQuickScan(): Promise<ScanResult> {
     runDisplayDiagnostics(),
     runWebcamDiagnostics(),
     runUsbDiagnostics(),
-    runIndiaAppsDiagnostics()
+    runIndiaAppsDiagnostics(),
+    runOverheatingDiagnostics(),
+    runHardwareDiagnostics(),
+    runKeyboardTouchpadDiagnostics(),
+    runGamingDiagnostics(),
+    runPartitionBootDiagnostics(),
+    runActivationDiagnostics(),
+    runEmailDiagnostics(),
+    runPhoneTransferDiagnostics()
   ])
   const timeoutPromise = new Promise<PromiseSettledResult<DiagnosticResult[]>[]>((resolve) =>
     setTimeout(() => {

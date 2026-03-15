@@ -106,6 +106,56 @@ const api = {
   cleanChrome: () => ipcRenderer.invoke('india:cleanChrome'),
   enableDotNet35: () => ipcRenderer.invoke('india:enableDotNet35'),
 
+  // Phase 3: Overheating Analyzer
+  thermalDiagnose: () => ipcRenderer.invoke('thermal:diagnose'),
+  optimizeCooling: () => ipcRenderer.invoke('thermal:optimizeCooling'),
+  killHighCpu: () => ipcRenderer.invoke('thermal:killHighCpu'),
+
+  // Phase 3: Hardware Deep Diagnostics
+  hardwareDiagnose: () => ipcRenderer.invoke('hardware:diagnose'),
+  cpuStressTest: (durationSeconds: number) =>
+    ipcRenderer.invoke('hardware:stressTest', { durationSeconds }),
+  guideMemTest: () => ipcRenderer.invoke('hardware:guideMemTest'),
+
+  // Phase 3: Keyboard/Touchpad Fixer
+  keyboardDiagnose: () => ipcRenderer.invoke('keyboard:diagnose'),
+  fixFilterKeys: () => ipcRenderer.invoke('keyboard:fixFilterKeys'),
+  toggleTouchpad: (enable: boolean) =>
+    ipcRenderer.invoke('keyboard:toggleTouchpad', { enable }),
+  reinstallInputDrivers: () => ipcRenderer.invoke('keyboard:reinstallDrivers'),
+
+  // Phase 3: Gaming Optimizer
+  gamingDiagnose: () => ipcRenderer.invoke('gaming:diagnose'),
+  enableGameMode: () => ipcRenderer.invoke('gaming:enableGameMode'),
+  setHighPerformance: () => ipcRenderer.invoke('gaming:setHighPerformance'),
+  cleanupRamForGaming: () => ipcRenderer.invoke('gaming:cleanupRam'),
+  repairDirectX: () => ipcRenderer.invoke('gaming:repairDirectX'),
+  optimizeGpu: () => ipcRenderer.invoke('gaming:optimizeGpu'),
+
+  // Phase 3: Partition/Boot Manager
+  partitionDiagnose: () => ipcRenderer.invoke('partition:diagnose'),
+  repairBcd: () => ipcRenderer.invoke('partition:repairBcd'),
+  repairGrub: () => ipcRenderer.invoke('partition:repairGrub'),
+  verifyBootDrive: () => ipcRenderer.invoke('partition:verifyBootDrive'),
+
+  // Phase 3: Windows Activation
+  activationDiagnose: () => ipcRenderer.invoke('activation:diagnose'),
+  activationTroubleshoot: () => ipcRenderer.invoke('activation:troubleshoot'),
+
+  // Phase 3: Email/Account Setup
+  emailDiagnose: () => ipcRenderer.invoke('email:diagnose'),
+  autoConfigureEmail: (email: string) =>
+    ipcRenderer.invoke('email:autoConfigure', { email }),
+  repairOutlookProfile: () => ipcRenderer.invoke('email:repairOutlook'),
+  clearEmailCredentials: (target: string) =>
+    ipcRenderer.invoke('email:clearCredentials', { target }),
+
+  // Phase 3: Phone Data Transfer
+  phoneDiagnose: () => ipcRenderer.invoke('phone:diagnose'),
+  guideUsbDebugging: () => ipcRenderer.invoke('phone:guideUsbDebugging'),
+  pullPhoneFiles: (sourcePath: string, destinationPath: string) =>
+    ipcRenderer.invoke('phone:pullFiles', { sourcePath, destinationPath }),
+
   // Scan
   quickScan: () => ipcRenderer.invoke('scan:quick'),
   fullScan: (config: unknown) => ipcRenderer.invoke('scan:full', config),

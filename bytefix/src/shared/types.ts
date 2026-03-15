@@ -157,7 +157,7 @@ export interface FixResult {
 
 export interface FixChange {
   type: 'service' | 'registry' | 'file' | 'process' | 'network' | 'system' | 'driver' | 'device' | 'application'
-  action: 'disabled' | 'enabled' | 'modified' | 'deleted' | 'created' | 'restored' | 'killed' | 'reinstalled' | 'restarted' | 'repaired' | 'cleared' | 'reloaded' | 'power-cycled'
+  action: 'disabled' | 'enabled' | 'modified' | 'deleted' | 'created' | 'restored' | 'killed' | 'reinstalled' | 'restarted' | 'repaired' | 'cleared' | 'reloaded' | 'power-cycled' | 'optimized'
   target: string
   before?: string
   after?: string
@@ -381,6 +381,51 @@ export interface IPCChannels {
   'india:fixJavaBanking': { request: void; response: FixResult }
   'india:cleanChrome': { request: void; response: FixResult }
   'india:enableDotNet35': { request: void; response: FixResult }
+
+  // Phase 3: Overheating Analyzer
+  'thermal:diagnose': { request: void; response: DiagnosticResult[] }
+  'thermal:optimizeCooling': { request: void; response: FixResult }
+  'thermal:killHighCpu': { request: void; response: FixResult }
+
+  // Phase 3: Hardware Deep Diagnostics
+  'hardware:diagnose': { request: void; response: DiagnosticResult[] }
+  'hardware:stressTest': { request: { durationSeconds: number }; response: FixResult }
+  'hardware:guideMemTest': { request: void; response: FixResult }
+
+  // Phase 3: Keyboard/Touchpad Fixer
+  'keyboard:diagnose': { request: void; response: DiagnosticResult[] }
+  'keyboard:fixFilterKeys': { request: void; response: FixResult }
+  'keyboard:toggleTouchpad': { request: { enable: boolean }; response: FixResult }
+  'keyboard:reinstallDrivers': { request: void; response: FixResult }
+
+  // Phase 3: Gaming Optimizer
+  'gaming:diagnose': { request: void; response: DiagnosticResult[] }
+  'gaming:enableGameMode': { request: void; response: FixResult }
+  'gaming:setHighPerformance': { request: void; response: FixResult }
+  'gaming:cleanupRam': { request: void; response: FixResult }
+  'gaming:repairDirectX': { request: void; response: FixResult }
+  'gaming:optimizeGpu': { request: void; response: FixResult }
+
+  // Phase 3: Partition/Boot Manager
+  'partition:diagnose': { request: void; response: DiagnosticResult[] }
+  'partition:repairBcd': { request: void; response: FixResult }
+  'partition:repairGrub': { request: void; response: FixResult }
+  'partition:verifyBootDrive': { request: void; response: FixResult }
+
+  // Phase 3: Windows Activation
+  'activation:diagnose': { request: void; response: DiagnosticResult[] }
+  'activation:troubleshoot': { request: void; response: FixResult }
+
+  // Phase 3: Email/Account Setup
+  'email:diagnose': { request: void; response: DiagnosticResult[] }
+  'email:autoConfigure': { request: { email: string }; response: FixResult }
+  'email:repairOutlook': { request: void; response: FixResult }
+  'email:clearCredentials': { request: { target: string }; response: FixResult }
+
+  // Phase 3: Phone Data Transfer
+  'phone:diagnose': { request: void; response: DiagnosticResult[] }
+  'phone:guideUsbDebugging': { request: void; response: FixResult }
+  'phone:pullFiles': { request: { sourcePath: string; destinationPath: string }; response: FixResult }
 
   // Full Scan
   'scan:full': { request: ScanConfig; response: ScanResult }
