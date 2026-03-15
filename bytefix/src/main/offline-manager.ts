@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, net } from 'electron'
+import { ipcMain, BrowserWindow, net, app } from 'electron'
 import { logToFile } from './error-handler'
 
 interface QueuedAction {
@@ -72,25 +72,14 @@ function pingEndpoint(url: string, timeout: number): Promise<boolean> {
 
 function processQueue(): void {
   while (actionQueue.length > 0 && isOnline) {
-    const action = actionQueue[0]
-    try {
-      sendToRenderer('offline:replayAction', {
-        id: action.id,
-        type: action.type,
-        payload: action.payload,
-        timestamp: action.timestamp,
-        retries: action.retries
-      })
-      actionQueue.shift()
-    } catch {
-      action.retries++
-      if (action.retries >= MAX_RETRIES) {
-        logToFile('ERROR', 'offline', `Action failed after ${MAX_RETRIES} retries`, { id: action.id })
-        actionQueue.shift()
-        sendToRenderer('offline:actionFailed', { id: action.id, type: action.type })
-      }
-      break
-    }
+    const action = actionQueue.shift()!
+    sendToRenderer('offline:replayAction', {
+      id: action.id,
+      type: action.type,
+      payload: action.payload,
+      timestamp: action.timestamp
+    })
+    logToFile('INFO', 'offline', `Replayed queued action: ${action.type}`, { id: action.id })
   }
 }
 
@@ -101,9 +90,14 @@ export function setupOfflineManager(win: BrowserWindow): void {
   checkConnectivity()
 
   // Poll every 30 seconds
-  setInterval(() => {
+  const connectivityInterval = setInterval(() => {
     checkConnectivity()
   }, 30_000)
+
+  // Clean up interval on app quit
+  app.on('will-quit', () => {
+    clearInterval(connectivityInterval)
+  })
 
   // IPC handlers
   ipcMain.handle('offline:getStatus', () => ({ online: isOnline }))

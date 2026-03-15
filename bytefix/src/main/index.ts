@@ -11,9 +11,8 @@ import { setupOfflineManager } from './offline-manager'
 const logger = createLogger('main')
 
 let mainWindow: BrowserWindow | null = null
-
-// Setup global error handlers before anything else
-setupGlobalErrorHandlers()
+let autoUpdaterInitialized = false
+let offlineManagerInitialized = false
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -48,16 +47,23 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Setup auto-updater (only in production builds)
-  if (!is.dev) {
+  // Setup auto-updater (only in production builds, once only)
+  if (!is.dev && !autoUpdaterInitialized) {
     setupAutoUpdater(mainWindow)
+    autoUpdaterInitialized = true
   }
 
-  // Setup offline manager
-  setupOfflineManager(mainWindow)
+  // Setup offline manager (once only)
+  if (!offlineManagerInitialized) {
+    setupOfflineManager(mainWindow)
+    offlineManagerInitialized = true
+  }
 }
 
 app.whenReady().then(async () => {
+  // Setup global error handlers after app is ready (needs app.getPath)
+  setupGlobalErrorHandlers()
+
   electronApp.setAppUserModelId('com.bytefix.app')
 
   app.on('browser-window-created', (_, window) => {

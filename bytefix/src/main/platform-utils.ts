@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, statSync } from 'fs'
 import { createLogger } from './logger'
 
 const logger = createLogger('platform-utils')
@@ -74,12 +74,13 @@ export function getClamScanPath(): string {
 }
 
 /**
- * Safe file copy that uses the right command per platform
- * Windows: robocopy (falls back to copy), macOS/Linux: cp or rsync
+ * Safe file/directory copy that uses the right command per platform
+ * Windows: robocopy for directories, copy for files. macOS/Linux: rsync or cp
  */
 export function copyFileCommand(source: string, dest: string): { command: string; args: string[] } {
+  const isDir = existsSync(source) && statSync(source).isDirectory()
   if (isWindows()) {
-    if (isToolAvailable('robocopy')) {
+    if (isDir && isToolAvailable('robocopy')) {
       return { command: 'robocopy', args: [source, dest, '/E', '/R:1', '/W:1'] }
     }
     return { command: 'cmd', args: ['/c', 'copy', '/Y', source, dest] }
@@ -87,7 +88,7 @@ export function copyFileCommand(source: string, dest: string): { command: string
   if (isToolAvailable('rsync')) {
     return { command: 'rsync', args: ['-a', source, dest] }
   }
-  return { command: 'cp', args: ['-r', source, dest] }
+  return { command: 'cp', args: [isDir ? '-r' : '-f', source, dest] }
 }
 
 /**
