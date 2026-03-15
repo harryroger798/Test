@@ -1,6 +1,6 @@
 import { execSync, execFileSync, exec } from 'child_process'
 import { platform } from 'os'
-import { existsSync, statSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
+import { existsSync, statSync, lstatSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
 import { join } from 'path'
 import { createLogger } from '../logger'
 import type { StartupItem, CleanupItem, FixResult, FixChange, DiagnosticResult } from '../../shared/types'
@@ -553,7 +553,8 @@ function getDirSize(dirPath: string): number {
       for (const entry of entries.slice(0, 1000)) { // Limit to avoid hanging on huge dirs
         try {
           const entryPath = join(dirPath, entry)
-          const entryStat = statSync(entryPath)
+          const entryStat = lstatSync(entryPath)
+          if (entryStat.isSymbolicLink()) continue
           if (entryStat.isFile()) {
             total += entryStat.size
           } else if (entryStat.isDirectory()) {
@@ -579,7 +580,9 @@ function cleanDirectory(dirPath: string): void {
     for (const entry of entries) {
       const entryPath = join(dirPath, entry)
       try {
-        const stat = statSync(entryPath)
+        const stat = lstatSync(entryPath)
+        // Skip symlinks to prevent traversal outside directory
+        if (stat.isSymbolicLink()) continue
         // Only delete files older than 24 hours
         const ageMs = Date.now() - stat.mtimeMs
         if (ageMs < 86400000) continue

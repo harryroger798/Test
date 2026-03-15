@@ -1,6 +1,8 @@
 import { IpcMain } from 'electron'
 import { execSync, execFileSync } from 'child_process'
 import { nanoid } from 'nanoid'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 // Input sanitization helpers to prevent command injection
 function sanitizeDevicePath(device: string): string {
@@ -210,9 +212,9 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
           name: attr.name,
           value: attr.value,
           worst: attr.worst,
-          threshold: (attr.thresh as Record<string, unknown>)?.value ?? 0,
+          threshold: (attr.thresh as number) ?? 0,
           raw: String((attr.raw as Record<string, unknown>)?.value ?? ''),
-          status: (attr.value as number) <= ((attr.thresh as Record<string, unknown>)?.value as number ?? 0) ? 'critical' : 'ok'
+          status: (attr.value as number) <= ((attr.thresh as number) ?? 0) ? 'critical' : 'ok'
         }))
       }
     } catch {
@@ -269,7 +271,7 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     const safeScanId = args.scanId.replace(/[^a-zA-Z0-9_-]/g, '')
     if (!safeScanId) throw new Error('Invalid scan ID')
     // Placeholder - will generate PDF report
-    return { filePath: `/tmp/bytefix-report-${safeScanId}.txt` }
+    return { filePath: join(tmpdir(), `bytefix-report-${safeScanId}.txt`) }
   })
 
   // ============================================================
