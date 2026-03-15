@@ -186,9 +186,14 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('disk:getSmartData', async (_event, args: { device: string }) => {
     try {
       const safeDevice = sanitizeDevicePath(args.device);
-      const output = execSync(`smartctl -a ${safeDevice} --json 2>/dev/null || echo "{}"`, {
-        timeout: 30000, encoding: 'utf8'
-      })
+      let output: string
+      try {
+        output = execFileSync('smartctl', ['-a', safeDevice, '--json'], {
+          timeout: 30000, encoding: 'utf8'
+        })
+      } catch {
+        output = '{}'
+      }
       const data = JSON.parse(output)
       return {
         healthy: data?.smart_status?.passed ?? true,

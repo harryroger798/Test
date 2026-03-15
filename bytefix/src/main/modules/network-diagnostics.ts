@@ -211,9 +211,17 @@ export async function flushDns(): Promise<FixResult> {
   try {
     if (isWindows) {
       execSync('ipconfig /flushdns', { timeout: 5000, encoding: 'utf8' })
-      // Also set Google DNS as fallback
-      execSync('netsh interface ip set dns "Wi-Fi" static 8.8.8.8 primary 2>nul || true', { timeout: 5000 })
-      execSync('netsh interface ip add dns "Wi-Fi" 8.8.4.4 index=2 2>nul || true', { timeout: 5000 })
+      // Detect active network interface and set Google DNS as fallback
+      try {
+        const ifaceOutput = execSync(
+          'powershell -NoProfile -Command "(Get-NetAdapter | Where-Object { $_.Status -eq \'Up\' } | Select-Object -First 1).Name"',
+          { timeout: 5000, encoding: 'utf8' }
+        ).trim()
+        if (ifaceOutput) {
+          execSync(`netsh interface ip set dns "${ifaceOutput}" static 8.8.8.8 primary 2>nul || true`, { timeout: 5000 })
+          execSync(`netsh interface ip add dns "${ifaceOutput}" 8.8.4.4 index=2 2>nul || true`, { timeout: 5000 })
+        }
+      } catch { /* DNS fallback is best-effort */ }
     } else if (isMac) {
       execSync('sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder 2>/dev/null || true', { timeout: 5000 })
     } else {
