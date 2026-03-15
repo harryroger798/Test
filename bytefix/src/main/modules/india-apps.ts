@@ -5,7 +5,7 @@
 // ============================================================
 
 import { execSync } from 'child_process'
-import { existsSync, readdirSync, statSync, lstatSync, rmSync, mkdirSync, writeFileSync, appendFileSync } from 'fs'
+import { existsSync, readdirSync, statSync, lstatSync, rmSync, mkdirSync, writeFileSync, appendFileSync, unlinkSync } from 'fs'
 import { join, resolve, normalize } from 'path'
 import { platform, homedir } from 'os'
 import { createLogger } from '../logger'
@@ -766,7 +766,13 @@ export async function cleanChrome(): Promise<FixResult> {
             const entries = readdirSync(cachePath)
             for (const entry of entries) {
               try {
-                rmSync(join(cachePath, entry), { recursive: true, force: true })
+                const entryPath = join(cachePath, entry)
+                const stat = lstatSync(entryPath) // lstat doesn't follow symlinks
+                if (stat.isSymbolicLink()) {
+                  unlinkSync(entryPath) // remove the symlink itself, not its target
+                } else {
+                  rmSync(entryPath, { recursive: true, force: true })
+                }
               } catch { /* individual file in use */ }
             }
             totalCleaned++

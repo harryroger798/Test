@@ -361,7 +361,8 @@ export async function clearBluetoothCache(): Promise<FixResult> {
     } else {
       try {
         // Remove only contents, not the directory itself — preserves /var/lib/bluetooth for the service
-        execFileSync('pkexec', ['sh', '-c', 'rm -rf /var/lib/bluetooth/*'], { timeout: 30000, stdio: 'pipe' })
+        // Use find -delete instead of sh -c to avoid granting a root shell via pkexec
+        execFileSync('pkexec', ['find', '/var/lib/bluetooth/', '-mindepth', '1', '-delete'], { timeout: 30000, stdio: 'pipe' })
         execFileSync('pkexec', ['systemctl', 'restart', 'bluetooth'], { timeout: 30000, stdio: 'pipe' })
         details.push('Bluetooth cache cleared and service restarted')
         changes.push({ type: 'file', action: 'cleared', target: '/var/lib/bluetooth' })
