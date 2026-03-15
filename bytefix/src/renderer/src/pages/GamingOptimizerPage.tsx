@@ -17,7 +17,10 @@ export function GamingOptimizerPage(): JSX.Element {
   async function runFix(action: string, fn: () => Promise<FixResult>): Promise<void> {
     setLoading(action)
     try { setResult(await fn()) }
-    catch (err) { console.error(err) }
+    catch (err) {
+      console.error(err)
+      setResult({ success: false, module: 'gaming', action, description: 'Operation failed', details: [String(err)], changes: [], rollbackAvailable: false })
+    }
     finally { setLoading('') }
   }
 
@@ -93,7 +96,7 @@ export function GamingOptimizerPage(): JSX.Element {
         </div>
         <div className="card">
           <h3 className="font-medium text-white mb-2">Cleanup RAM</h3>
-          <p className="text-sm text-gray-400 mb-3">Kills background apps (Teams, Discord, Chrome, etc.) to free RAM for gaming.</p>
+          <p className="text-sm text-gray-400 mb-3">Kills background apps (Teams, Discord, Spotify, Steam, etc.) to free RAM for gaming.</p>
           <button onClick={() => runFix('ram', () => window.bytefix.cleanupRamForGaming())} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'ram' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gamepad2 className="w-4 h-4" />}
             Cleanup RAM

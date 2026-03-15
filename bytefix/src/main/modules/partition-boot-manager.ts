@@ -558,7 +558,6 @@ export async function verifyBootDrive(): Promise<FixResult> {
         details.push('Boot drive filesystem is healthy')
       } else {
         details.push('Issues detected. Run chkdsk /r from Recovery Environment to fix.')
-        changes.push({ type: 'system', action: 'repaired', target: 'Boot drive scan' })
       }
     } catch {
       details.push('chkdsk requires administrator privileges')
@@ -577,7 +576,6 @@ export async function verifyBootDrive(): Promise<FixResult> {
       if (fsErrors.length > 0) {
         details.push('Filesystem errors detected in kernel log:')
         details.push(...fsErrors.slice(0, 10))
-        changes.push({ type: 'system', action: 'repaired', target: 'Filesystem error detection' })
       } else {
         details.push('No filesystem errors in kernel log')
       }

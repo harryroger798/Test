@@ -19,7 +19,10 @@ export function PhoneTransferPage(): JSX.Element {
   async function runFix(action: string, fn: () => Promise<FixResult>): Promise<void> {
     setLoading(action)
     try { setResult(await fn()) }
-    catch (err) { console.error(err) }
+    catch (err) {
+      console.error(err)
+      setResult({ success: false, module: 'phone-transfer', action, description: 'Operation failed', details: [String(err)], changes: [], rollbackAvailable: false })
+    }
     finally { setLoading('') }
   }
 
@@ -100,7 +103,7 @@ export function PhoneTransferPage(): JSX.Element {
               type="text"
               value={destPath}
               onChange={(e) => setDestPath(e.target.value)}
-              placeholder="Destination (e.g. C:\PhoneBackup)"
+              placeholder="Destination (e.g. C:\\PhoneBackup)"
               className="w-full bg-surface-lighter border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500"
             />
           </div>

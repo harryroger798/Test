@@ -137,7 +137,7 @@ const EMAIL_PROVIDERS: EmailProviderConfig[] = [
 function lookupProvider(email: string): EmailProviderConfig | undefined {
   const domain = email.split('@')[1]?.toLowerCase()
   if (!domain) return undefined
-  return EMAIL_PROVIDERS.find(p => p.domains.some(d => domain.endsWith(d)))
+  return EMAIL_PROVIDERS.find(p => p.domains.some(d => domain === d || domain.endsWith('.' + d)))
 }
 
 // ============================================================
@@ -347,7 +347,7 @@ export async function clearEmailCredentials(target: string): Promise<FixResult> 
             timeout: 5000, encoding: 'utf8'
           })
           details.push(`Removed credential: ${target}`)
-          changes.push({ type: 'credential', action: 'deleted', target })
+          changes.push({ type: 'system', action: 'deleted', target })
         } catch {
           details.push(`Could not remove credential: ${target}`)
         }

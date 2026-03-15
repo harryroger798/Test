@@ -17,7 +17,10 @@ export function KeyboardTouchpadPage(): JSX.Element {
   async function runFix(action: string, fn: () => Promise<FixResult>): Promise<void> {
     setLoading(action)
     try { setResult(await fn()) }
-    catch (err) { console.error(err) }
+    catch (err) {
+      console.error(err)
+      setResult({ success: false, module: 'keyboard', action, description: 'Operation failed', details: [String(err)], changes: [], rollbackAvailable: false })
+    }
     finally { setLoading('') }
   }
 
@@ -94,7 +97,7 @@ export function KeyboardTouchpadPage(): JSX.Element {
         <div className="card">
           <h3 className="font-medium text-white mb-2">Disable Touchpad</h3>
           <p className="text-sm text-gray-400 mb-3">Disables touchpad (useful when using external mouse to prevent accidental taps).</p>
-          <button onClick={() => runFix('touchpad-off', () => window.bytefix.toggleTouchpad(false))} disabled={!!loading} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { if (window.confirm('Disable touchpad? You will need an external mouse to navigate.')) runFix('touchpad-off', () => window.bytefix.toggleTouchpad(false)) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'touchpad-off' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Keyboard className="w-4 h-4" />}
             Disable Touchpad
           </button>

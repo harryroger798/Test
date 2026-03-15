@@ -19,7 +19,10 @@ export function EmailSetupPage(): JSX.Element {
   async function runFix(action: string, fn: () => Promise<FixResult>): Promise<void> {
     setLoading(action)
     try { setResult(await fn()) }
-    catch (err) { console.error(err) }
+    catch (err) {
+      console.error(err)
+      setResult({ success: false, module: 'email-setup', action, description: 'Operation failed', details: [String(err)], changes: [], rollbackAvailable: false })
+    }
     finally { setLoading('') }
   }
 
@@ -114,7 +117,7 @@ export function EmailSetupPage(): JSX.Element {
               className="flex-1 bg-surface-lighter border border-gray-600 rounded px-3 py-1.5 text-sm text-white placeholder-gray-500"
             />
           </div>
-          <button onClick={() => runFix('creds', () => window.bytefix.clearEmailCredentials(credTarget))} disabled={!!loading} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { if (window.confirm(credTarget ? `Clear credentials matching "${credTarget}"?` : 'Clear all stored email credentials?')) runFix('creds', () => window.bytefix.clearEmailCredentials(credTarget)) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'creds' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
             Clear Credentials
           </button>

@@ -17,7 +17,10 @@ export function OverheatingPage(): JSX.Element {
   async function runFix(action: string, fn: () => Promise<FixResult>): Promise<void> {
     setLoading(action)
     try { setResult(await fn()) }
-    catch (err) { console.error(err) }
+    catch (err) {
+      console.error(err)
+      setResult({ success: false, module: 'thermal', action, description: 'Operation failed', details: [String(err)], changes: [], rollbackAvailable: false })
+    }
     finally { setLoading('') }
   }
 
