@@ -84,6 +84,73 @@ export async function initDatabase(): Promise<void> {
       result TEXT,
       error TEXT
     );
+
+    -- Phase 4: CRM / Business Layer tables
+    CREATE TABLE IF NOT EXISTS customers (
+      id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      email TEXT,
+      address TEXT,
+      gstin TEXT,
+      state_code TEXT,
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS repair_jobs (
+      id TEXT PRIMARY KEY,
+      ticket_number TEXT NOT NULL UNIQUE,
+      customer_id TEXT NOT NULL REFERENCES customers(id),
+      device_brand TEXT,
+      device_model TEXT,
+      device_serial TEXT,
+      complaint TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'received',
+      diagnosis TEXT,
+      estimated_cost REAL,
+      final_cost REAL,
+      technician TEXT,
+      promised_date INTEGER,
+      notes TEXT,
+      scan_id TEXT REFERENCES scans(id),
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY,
+      invoice_number TEXT NOT NULL UNIQUE,
+      job_id TEXT REFERENCES repair_jobs(id),
+      customer_id TEXT NOT NULL REFERENCES customers(id),
+      shop_name TEXT NOT NULL,
+      shop_gstin TEXT,
+      shop_address TEXT,
+      shop_state_code TEXT,
+      customer_gstin TEXT,
+      customer_state_code TEXT,
+      is_intra_state INTEGER NOT NULL DEFAULT 1,
+      subtotal REAL NOT NULL DEFAULT 0,
+      cgst_rate REAL NOT NULL DEFAULT 9,
+      cgst_amount REAL NOT NULL DEFAULT 0,
+      sgst_rate REAL NOT NULL DEFAULT 9,
+      sgst_amount REAL NOT NULL DEFAULT 0,
+      igst_rate REAL NOT NULL DEFAULT 0,
+      igst_amount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      line_items TEXT NOT NULL DEFAULT '[]',
+      payment_method TEXT,
+      payment_status TEXT NOT NULL DEFAULT 'pending',
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+    CREATE INDEX IF NOT EXISTS idx_repair_jobs_customer ON repair_jobs(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_repair_jobs_status ON repair_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_invoices_job ON invoices(job_id);
   `)
 }
 
