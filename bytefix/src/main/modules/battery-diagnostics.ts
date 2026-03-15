@@ -42,11 +42,11 @@ export async function getBatteryReport(): Promise<BatteryInfo> {
         const html = readFileSync(reportPath, 'utf8')
         // Parse design capacity
         const designMatch = html.match(/DESIGN CAPACITY.*?(\d[\d,]+)\s*mWh/i)
-        if (designMatch) info.designCapacity = parseInt(designMatch[1].replace(',', ''))
+        if (designMatch) info.designCapacity = parseInt(designMatch[1].replace(/,/g, ''))
         // Parse full charge capacity
         const fullMatch = html.match(/FULL CHARGE CAPACITY.*?(\d[\d,]+)\s*mWh/i)
         if (fullMatch) {
-          info.currentCapacity = parseInt(fullMatch[1].replace(',', ''))
+          info.currentCapacity = parseInt(fullMatch[1].replace(/,/g, ''))
           if (info.designCapacity > 0) {
             info.healthPercent = Math.round((info.currentCapacity / info.designCapacity) * 100)
           }

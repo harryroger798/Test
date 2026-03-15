@@ -1,4 +1,4 @@
-import { execSync, exec } from 'child_process'
+import { execSync, execFileSync, exec } from 'child_process'
 import { platform } from 'os'
 import { existsSync, statSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
 import { join } from 'path'
@@ -163,10 +163,29 @@ export async function getStartupItems(): Promise<StartupItem[]> {
   return items
 }
 
+// Validate registry value name: only allow alphanumeric, spaces, hyphens, underscores, dots
+function sanitizeRegistryValueName(name: string): string {
+  if (!/^[a-zA-Z0-9 _\-\.]+$/.test(name)) {
+    throw new Error(`Invalid startup item name: ${name}`)
+  }
+  return name
+}
+
+// Validate file path: reject shell metacharacters
+function sanitizeFilePath(p: string): string {
+  if (/[;&|`$<>!\n\r]/.test(p)) {
+    throw new Error(`Invalid file path: ${p}`)
+  }
+  return p
+}
+
 export async function disableStartupItem(name: string, path: string): Promise<FixResult> {
   const changes: FixChange[] = []
 
   try {
+    const safeName = sanitizeRegistryValueName(name)
+    const safePath = sanitizeFilePath(path)
+
     if (isWindows) {
       // Remove from registry Run key
       const regPaths = [
@@ -175,12 +194,12 @@ export async function disableStartupItem(name: string, path: string): Promise<Fi
       ]
       for (const regPath of regPaths) {
         try {
-          execSync(`reg delete "${regPath}" /v "${name}" /f`, { timeout: 5000, encoding: 'utf8' })
+          execFileSync('reg', ['delete', regPath, '/v', safeName, '/f'], { timeout: 5000, encoding: 'utf8' })
           changes.push({
             type: 'registry',
             action: 'deleted',
-            target: `${regPath}\\${name}`,
-            before: path,
+            target: `${regPath}\\${safeName}`,
+            before: safePath,
             after: 'Removed'
           })
           break
@@ -189,16 +208,16 @@ export async function disableStartupItem(name: string, path: string): Promise<Fi
         }
       }
     } else if (isMac) {
-      if (existsSync(path)) {
-        execSync(`launchctl unload "${path}" 2>/dev/null || true`, { timeout: 5000 })
-        changes.push({ type: 'service', action: 'disabled', target: path })
+      if (existsSync(safePath)) {
+        execFileSync('launchctl', ['unload', safePath], { timeout: 5000 })
+        changes.push({ type: 'service', action: 'disabled', target: safePath })
       }
     } else {
       // Linux - rename .desktop file
-      if (existsSync(path)) {
-        const disabledPath = path + '.disabled'
-        execSync(`mv "${path}" "${disabledPath}"`, { timeout: 5000 })
-        changes.push({ type: 'file', action: 'modified', target: path, after: disabledPath })
+      if (existsSync(safePath)) {
+        const disabledPath = safePath + '.disabled'
+        execFileSync('mv', [safePath, disabledPath], { timeout: 5000 })
+        changes.push({ type: 'file', action: 'modified', target: safePath, after: disabledPath })
       }
     }
 
@@ -413,12 +432,12 @@ export async function optimizeDisk(drive: string): Promise<FixResult> {
 
       if (mediaType.includes('SSD')) {
         // TRIM for SSD
-        execSync(`defrag ${drive} /L /U`, { timeout: 120000, encoding: 'utf8' })
+        execFileSync('defrag', [drive, '/L', '/U'], { timeout: 120000, encoding: 'utf8' })
         details.push(`TRIM optimization run on ${drive} (SSD)`)
         changes.push({ type: 'system', action: 'modified', target: `${drive} TRIM` })
       } else {
         // Defrag for HDD
-        execSync(`defrag ${drive} /O /U`, { timeout: 300000, encoding: 'utf8' })
+        execFileSync('defrag', [drive, '/O', '/U'], { timeout: 300000, encoding: 'utf8' })
         details.push(`Defragmentation run on ${drive} (HDD)`)
         changes.push({ type: 'system', action: 'modified', target: `${drive} defrag` })
       }

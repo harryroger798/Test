@@ -17,11 +17,11 @@ function sanitizeDevicePath(device: string): string {
 }
 
 function sanitizeDriveLetter(drive: string): string {
-  const safe = drive.replace(/[^a-zA-Z:\\]/g, '');
-  if (!safe || safe.length > 3) {
+  const normalized = drive.trim()
+  if (!/^[a-zA-Z]:\\?$/.test(normalized)) {
     throw new Error(`Invalid drive letter: ${drive}`);
   }
-  return safe;
+  return `${normalized[0].toUpperCase()}:`;
 }
 
 function sanitizeInterfaceName(iface: string): string {
@@ -187,16 +187,18 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     try {
       const safeDevice = sanitizeDevicePath(args.device);
       let output: string
+      let smartctlFailed = false
       try {
         output = execFileSync('smartctl', ['-a', safeDevice, '--json'], {
           timeout: 30000, encoding: 'utf8'
         })
       } catch {
         output = '{}'
+        smartctlFailed = true
       }
       const data = JSON.parse(output)
       return {
-        healthy: data?.smart_status?.passed ?? true,
+        healthy: smartctlFailed ? false : (data?.smart_status?.passed ?? false),
         temperature: data?.temperature?.current ?? 0,
         powerOnHours: data?.power_on_time?.hours ?? 0,
         reallocatedSectors: 0,
@@ -215,9 +217,10 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
       }
     } catch {
       return {
-        healthy: true, temperature: 0, powerOnHours: 0,
+        healthy: false, temperature: 0, powerOnHours: 0,
         reallocatedSectors: 0, pendingSectors: 0, uncorrectableSectors: 0,
-        powerCycleCount: 0, attributes: []
+        powerCycleCount: 0, attributes: [],
+        error: 'Failed to read SMART data'
       }
     }
   })
@@ -226,7 +229,7 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     try {
       if (process.platform === 'win32') {
         const safeDrive = sanitizeDriveLetter(args.drive);
-        const output = execSync(`chkdsk ${safeDrive} /scan`, { timeout: 300000, encoding: 'utf8' })
+        const output = execFileSync('chkdsk', [safeDrive, '/scan'], { timeout: 300000, encoding: 'utf8' })
         return {
           success: true, module: 'disk', action: 'chkdsk',
           description: 'Disk check completed', details: [output.substring(0, 500)],
@@ -262,8 +265,11 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   // Reports
   // ============================================================
   ipcMain.handle('report:generate', async (_event, args: { scanId: string }) => {
+    // Sanitize scanId to prevent path traversal
+    const safeScanId = args.scanId.replace(/[^a-zA-Z0-9_-]/g, '')
+    if (!safeScanId) throw new Error('Invalid scan ID')
     // Placeholder - will generate PDF report
-    return { filePath: `/tmp/bytefix-report-${args.scanId}.txt` }
+    return { filePath: `/tmp/bytefix-report-${safeScanId}.txt` }
   })
 
   // ============================================================
@@ -299,11 +305,16 @@ async function runQuickScan(): Promise<ScanResult> {
     runBatteryDiagnostics()
   ])
 
-  if (perfResults.status === 'fulfilled') diagnostics.push(...perfResults.value)
-  if (osResults.status === 'fulfilled') diagnostics.push(...osResults.value)
-  if (malwareResults.status === 'fulfilled') diagnostics.push(...malwareResults.value)
-  if (networkResults.status === 'fulfilled') diagnostics.push(...networkResults.value)
-  if (batteryResults.status === 'fulfilled') diagnostics.push(...batteryResults.value)
+  const moduleNames = ['performance', 'os-repair', 'malware', 'network', 'battery']
+  const allResults = [perfResults, osResults, malwareResults, networkResults, batteryResults]
+  for (let i = 0; i < allResults.length; i++) {
+    const result = allResults[i]
+    if (result.status === 'fulfilled') {
+      diagnostics.push(...result.value)
+    } else {
+      logger.warn(`Module ${moduleNames[i]} scan failed: ${result.reason}`)
+    }
+  }
 
   const endTime = Date.now()
   let systemSnapshot: SystemInfo | undefined
