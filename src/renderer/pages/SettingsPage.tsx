@@ -988,6 +988,51 @@ export const SettingsPage: React.FC = () => {
             </div>
           </section>
 
+          {/* Open Source Licenses */}
+          <section className="bg-card border border-border rounded-xl p-5 hover-lift transition-all duration-200 animate-slide-in">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+              <FileText size={16} className="text-primary" />
+              Open Source Licenses
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              GrabTube uses the following open-source software, each invoked as a standalone binary:
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-3 py-2 bg-secondary/30 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-foreground">FFmpeg</span>
+                  <span className="text-xs text-muted-foreground ml-2">Media processing</span>
+                </div>
+                <span className="text-xs text-muted-foreground">GPLv3</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 bg-secondary/30 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-foreground">yt-dlp</span>
+                  <span className="text-xs text-muted-foreground ml-2">Video extraction</span>
+                </div>
+                <span className="text-xs text-muted-foreground">Unlicense</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 bg-secondary/30 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-foreground">Deno</span>
+                  <span className="text-xs text-muted-foreground ml-2">JS runtime</span>
+                </div>
+                <span className="text-xs text-muted-foreground">MIT</span>
+              </div>
+              <div className="flex items-center justify-between px-3 py-2 bg-secondary/30 rounded-lg">
+                <div>
+                  <span className="text-xs font-medium text-foreground">bgutil-pot-provider</span>
+                  <span className="text-xs text-muted-foreground ml-2">POT tokens</span>
+                </div>
+                <span className="text-xs text-muted-foreground">MIT</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Full license texts are included in the <code className="px-1 py-0.5 bg-secondary/50 rounded text-xs">licenses/</code> folder of the installation directory.
+              FFmpeg source: <a href="https://github.com/BtbN/FFmpeg-Builds" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">github.com/BtbN/FFmpeg-Builds</a>
+            </p>
+          </section>
+
           {/* Disclaimer */}
           <div className="text-xs text-muted-foreground text-center py-4">
             <p>

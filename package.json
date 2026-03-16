@@ -92,6 +92,13 @@
           "!**/ffmpeg-master-*/**",
           "!**/ffmpeg-*-static/**"
         ]
+      },
+      {
+        "from": "resources/licenses",
+        "to": "licenses",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

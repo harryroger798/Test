@@ -1,0 +1,58 @@
+================================================================================
+THIRD-PARTY SOFTWARE LICENSES — GrabTube
+================================================================================
+
+GrabTube bundles the following third-party open-source software. Each component
+is distributed as a standalone binary and invoked via command line (not linked
+as a library). Full license texts are provided below.
+
+--------------------------------------------------------------------------------
+1. FFmpeg — Media Processing
+--------------------------------------------------------------------------------
+Website:  https://ffmpeg.org
+Source:   https://github.com/BtbN/FFmpeg-Builds
+License:  GNU General Public License v3.0 (GPLv3)
+
+FFmpeg is used as an external binary for media conversion and processing.
+GrabTube invokes FFmpeg via subprocess (command line) and does not link
+against FFmpeg libraries.
+
+The full text of the GPLv3 license is provided in: GPL-3.0.txt
+
+--------------------------------------------------------------------------------
+2. yt-dlp — Video Downloader
+--------------------------------------------------------------------------------
+Website:  https://github.com/yt-dlp/yt-dlp
+License:  The Unlicense
+
+yt-dlp is used as an external binary for extracting video/audio streams
+from supported websites.
+
+The full text of The Unlicense is provided in: UNLICENSE.txt
+
+--------------------------------------------------------------------------------
+3. Deno — JavaScript Runtime
+--------------------------------------------------------------------------------
+Website:  https://deno.land
+Source:   https://github.com/denoland/deno
+License:  MIT License
+
+Deno is used as an external runtime for YouTube JavaScript extraction
+required by yt-dlp.
+
+The full text of the MIT License (Deno) is provided in: MIT-DENO.txt
+
+--------------------------------------------------------------------------------
+4. bgutil-ytdlp-pot-provider-rs — POT Token Provider
+--------------------------------------------------------------------------------
+Website:  https://github.com/jim60105/bgutil-ytdlp-pot-provider-rs
+License:  MIT License
+
+Used as an external binary to generate Proof of Origin Tokens for YouTube
+downloads.
+
+The full text of the MIT License is provided in: MIT-POT-PROVIDER.txt
+
+================================================================================
+END OF THIRD-PARTY LICENSES
+================================================================================
