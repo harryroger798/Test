@@ -22,9 +22,9 @@ import { app } from 'electron';
 const LICENSE_SERVER_URL = 'https://grabtube-license.grabtube-app.workers.dev';
 
 // HMAC secret for signing local license files (machine-specific so files can't be copied between machines)
+// Uses only truly stable components (platform + arch) — hostname is excluded because users can rename their machine.
 function deriveLocalSecret(seed: string): string {
   const machineSalt = [
-    os.hostname(),
     os.platform(),
     os.arch(),
   ].join(':');
@@ -94,6 +94,7 @@ const REVALIDATION_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 export class LicenseManager {
   private licensePath: string;
   private counterPath: string;
+  private deviceIdPath: string;
   private state: LicenseState;
   private dailyDownloadCount: number = 0;
   private dailyCountDate: string = '';
@@ -103,6 +104,7 @@ export class LicenseManager {
     const userDataPath = app?.getPath?.('userData') || path.join(process.env.HOME || '', '.grabtube');
     this.licensePath = path.join(userDataPath, 'license.dat');
     this.counterPath = path.join(userDataPath, 'counter.dat');
+    this.deviceIdPath = path.join(userDataPath, 'device-id.dat');
     this.state = this.loadState();
     this.loadCounter();
   }
@@ -114,7 +116,7 @@ export class LicenseManager {
    * Device ID is mixed in so signed files cannot be copied between machines.
    */
   private signData(data: string): string {
-    const key = LICENSE_HMAC_SECRET + this.generateDeviceId();
+    const key = LICENSE_HMAC_SECRET + this.getOrCreateDeviceId();
     return crypto.createHmac('sha256', key).update(data).digest('hex');
   }
 
@@ -180,7 +182,7 @@ export class LicenseManager {
       return {
         tier: (signedData.tier as LicenseTier) || 'free',
         key: (signedData.key as string) || '',
-        deviceId: (signedData.deviceId as string) || this.generateDeviceId(),
+        deviceId: (signedData.deviceId as string) || this.getOrCreateDeviceId(),
         activated: (signedData.activated as boolean) || false,
         validatedAt: (signedData.validatedAt as string) || '',
         maxDevices: (signedData.maxDevices as number) || 0,
@@ -198,7 +200,7 @@ export class LicenseManager {
         const state: LicenseState = {
           tier: 'free', // Don't trust plaintext tier — will be re-validated from server
           key: data.key || '',
-          deviceId: data.deviceId || this.generateDeviceId(),
+          deviceId: data.deviceId || this.getOrCreateDeviceId(),
           activated: !!(data.key), // Mark as activated only if key exists
           validatedAt: '', // Force immediate re-validation
           maxDevices: 0,
@@ -218,7 +220,7 @@ export class LicenseManager {
     return {
       tier: 'free',
       key: '',
-      deviceId: this.generateDeviceId(),
+      deviceId: this.getOrCreateDeviceId(),
       activated: false,
       validatedAt: '',
       maxDevices: 0,
@@ -286,21 +288,52 @@ export class LicenseManager {
     });
   }
 
-  // Generate a unique device ID based on hardware characteristics
+  /**
+   * Get or create a stable device ID.
+   * The device ID is persisted to a plain file so it survives restarts even if
+   * network interfaces, hostname, or other volatile OS properties change.
+   * Only generates a new ID on first run; all subsequent runs read from disk.
+   */
+  private getOrCreateDeviceId(): string {
+    // 1. Try reading persisted device ID
+    try {
+      if (fs.existsSync(this.deviceIdPath)) {
+        const persisted = fs.readFileSync(this.deviceIdPath, 'utf-8').trim();
+        if (persisted && /^[a-f0-9]{32}$/.test(persisted)) {
+          return persisted;
+        }
+      }
+    } catch { /* file read failed, generate new */ }
+
+    // 2. Generate new device ID from stable hardware characteristics only
+    //    Excludes: os.hostname() (user can rename), os.networkInterfaces() MACs (change on macOS after restart)
+    //    Includes: platform, arch, CPU model, CPU count, total memory — these never change for the same machine
+    const id = this.generateDeviceId();
+
+    // 3. Persist for future runs
+    try {
+      const dir = path.dirname(this.deviceIdPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.deviceIdPath, id);
+    } catch { /* persist failed, still return the ID */ }
+
+    return id;
+  }
+
+  // Generate a unique device ID based on stable hardware characteristics
+  // NOTE: This is only called once (on first run). The result is persisted by getOrCreateDeviceId().
   private generateDeviceId(): string {
     const components = [
-      os.hostname(),
       os.platform(),
       os.arch(),
       os.cpus()[0]?.model || 'unknown-cpu',
       os.totalmem().toString(),
-      // Add higher-entropy components: network interface MACs and CPU count
       os.cpus().length.toString(),
-      ...Object.values(os.networkInterfaces())
-        .flat()
-        .filter((iface): iface is NonNullable<typeof iface> => !!iface && !iface.internal)
-        .map(iface => iface.mac)
-        .filter(mac => mac && mac !== '00:00:00:00:00:00'),
+      // Add hostname as a soft signal (helps differentiate machines with identical specs)
+      // but since this is only called once and persisted, hostname changes won't affect it
+      os.hostname(),
     ];
     return crypto.createHash('sha256').update(components.join('|')).digest('hex').substring(0, 32);
   }

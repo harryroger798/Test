@@ -441,9 +441,50 @@ async function handleActivate(request: Request, env: Env): Promise<Response> {
   ).bind(key).first() as { count: number };
 
   if (activeCount.count >= license.max_devices) {
-    return errorResponse(
-      `Device limit reached (${activeCount.count}/${license.max_devices}). Deactivate another device first.`
-    );
+    // Auto-swap: If the new device name shares the same hostname as an existing active device,
+    // it's likely the same machine with a changed device fingerprint (e.g. after OS update,
+    // network interface change on macOS, etc.). Auto-deactivate the old device and continue.
+    if (deviceName) {
+      // Extract hostname from device name format: "platform release - hostname"
+      const newHostname = deviceName.split(' - ').pop()?.trim();
+      if (newHostname) {
+        const existingDevices = await env.DB.prepare(
+          'SELECT device_id, device_name FROM activations WHERE license_key = ? AND active = 1'
+        ).bind(key).all();
+
+        for (const row of existingDevices.results || []) {
+          const existingDevice = row as { device_id: string; device_name: string };
+          const existingHostname = (existingDevice.device_name || '').split(' - ').pop()?.trim();
+          if (existingHostname && existingHostname === newHostname && existingDevice.device_id !== deviceId) {
+            // Same hostname, different device ID — auto-swap (kick old device, activate new one)
+            await env.DB.prepare(
+              'UPDATE activations SET active = 0 WHERE license_key = ? AND device_id = ?'
+            ).bind(key, existingDevice.device_id).run();
+            // Proceed to activation below (don't return error)
+            break;
+          }
+        }
+
+        // Re-check count after potential auto-swap
+        const newCount = await env.DB.prepare(
+          'SELECT COUNT(*) as count FROM activations WHERE license_key = ? AND active = 1'
+        ).bind(key).first() as { count: number };
+
+        if (newCount.count >= license.max_devices) {
+          return errorResponse(
+            `Device limit reached (${newCount.count}/${license.max_devices}). Deactivate another device first.`
+          );
+        }
+      } else {
+        return errorResponse(
+          `Device limit reached (${activeCount.count}/${license.max_devices}). Deactivate another device first.`
+        );
+      }
+    } else {
+      return errorResponse(
+        `Device limit reached (${activeCount.count}/${license.max_devices}). Deactivate another device first.`
+      );
+    }
   }
 
   if (deactivated) {
