@@ -1,0 +1,153 @@
+name: SharewareOnSale Forum Monitor
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Allow manual trigger for testing
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check forum for new posts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -e
+
+          FORUM_URL="https://sharewareonsale.com/discuss/topic/grabtube-pro-mar-16-2026"
+          CACHE_URL="https://api.github.com/repos/${{ github.repository }}/actions/variables/FORUM_POST_COUNT"
+
+          # Fetch the forum page
+          echo "Fetching forum page..."
+          PAGE=$(curl -sL --max-time 30 "$FORUM_URL" || echo "FETCH_FAILED")
+
+          if [ "$PAGE" = "FETCH_FAILED" ]; then
+            echo "Failed to fetch forum page, skipping this run"
+            exit 0
+          fi
+
+          # Extract post count from "Viewing X posts (of Y total)"
+          CURRENT_COUNT=$(echo "$PAGE" | grep -oP 'Viewing \d+ post[s]? \(of \K\d+' | head -1 || echo "0")
+          echo "Current post count: $CURRENT_COUNT"
+
+          if [ -z "$CURRENT_COUNT" ] || [ "$CURRENT_COUNT" = "0" ]; then
+            echo "Could not parse post count, skipping"
+            exit 0
+          fi
+
+          # Get the stored post count from GitHub Actions variable
+          STORED_COUNT="0"
+          STORED_RESPONSE=$(curl -sL -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "$CACHE_URL" 2>/dev/null || echo "")
+          
+          HTTP_CODE=$(echo "$STORED_RESPONSE" | tail -1)
+          if [ "$HTTP_CODE" = "200" ]; then
+            STORED_COUNT=$(echo "$STORED_RESPONSE" | head -n -1 | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])" 2>/dev/null || echo "0")
+          fi
+          echo "Stored post count: $STORED_COUNT"
+
+          # Compare counts
+          if [ "$CURRENT_COUNT" -gt "$STORED_COUNT" ] 2>/dev/null; then
+            NEW_POSTS=$((CURRENT_COUNT - STORED_COUNT))
+            echo "🔔 $NEW_POSTS new post(s) detected!"
+
+            # Extract the latest posts content
+            # Get usernames and post snippets from the page
+            LATEST_USERS=$(echo "$PAGE" | grep -oP 'class="bbp-author-name"[^>]*>\K[^<]+' | tail -"$NEW_POSTS" || echo "Unknown user")
+            
+            # Extract post content (simplified - get text between reply divs)
+            LATEST_CONTENT=$(echo "$PAGE" | python3 -c "
+          import sys, re, html
+          page = sys.stdin.read()
+          # Find all reply content divs
+          replies = re.findall(r'class=\"bbp-reply-content\">(.*?)</div>', page, re.DOTALL)
+          for i, reply in enumerate(replies[-${NEW_POSTS}:], 1):
+              # Strip HTML tags and decode entities
+              text = re.sub(r'<[^>]+>', '', reply).strip()
+              text = html.unescape(text)
+              # Truncate to 300 chars
+              if len(text) > 300:
+                  text = text[:300] + '...'
+              print(f'Post {i}: {text}')
+              print()
+          " 2>/dev/null || echo "Could not extract post content")
+
+            # Build notification message
+            MSG="🔔 <b>New Forum Post(s) on SharewareOnSale!</b>%0A%0A"
+            MSG="${MSG}<b>${NEW_POSTS} new post(s)</b> detected in GrabTube Pro discussion%0A%0A"
+            
+            if [ -n "$LATEST_USERS" ]; then
+              MSG="${MSG}<b>By:</b> $(echo "$LATEST_USERS" | tr '\n' ', ')%0A%0A"
+            fi
+
+            if [ -n "$LATEST_CONTENT" ]; then
+              # URL-encode the content for Telegram
+              ENCODED_CONTENT=$(echo "$LATEST_CONTENT" | python3 -c "
+          import sys, urllib.parse, html as h
+          text = sys.stdin.read().strip()
+          # Escape HTML special chars for Telegram
+          text = h.escape(text)
+          # URL-encode newlines
+          text = text.replace(chr(10), '%0A')
+          print(text)
+          " 2>/dev/null || echo "")
+              MSG="${MSG}${ENCODED_CONTENT}%0A%0A"
+            fi
+
+            MSG="${MSG}👉 <a href=\"${FORUM_URL}\">View Forum Thread</a>%0A%0A"
+            MSG="${MSG}<b>Suggested responses:</b>%0A"
+
+            # Keyword-based auto-suggestions
+            CONTENT_LOWER=$(echo "$LATEST_CONTENT" | tr '[:upper:]' '[:lower:]')
+            
+            if echo "$CONTENT_LOWER" | grep -qiE "invalid|not work|doesn.t work|error|fail"; then
+              MSG="${MSG}• Key issue: Ask user to re-copy the license key carefully, no extra spaces%0A"
+            fi
+            if echo "$CONTENT_LOWER" | grep -qiE "device limit|limit reached|already activated"; then
+              MSG="${MSG}• Device limit: Check admin panel, kick old device if needed%0A"
+            fi
+            if echo "$CONTENT_LOWER" | grep -qiE "mac|macos|damaged|can.t be opened"; then
+              MSG="${MSG}• macOS Gatekeeper: Tell user to run: xattr -cr /Applications/GrabTube.app%0A"
+            fi
+            if echo "$CONTENT_LOWER" | grep -qiE "slow|speed|download.*slow|taking long"; then
+              MSG="${MSG}• Download speed: CDN is active, ask user to clear browser cache and retry%0A"
+            fi
+            if echo "$CONTENT_LOWER" | grep -qiE "how to|where|install|activate|key|license|redeem"; then
+              MSG="${MSG}• Activation help: Download from grabtube.org → Install → Enter license key → Click Activate%0A"
+            fi
+
+            # Send Telegram notification
+            echo "Sending Telegram notification..."
+            curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d "chat_id=${TELEGRAM_CHAT_ID}" \
+              -d "parse_mode=HTML" \
+              -d "disable_web_page_preview=true" \
+              -d "text=${MSG}" > /dev/null
+
+            echo "Notification sent!"
+          else
+            echo "No new posts (current: $CURRENT_COUNT, stored: $STORED_COUNT)"
+          fi
+
+          # Update stored count using GitHub Actions variables API
+          if [ "$HTTP_CODE" = "200" ]; then
+            # Update existing variable
+            curl -sL -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/variables/FORUM_POST_COUNT" \
+              -d "{\"value\":\"$CURRENT_COUNT\"}" > /dev/null 2>&1 || true
+          else
+            # Create variable
+            curl -sL -X POST \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/variables" \
+              -d "{\"name\":\"FORUM_POST_COUNT\",\"value\":\"$CURRENT_COUNT\"}" > /dev/null 2>&1 || true
+          fi
+          echo "Updated stored count to: $CURRENT_COUNT"
