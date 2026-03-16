@@ -120,9 +120,300 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"key":"GT-TEST-FAKE-KEY0-0000","deviceId":"macos-gh-actions-test"}' | python3 -m json.tool
 
+      - name: "License Persistence Simulation (Restart Test)"
+        run: |
+          echo "============================================================"
+          echo "  LICENSE PERSISTENCE SIMULATION TEST"
+          echo "  Replicates exact LicenseManager logic from license-manager.ts"
+          echo "  Tests: device-id persistence, HMAC signing, file survival"
+          echo "============================================================"
+          echo ""
+          
+          cat > /tmp/license-persistence-test.mjs << 'NODESCRIPT'
+          import * as fs from 'fs';
+          import * as path from 'path';
+          import * as crypto from 'crypto';
+          import * as os from 'os';
+          
+          const LICENSE_SERVER_URL = 'https://grabtube-license.grabtube-app.workers.dev';
+          const SERVER_RESPONSE_SECRET = 'gt-server-response-v1';
+          
+          // Exact replica of deriveLocalSecret from license-manager.ts (v1.0.52+)
+          function deriveLocalSecret(seed) {
+            const machineSalt = [os.platform(), os.arch()].join(':');
+            return crypto.createHmac('sha256', machineSalt).update(seed).digest('hex');
+          }
+          
+          const LICENSE_HMAC_SECRET = deriveLocalSecret('gt-license-integrity-v1');
+          
+          // Exact replica of generateDeviceId from license-manager.ts
+          function generateDeviceId() {
+            const components = [
+              os.platform(),
+              os.arch(),
+              os.cpus()[0]?.model || 'unknown-cpu',
+              os.totalmem().toString(),
+              os.cpus().length.toString(),
+              os.hostname(),
+            ];
+            return crypto.createHash('sha256').update(components.join('|')).digest('hex').substring(0, 32);
+          }
+          
+          // Exact replica of getOrCreateDeviceId from license-manager.ts
+          function getOrCreateDeviceId(deviceIdPath) {
+            try {
+              if (fs.existsSync(deviceIdPath)) {
+                const persisted = fs.readFileSync(deviceIdPath, 'utf-8').trim();
+                if (persisted && /^[a-f0-9]{32}$/.test(persisted)) {
+                  return persisted;
+                }
+              }
+            } catch { /* file read failed, generate new */ }
+            const id = generateDeviceId();
+            try {
+              const dir = path.dirname(deviceIdPath);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(deviceIdPath, id);
+            } catch { /* persist failed */ }
+            return id;
+          }
+          
+          // Exact replica of signData from license-manager.ts
+          function signData(data, deviceId) {
+            const key = LICENSE_HMAC_SECRET + deviceId;
+            return crypto.createHmac('sha256', key).update(data).digest('hex');
+          }
+          
+          // Exact replica of verifySignature from license-manager.ts
+          function verifySignature(data, signature, deviceId) {
+            const expected = signData(data, deviceId);
+            if (expected.length !== signature.length) return false;
+            return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+          }
+          
+          // Exact replica of saveSignedFile from license-manager.ts
+          function saveSignedFile(filePath, data, deviceId) {
+            const dir = path.dirname(filePath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const jsonStr = JSON.stringify(data);
+            const encoded = Buffer.from(jsonStr).toString('base64');
+            const signature = signData(encoded, deviceId);
+            fs.writeFileSync(filePath, `${encoded}.${signature}`);
+          }
+          
+          // Exact replica of loadSignedFile from license-manager.ts
+          function loadSignedFile(filePath, deviceId) {
+            if (!fs.existsSync(filePath)) return null;
+            const content = fs.readFileSync(filePath, 'utf-8').trim();
+            const dotIndex = content.lastIndexOf('.');
+            if (dotIndex === -1) return null;
+            const encoded = content.substring(0, dotIndex);
+            const signature = content.substring(dotIndex + 1);
+            if (verifySignature(encoded, signature, deviceId)) {
+              const jsonStr = Buffer.from(encoded, 'base64').toString('utf-8');
+              return JSON.parse(jsonStr);
+            }
+            return null;
+          }
+          
+          // ============================================================
+          // TEST EXECUTION
+          // ============================================================
+          
+          let passed = 0;
+          let failed = 0;
+          function assert(condition, testName) {
+            if (condition) {
+              console.log(`  PASS: ${testName}`);
+              passed++;
+            } else {
+              console.log(`  FAIL: ${testName}`);
+              failed++;
+            }
+          }
+          
+          const USER_DATA = '/tmp/grabtube-test-userdata';
+          if (fs.existsSync(USER_DATA)) fs.rmSync(USER_DATA, { recursive: true });
+          
+          const licensePath = path.join(USER_DATA, 'license.dat');
+          const counterPath = path.join(USER_DATA, 'counter.dat');
+          const deviceIdPath = path.join(USER_DATA, 'device-id.dat');
+          
+          // ---- PHASE 1: First Launch (Simulate fresh install) ----
+          console.log('\n=== PHASE 1: First Launch (Fresh Install) ===');
+          
+          const deviceId1 = getOrCreateDeviceId(deviceIdPath);
+          console.log(`  Device ID generated: ${deviceId1}`);
+          assert(deviceId1.length === 32, 'Device ID is 32 hex chars');
+          assert(/^[a-f0-9]{32}$/.test(deviceId1), 'Device ID matches hex pattern');
+          assert(fs.existsSync(deviceIdPath), 'device-id.dat file created on disk');
+          assert(fs.readFileSync(deviceIdPath, 'utf-8').trim() === deviceId1, 'device-id.dat content matches generated ID');
+          
+          // ---- PHASE 2: Activate and write license files ----
+          console.log('\n=== PHASE 2: Write License Files (Simulate Successful Activation) ===');
+          
+          const licenseState = {
+            tier: 'pro',
+            key: 'GT-SIMULATED-TEST-KEY1',
+            deviceId: deviceId1,
+            activated: true,
+            validatedAt: new Date().toISOString(),
+            maxDevices: 1,
+            devicesUsed: 1,
+          };
+          
+          saveSignedFile(licensePath, licenseState, deviceId1);
+          assert(fs.existsSync(licensePath), 'license.dat file created on disk');
+          
+          const counterState = {
+            date: new Date().toISOString().split('T')[0],
+            count: 0,
+          };
+          saveSignedFile(counterPath, counterState, deviceId1);
+          assert(fs.existsSync(counterPath), 'counter.dat file created on disk');
+          
+          // Verify immediate readback
+          const readLicense1 = loadSignedFile(licensePath, deviceId1);
+          console.log(`  License readback: tier=${readLicense1?.tier}, activated=${readLicense1?.activated}`);
+          assert(readLicense1 !== null, 'license.dat readable immediately after write');
+          assert(readLicense1?.tier === 'pro', 'License tier is pro');
+          assert(readLicense1?.activated === true, 'License shows activated');
+          assert(readLicense1?.deviceId === deviceId1, 'Device ID matches in license state');
+          
+          const readCounter1 = loadSignedFile(counterPath, deviceId1);
+          assert(readCounter1 !== null, 'counter.dat readable immediately after write');
+          assert(readCounter1?.count === 0, 'Download counter is 0');
+          
+          // ---- PHASE 3: Simulate App Restart ----
+          console.log('\n=== PHASE 3: Simulate App Restart (Clear Memory, Re-read Disk) ===');
+          console.log('  Clearing all in-memory state...');
+          console.log('  Re-reading everything from disk only (exactly like Electron restart)...');
+          
+          // Re-read device ID from disk (getOrCreateDeviceId reads persisted file first)
+          const deviceId2 = getOrCreateDeviceId(deviceIdPath);
+          console.log(`  Device ID after restart: ${deviceId2}`);
+          assert(deviceId2 === deviceId1, 'Device ID PERSISTS across restart (CRITICAL TEST)');
+          
+          // Re-read license from disk with fresh device ID
+          const readLicense2 = loadSignedFile(licensePath, deviceId2);
+          console.log(`  License after restart: tier=${readLicense2?.tier}, activated=${readLicense2?.activated}`);
+          assert(readLicense2 !== null, 'license.dat SURVIVES restart (CRITICAL TEST)');
+          assert(readLicense2?.tier === 'pro', 'License tier STILL PRO after restart');
+          assert(readLicense2?.activated === true, 'License STILL ACTIVATED after restart');
+          assert(readLicense2?.key === 'GT-SIMULATED-TEST-KEY1', 'License key persists after restart');
+          
+          // Re-read counter from disk
+          const readCounter2 = loadSignedFile(counterPath, deviceId2);
+          assert(readCounter2 !== null, 'counter.dat SURVIVES restart');
+          assert(readCounter2?.count === 0, 'Counter value persists after restart');
+          
+          // ---- PHASE 4: Tamper Detection ----
+          console.log('\n=== PHASE 4: Tamper Detection (HMAC Integrity) ===');
+          
+          const rawFile = fs.readFileSync(licensePath, 'utf-8');
+          const lastDot = rawFile.lastIndexOf('.');
+          const encodedPart = rawFile.substring(0, lastDot);
+          const sigPart = rawFile.substring(lastDot + 1);
+          
+          // Decode, tamper with tier, re-encode without valid HMAC
+          const decoded = JSON.parse(Buffer.from(encodedPart, 'base64').toString('utf-8'));
+          decoded.tier = 'family';
+          const tamperedEncoded = Buffer.from(JSON.stringify(decoded)).toString('base64');
+          fs.writeFileSync(licensePath, `${tamperedEncoded}.${sigPart}`);
+          
+          const readTampered = loadSignedFile(licensePath, deviceId2);
+          assert(readTampered === null, 'Tampered license file REJECTED (HMAC mismatch)');
+          
+          // ---- PHASE 5: Cross-Machine Copy Protection ----
+          console.log('\n=== PHASE 5: Cross-Machine Copy Protection ===');
+          
+          // Restore valid license first
+          saveSignedFile(licensePath, licenseState, deviceId1);
+          
+          // Try reading with a different device ID (simulates copying files to another machine)
+          const fakeDeviceId = 'aaaabbbbccccddddeeee111122223333';
+          const readWithFakeDevice = loadSignedFile(licensePath, fakeDeviceId);
+          assert(readWithFakeDevice === null, 'License REJECTED on different device (copy protection works)');
+          
+          // Original device ID still works
+          const readWithRealDevice = loadSignedFile(licensePath, deviceId1);
+          assert(readWithRealDevice !== null, 'License ACCEPTED with original device ID');
+          assert(readWithRealDevice?.tier === 'pro', 'Correct tier with original device');
+          
+          // ---- PHASE 6: Device ID Stability ----
+          console.log('\n=== PHASE 6: Device ID Stability (Multiple Reads) ===');
+          
+          for (let i = 0; i < 5; i++) {
+            const readId = getOrCreateDeviceId(deviceIdPath);
+            assert(readId === deviceId1, `Device ID stable on read #${i + 1}`);
+          }
+          
+          // ---- PHASE 7: Server Connectivity Verification ----
+          console.log('\n=== PHASE 7: Server Connectivity + Key Validation ===');
+          
+          try {
+            const healthResp = await fetch(`${LICENSE_SERVER_URL}/health`);
+            const healthData = await healthResp.json();
+            assert(healthData.status === 'ok', 'License server health check OK');
+          } catch (e) {
+            console.log(`  Server unreachable: ${e.message}`);
+            assert(false, 'License server health check OK');
+          }
+          
+          // Test invalid key rejection
+          try {
+            const invalidResp = await fetch(`${LICENSE_SERVER_URL}/activate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                key: 'GT-FAKE-FAKE-FAKE-FAKE',
+                deviceId: deviceId1,
+                deviceName: `${os.platform()} ${os.release()} - ${os.hostname()}`,
+              }),
+            });
+            const invalidData = await invalidResp.json();
+            assert(invalidData.success === false, 'Invalid key correctly rejected by server');
+            assert(invalidData.error === 'Invalid license key', 'Correct error message for invalid key');
+          } catch (e) {
+            assert(false, `Server activation test: ${e.message}`);
+          }
+          
+          // ---- PHASE 8: HMAC Secret Derivation Consistency ----
+          console.log('\n=== PHASE 8: HMAC Secret Derivation Consistency ===');
+          
+          const secret1 = deriveLocalSecret('gt-license-integrity-v1');
+          const secret2 = deriveLocalSecret('gt-license-integrity-v1');
+          assert(secret1 === secret2, 'HMAC secret is deterministic (same input = same output)');
+          assert(secret1.length === 64, 'HMAC secret is 64 hex chars (SHA-256)');
+          
+          const differentSecret = deriveLocalSecret('different-seed');
+          assert(differentSecret !== secret1, 'Different seed produces different secret');
+          
+          // ---- RESULTS ----
+          console.log('\n============================================================');
+          console.log(`  RESULTS: ${passed} passed, ${failed} failed out of ${passed + failed} tests`);
+          console.log('============================================================');
+          
+          if (failed > 0) {
+            console.log('\n  LICENSE PERSISTENCE TEST FAILED');
+            process.exit(1);
+          } else {
+            console.log('\n  ALL LICENSE PERSISTENCE TESTS PASSED');
+            console.log('  - Device ID persists across simulated restarts');
+            console.log('  - HMAC-signed license files survive and verify correctly');
+            console.log('  - Tamper detection works (modified files rejected)');
+            console.log('  - Cross-machine protection works (different device = rejected)');
+            console.log('  - HMAC secret derivation is deterministic and stable');
+          }
+          NODESCRIPT
+          
+          node /tmp/license-persistence-test.mjs
+
       - name: Cleanup
         if: always()
         run: |
           hdiutil detach /Volumes/GrabTube* 2>/dev/null || true
           rm -f /tmp/GrabTube-CDN.dmg /tmp/GrabTube-Direct.dmg
+          rm -rf /tmp/grabtube-test-userdata
+          rm -f /tmp/license-persistence-test.mjs
           echo "Cleanup complete"
