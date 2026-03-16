@@ -22,22 +22,20 @@ Generates 320 test cases from the cartesian product of:
 
 | Dimension | Count | Values |
 |-----------|-------|--------|
-| Keywords | 16 | "Interior Designers in Kolkata", "Dentists in London", "Photographers in New York", etc. |
-| Platform Groups | 5 | LinkedIn, Instagram, Facebook, Google Maps, All Platforms |
+| Keywords | 16 | 8 with location ("Plumbers in Mumbai", "Dentists in Delhi", "Software Companies in Bangalore", etc.) + 8 without location ("Plumbers", "Dentists", "Software Companies", etc.) |
+| Platform Groups | 5 | B2B (linkedin, facebook, twitter), LOCAL (google_maps, instagram), SOCIAL (instagram, facebook, twitter), MEDIA (youtube, pinterest, tumblr, tiktok), COMMUNITY (reddit) |
 | Toggle Combos | 4 | {dorking: on/off} × {direct_scraping: on/off} |
 
 **Total**: 16 × 5 × 4 = **320 test cases**
 
-Each test case is a `TestCase` object:
+Toggle combinations:
 ```typescript
-interface TestCase {
-  id: string;           // "test-001"
-  keyword: string;      // "Interior Designers in Kolkata"
-  platforms: string[];  // ["linkedin"]
-  dorking: boolean;
-  directScraping: boolean;
-  expectedCountry?: string;  // "India"
-}
+const TOGGLE_COMBOS = [
+  { use_google_dorking: false, use_direct_scraping: false, label: 'Base' },
+  { use_google_dorking: true,  use_direct_scraping: false, label: 'Dorking' },
+  { use_google_dorking: false, use_direct_scraping: true,  label: 'Direct' },
+  { use_google_dorking: true,  use_direct_scraping: true,  label: 'Full' },
+];
 ```
 
 ### Test Runner Hook
@@ -82,18 +80,19 @@ Starts a test session. Creates a background task that:
 3. Collects backend logs per test case
 4. Stores results in a session-scoped dictionary
 
-### GET /api/test/status
-Returns current test progress, results so far, and any errors.
+### GET /api/test/{session_id}/status
+Returns current test progress: status, total, completed, failed, current_case, progress_pct.
 
-### GET /api/test/logs
-Returns collected backend logs for the current test session.
+### POST /api/test/{session_id}/frontend-log
+Receives frontend console logs from the client (batched every 20 entries).
 
-### GET /api/test/bundle
+### GET /api/test/{session_id}/download-bundle
 Generates and returns a ZIP file containing:
-- `test-results.json` — structured test results
-- `test-summary.txt` — human-readable summary
-- `backend-logs.txt` — backend logs during test run
-- `frontend-logs.txt` — frontend logs (sent from client)
+- `summary.json` — structured test results with timing
+- Per-case result files
+- `backend-logs.txt` — backend stdout/stderr during test run
+- `frontend-logs.json` — frontend console logs (sent from client)
+- `location-filter-report.json` — location filtering analysis
 
 ---
 
@@ -104,15 +103,16 @@ Generates and returns a ZIP file containing:
 
 The test runner sends frontend logs to Electron main process via IPC:
 ```
-Renderer → preload.js → main.js → file system
-                                 → backend /api/test/logs
+Renderer → preload.js → main.js → in-memory buffer (last 2000 lines)
+                                 → POST /api/test/{session_id}/frontend-log
 ```
 
 ### Bundle Folder Opening
 When the ZIP bundle is downloaded, Electron opens the containing folder:
 ```javascript
 electronAPI.openBundleFolder(zipPath)
-// → shell.showItemInFolder(zipPath)
+// → ipcMain.handle('open-bundle-folder') → shell.showItemInFolder(zipPath)
+// → Fallback: opens userData folder if path doesn't exist
 ```
 
 ---
@@ -234,4 +234,12 @@ User clicks "Run Tests" in Settings
 
 ## Download
 
-**Windows**: [SnapLeads Setup 3.5.35.exe](https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads%20Setup%203.5.35.exe)
+**Windows**: [SnapLeads Setup 3.5.35.exe](https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads%20Setup%203.5.35.exe) (657 MB)
+**Mac (ARM64)**: [SnapLeads-3.5.35-arm64-mac.zip](https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads-3.5.35-arm64-mac.zip) (278 MB)
+
+### Build Info
+- **Build system**: GitHub Actions (`windows-latest` + `macos-latest`)
+- **Workflow**: `Build & Release All Platforms` (workflow_dispatch)
+- **Run ID**: 23144812219
+- **Backend**: PyInstaller `--onefile` with 45+ hidden imports + Patchright Chromium + DuckDB httpfs
+- **Frontend**: Vite build → electron-builder NSIS installer (Windows) / ZIP (Mac)

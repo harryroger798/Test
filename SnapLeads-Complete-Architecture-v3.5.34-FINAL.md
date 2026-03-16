@@ -52,10 +52,12 @@ fetchWithRetry(url, options, maxRetries=3)
 **File**: `electron/main.js`, `electron/preload.js`
 
 The Electron main process:
-1. Spawns the Python backend
-2. Polls `http://127.0.0.1:8000/api/dashboard/stats` every 2s
-3. When healthy, sends `backend-ready` IPC message to renderer
+1. Spawns the Python backend as a child process
+2. Monitors stdout/stderr for `"Application startup complete"` or `"Uvicorn running"` messages
+3. When detected, sets `backendReady = true` and sends `backend-ready` IPC message to renderer
 4. Renderer's `onBackendReady` handler immediately resolves `waitForBackend()`
+
+**Note**: The frontend's `waitForBackend()` polls `GET /api/dashboard/stats` as a fallback — the IPC signal from Electron is the primary (faster) path.
 
 **Preload bridge** (`preload.js`):
 ```javascript
@@ -168,4 +170,5 @@ If `markBackendReady()` was called (from UI after splash) while `waitForBackend(
 
 ## Download
 
-**Windows**: [SnapLeads Setup 3.5.34.exe](https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads%20Setup%203.5.34.exe)
+**Windows**: [SnapLeads Setup 3.5.35.exe](https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads%20Setup%203.5.35.exe) (657 MB) — v3.5.35 includes all v3.5.34 fixes
+**Mac (ARM64)**: [SnapLeads-3.5.35-arm64-mac.zip](https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads-3.5.35-arm64-mac.zip) (278 MB)
