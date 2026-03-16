@@ -17,22 +17,14 @@
 <body>
   <div class="container">
     <h1>Downloading GrabTube for Windows...</h1>
-    <p>If the download doesn't start automatically, <a id="dl" href="https://grabtube-download.grabtube-app.workers.dev/windows">click here</a>.</p>
+    <p>If the download doesn't start automatically, <a id="dl" href="https://grabtube-license.grabtube-app.workers.dev/cdn/download/windows">click here</a>.</p>
   </div>
   <script>
-    fetch("https://grabtube-download.grabtube-app.workers.dev/api/latest?t=" + Date.now())
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var v = data.version;
-        var url = "https://github.com/harryroger798/Test/releases/download/v" + v + "/GrabTube.Setup." + v + ".exe";
-        document.getElementById("dl").href = url;
-        window.location.href = url;
-      })
-      .catch(function() {
-        var url = "https://grabtube-download.grabtube-app.workers.dev/windows?t=" + Date.now();
-        document.getElementById("dl").href = url;
-        window.location.href = url;
-      });
+    // Use Cloudflare CDN proxy for fast downloads (cached at 300+ edge locations)
+    var cdnBase = "https://grabtube-license.grabtube-app.workers.dev";
+    var url = cdnBase + "/cdn/download/windows";
+    document.getElementById("dl").href = url;
+    window.location.href = url;
   </script>
 </body>
 </html>
