@@ -92,9 +92,13 @@ jobs:
             echo "=== Bundled Binaries ==="
             find "$APP_PATH" -name "yt-dlp*" -o -name "ffmpeg*" -o -name "ffprobe*" 2>/dev/null | head -10
             
-            # Check electron version
-            echo "=== Electron Version ==="
-            "$APP_PATH/Contents/MacOS/GrabTube" --version 2>/dev/null || echo "Could not get version (expected for Electron apps)"
+            # Check code signature
+            echo "=== Code Signature ==="
+            codesign -dv "$APP_PATH" 2>&1 || echo "Not signed"
+            
+            # Check Info.plist version
+            echo "=== App Version ==="
+            /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "No version in plist"
           else
             echo "GrabTube.app not found"
           fi
