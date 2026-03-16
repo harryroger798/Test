@@ -1838,12 +1838,12 @@ async function handleCdnDownload(request: Request): Promise<Response> {
       tagName = requestedVersion.startsWith('v') ? requestedVersion : `v${requestedVersion}`;
     } else {
       // Fetch latest release tag
-      const ghResp = await fetch(`${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`, {
+      const releaseResp = await fetch(`${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`, {
         headers: { 'User-Agent': 'GrabTube-CDN/1.0', 'Accept': 'application/vnd.github+json' },
         cf: { cacheTtl: 300, cacheEverything: true } as RequestInitCfProperties,
       });
-      if (!ghResp.ok) return errorResponse('Failed to fetch release info', 502);
-      const release = await ghResp.json() as { tag_name: string };
+      if (!releaseResp.ok) return errorResponse('Failed to fetch release info', 502);
+      const release = await releaseResp.json() as { tag_name: string };
       tagName = release.tag_name;
       version = tagName.replace(/^v/, '');
     }
