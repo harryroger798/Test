@@ -1730,7 +1730,6 @@ async function handleAdminGiveawayList(env: Env): Promise<Response> {
 // === CDN DOWNLOAD PROXY ===
 // GitHub repo for release assets
 const GITHUB_REPO = 'harryroger798/Test';
-const GITHUB_API = 'https://api.github.com';
 
 // Platform-to-asset mapping
 function getAssetPattern(platform: string, version: string): string | null {
@@ -1742,11 +1741,27 @@ function getAssetPattern(platform: string, version: string): string | null {
   }
 }
 
+async function getLatestVersion(): Promise<{ version: string; tagName: string } | null> {
+  // Use GitHub's releases/latest redirect to get the tag (no API auth needed, no rate limits)
+  const redirectResp = await fetch(`https://github.com/${GITHUB_REPO}/releases/latest`, {
+    redirect: 'manual',
+    headers: { 'User-Agent': 'GrabTube-CDN/1.0' },
+  });
+  const location = redirectResp.headers.get('Location');
+  if (!location) return null;
+  // Location: https://github.com/harryroger798/Test/releases/tag/v1.0.53
+  const tagMatch = location.match(/\/tag\/([^/]+)$/);
+  if (!tagMatch) return null;
+  const tagName = tagMatch[1];
+  const version = tagName.replace(/^v/, '');
+  return { version, tagName };
+}
+
 async function handleCdnLatest(request: Request): Promise<Response> {
-  // Fetch latest release from GitHub API (cached at edge for 5 minutes)
+  // Fetch latest release version (cached at edge for 5 minutes)
   const cacheKey = `https://cdn-cache.grabtube.internal/api/latest-release`;
   const cache = caches.default;
-  let cached = await cache.match(cacheKey);
+  const cached = await cache.match(cacheKey);
   if (cached) {
     return new Response(cached.body, {
       headers: {
@@ -1759,40 +1774,22 @@ async function handleCdnLatest(request: Request): Promise<Response> {
   }
 
   try {
-    const ghResp = await fetch(`${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`, {
-      headers: {
-        'User-Agent': 'GrabTube-CDN/1.0',
-        'Accept': 'application/vnd.github+json',
-      },
-    });
-    if (!ghResp.ok) {
-      return errorResponse('Failed to fetch release info', 502);
-    }
-    const release = await ghResp.json() as { tag_name: string; published_at: string; assets: Array<{ name: string; size: number; download_count: number }> };
-    const version = release.tag_name.replace(/^v/, '');
+    const latest = await getLatestVersion();
+    if (!latest) return errorResponse('Failed to fetch release info', 502);
+    const { version, tagName } = latest;
 
     const result = {
       version,
-      tag: release.tag_name,
-      published: release.published_at,
+      tag: tagName,
       downloads: {
         windows: `/cdn/download/windows`,
         macos: `/cdn/download/macos`,
         linux: `/cdn/download/linux`,
       },
       assets: {
-        windows: {
-          name: getAssetPattern('windows', version),
-          size: release.assets.find(a => a.name.endsWith('.exe'))?.size || 0,
-        },
-        macos: {
-          name: getAssetPattern('macos', version),
-          size: release.assets.find(a => a.name.endsWith('.dmg'))?.size || 0,
-        },
-        linux: {
-          name: getAssetPattern('linux', version),
-          size: release.assets.find(a => a.name.endsWith('.AppImage'))?.size || 0,
-        },
+        windows: { name: getAssetPattern('windows', version) },
+        macos: { name: getAssetPattern('macos', version) },
+        linux: { name: getAssetPattern('linux', version) },
       },
     };
 
@@ -1837,15 +1834,11 @@ async function handleCdnDownload(request: Request): Promise<Response> {
       version = requestedVersion.replace(/^v/, '');
       tagName = requestedVersion.startsWith('v') ? requestedVersion : `v${requestedVersion}`;
     } else {
-      // Fetch latest release tag
-      const releaseResp = await fetch(`${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`, {
-        headers: { 'User-Agent': 'GrabTube-CDN/1.0', 'Accept': 'application/vnd.github+json' },
-        cf: { cacheTtl: 300, cacheEverything: true } as RequestInitCfProperties,
-      });
-      if (!releaseResp.ok) return errorResponse('Failed to fetch release info', 502);
-      const release = await releaseResp.json() as { tag_name: string };
-      tagName = release.tag_name;
-      version = tagName.replace(/^v/, '');
+      // Get latest version via GitHub redirect (no API auth needed)
+      const latest = await getLatestVersion();
+      if (!latest) return errorResponse('Failed to fetch release info', 502);
+      tagName = latest.tagName;
+      version = latest.version;
     }
 
     const assetName = getAssetPattern(platform, version);
