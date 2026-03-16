@@ -150,6 +150,8 @@ export class LicenseManager {
 
   /**
    * Load and verify signed file. Returns null if tampered or missing.
+   * Tries current HMAC format first, then falls back to legacy v1.0.51 format
+   * for seamless migration when users upgrade.
    */
   private loadSignedFile(filePath: string): Record<string, unknown> | null {
     try {
@@ -161,16 +163,65 @@ export class LicenseManager {
       const encoded = content.substring(0, dotIndex);
       const signature = content.substring(dotIndex + 1);
 
-      if (!this.verifySignature(encoded, signature)) {
-        console.warn('[LicenseManager] License file integrity check failed — reverting to free tier');
-        return null;
+      // Try current v1.0.52+ HMAC format first
+      if (this.verifySignature(encoded, signature)) {
+        const jsonStr = Buffer.from(encoded, 'base64').toString('utf-8');
+        return JSON.parse(jsonStr);
       }
 
-      const jsonStr = Buffer.from(encoded, 'base64').toString('utf-8');
-      return JSON.parse(jsonStr);
+      // Fallback: Try legacy v1.0.51 HMAC format for migration
+      if (this.verifySignatureLegacy(encoded, signature)) {
+        console.log('[LicenseManager] Migrating license file from v1.0.51 HMAC format');
+        const jsonStr = Buffer.from(encoded, 'base64').toString('utf-8');
+        const data = JSON.parse(jsonStr) as Record<string, unknown>;
+        // Re-save with new HMAC format to complete one-time migration
+        this.saveSignedFile(filePath, data);
+        return data;
+      }
+
+      console.warn('[LicenseManager] License file integrity check failed — reverting to free tier');
+      return null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Verify HMAC signature using legacy v1.0.51 key derivation.
+   * Used for one-time migration when upgrading from v1.0.51 to v1.0.52+.
+   * The old version used os.hostname() in deriveLocalSecret AND generateDeviceId().
+   */
+  private verifySignatureLegacy(data: string, signature: string): boolean {
+    try {
+      const expected = this.signDataLegacy(data);
+      if (expected.length !== signature.length) return false;
+      return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Legacy HMAC signing matching v1.0.51 behavior:
+   * - deriveLocalSecret() included os.hostname() in the salt
+   * - signData() called generateDeviceId() directly (not persisted)
+   */
+  private signDataLegacy(data: string): string {
+    // Recreate v1.0.51 deriveLocalSecret() which included hostname (in original order)
+    const machineSaltOld = [
+      os.hostname(),
+      os.platform(),
+      os.arch(),
+    ].join(':');
+    const legacyHmacSecret = crypto.createHmac('sha256', machineSaltOld)
+      .update('gt-license-integrity-v1').digest('hex');
+
+    // Recreate v1.0.51 generateDeviceId() — same components as current since
+    // the v1.0.52 generateDeviceId() still uses the same formula
+    const legacyDeviceId = this.generateDeviceId();
+
+    const key = legacyHmacSecret + legacyDeviceId;
+    return crypto.createHmac('sha256', key).update(data).digest('hex');
   }
 
   // === STATE MANAGEMENT ===
