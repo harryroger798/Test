@@ -359,6 +359,18 @@ export default {
         });
       }
 
+      // === CDN DOWNLOAD PROXY ===
+      // Proxies GitHub Release assets through Cloudflare's global edge network for faster downloads.
+      // Caches binaries at the edge for 24h so users get Cloudflare CDN speeds instead of GitHub's Azure blob storage.
+      if (path.startsWith('/cdn/download/') && request.method === 'GET') {
+        return await handleCdnDownload(request);
+      }
+
+      // Latest version API (for download pages)
+      if (path === '/cdn/latest' && request.method === 'GET') {
+        return await handleCdnLatest(request);
+      }
+
       return errorResponse('Not found', 404);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Internal server error';
@@ -1715,6 +1727,174 @@ async function handleAdminGiveawayList(env: Env): Promise<Response> {
 }
 
 // === GIVEAWAY PAGE HTML ===
+// === CDN DOWNLOAD PROXY ===
+// GitHub repo for release assets
+const GITHUB_REPO = 'harryroger798/Test';
+const GITHUB_API = 'https://api.github.com';
+
+// Platform-to-asset mapping
+function getAssetPattern(platform: string, version: string): string | null {
+  switch (platform) {
+    case 'windows': return `GrabTube.Setup.${version}.exe`;
+    case 'macos': return `GrabTube-${version}-arm64.dmg`;
+    case 'linux': return `GrabTube-${version}.AppImage`;
+    default: return null;
+  }
+}
+
+async function handleCdnLatest(request: Request): Promise<Response> {
+  // Fetch latest release from GitHub API (cached at edge for 5 minutes)
+  const cacheKey = `https://cdn-cache.grabtube.internal/api/latest-release`;
+  const cache = caches.default;
+  let cached = await cache.match(cacheKey);
+  if (cached) {
+    return new Response(cached.body, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+        'X-Cache': 'HIT',
+      },
+    });
+  }
+
+  try {
+    const ghResp = await fetch(`${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: {
+        'User-Agent': 'GrabTube-CDN/1.0',
+        'Accept': 'application/vnd.github+json',
+      },
+    });
+    if (!ghResp.ok) {
+      return errorResponse('Failed to fetch release info', 502);
+    }
+    const release = await ghResp.json() as { tag_name: string; published_at: string; assets: Array<{ name: string; size: number; download_count: number }> };
+    const version = release.tag_name.replace(/^v/, '');
+
+    const result = {
+      version,
+      tag: release.tag_name,
+      published: release.published_at,
+      downloads: {
+        windows: `/cdn/download/windows`,
+        macos: `/cdn/download/macos`,
+        linux: `/cdn/download/linux`,
+      },
+      assets: {
+        windows: {
+          name: getAssetPattern('windows', version),
+          size: release.assets.find(a => a.name.endsWith('.exe'))?.size || 0,
+        },
+        macos: {
+          name: getAssetPattern('macos', version),
+          size: release.assets.find(a => a.name.endsWith('.dmg'))?.size || 0,
+        },
+        linux: {
+          name: getAssetPattern('linux', version),
+          size: release.assets.find(a => a.name.endsWith('.AppImage'))?.size || 0,
+        },
+      },
+    };
+
+    const response = new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+        'Access-Control-Allow-Origin': '*',
+        'X-Cache': 'MISS',
+      },
+    });
+    // Cache for 5 minutes at the edge
+    const cacheResp = new Response(JSON.stringify(result), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300',
+      },
+    });
+    await cache.put(cacheKey, cacheResp);
+    return response;
+  } catch {
+    return errorResponse('Failed to fetch release info', 502);
+  }
+}
+
+async function handleCdnDownload(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const pathParts = url.pathname.split('/');
+  // /cdn/download/:platform or /cdn/download/:platform/:version
+  const platform = pathParts[3];
+  const requestedVersion = pathParts[4]; // optional
+
+  if (!['windows', 'macos', 'linux'].includes(platform)) {
+    return errorResponse('Invalid platform. Use: windows, macos, linux', 400);
+  }
+
+  try {
+    // Get the version (either requested or latest)
+    let version: string;
+    let tagName: string;
+    if (requestedVersion) {
+      version = requestedVersion.replace(/^v/, '');
+      tagName = requestedVersion.startsWith('v') ? requestedVersion : `v${requestedVersion}`;
+    } else {
+      // Fetch latest release tag
+      const ghResp = await fetch(`${GITHUB_API}/repos/${GITHUB_REPO}/releases/latest`, {
+        headers: { 'User-Agent': 'GrabTube-CDN/1.0', 'Accept': 'application/vnd.github+json' },
+        cf: { cacheTtl: 300, cacheEverything: true } as RequestInitCfProperties,
+      });
+      if (!ghResp.ok) return errorResponse('Failed to fetch release info', 502);
+      const release = await ghResp.json() as { tag_name: string };
+      tagName = release.tag_name;
+      version = tagName.replace(/^v/, '');
+    }
+
+    const assetName = getAssetPattern(platform, version);
+    if (!assetName) return errorResponse('Invalid platform', 400);
+
+    // Build the GitHub release download URL
+    const githubUrl = `https://github.com/${GITHUB_REPO}/releases/download/${tagName}/${assetName}`;
+
+    // Fetch from GitHub with Cloudflare's built-in edge caching (24h TTL).
+    // This uses cf.cacheTtl which tells Cloudflare to cache the upstream
+    // response at the edge automatically — no manual cache.put needed.
+    const ghResp = await fetch(githubUrl, {
+      headers: { 'User-Agent': 'GrabTube-CDN/1.0' },
+      redirect: 'follow',
+      cf: { cacheTtl: 86400, cacheEverything: true } as RequestInitCfProperties,
+    });
+
+    if (!ghResp.ok) {
+      return errorResponse(`Asset not found: ${assetName}`, 404);
+    }
+
+    // Determine content type
+    let contentType = 'application/octet-stream';
+    if (assetName.endsWith('.exe')) contentType = 'application/x-msdownload';
+    else if (assetName.endsWith('.dmg')) contentType = 'application/x-apple-diskimage';
+    else if (assetName.endsWith('.AppImage')) contentType = 'application/x-executable';
+
+    // Stream through Cloudflare's edge
+    const responseHeaders = new Headers({
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${assetName}"`,
+      'Cache-Control': 'public, max-age=86400',
+      'X-CDN': 'Cloudflare-Edge',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    // Indicate cache status
+    const cfCacheStatus = ghResp.headers.get('CF-Cache-Status');
+    responseHeaders.set('X-Cache', cfCacheStatus === 'HIT' ? 'HIT' : 'MISS');
+
+    const contentLength = ghResp.headers.get('Content-Length');
+    if (contentLength) responseHeaders.set('Content-Length', contentLength);
+
+    return new Response(ghResp.body, { headers: responseHeaders });
+  } catch {
+    return errorResponse('Download failed. Please try again.', 502);
+  }
+}
+
 function getGiveawayPageHTML(): string {
   return `<!DOCTYPE html>
 <html lang="en">
