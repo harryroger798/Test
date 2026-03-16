@@ -1,0 +1,120 @@
+name: macOS GrabTube Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  macos-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: System Info
+        run: |
+          echo "=== macOS Version ==="
+          sw_vers
+          echo "=== Hardware ==="
+          sysctl -n machdep.cpu.brand_string
+          echo "CPU cores: $(sysctl -n hw.ncpu)"
+          echo "Memory: $(sysctl -n hw.memsize | awk '{print $1/1073741824}') GB"
+          echo "=== Disk ==="
+          df -h /
+          echo "=== Network ==="
+          curl -s https://ipinfo.io/json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'IP: {d.get(\"ip\")}\nCity: {d.get(\"city\")}\nRegion: {d.get(\"region\")}\nCountry: {d.get(\"country\")}\nOrg: {d.get(\"org\")}')"
+
+      - name: Test CDN Latest Endpoint
+        run: |
+          echo "=== Testing /cdn/latest ==="
+          curl -s "https://grabtube-license.grabtube-app.workers.dev/cdn/latest" | python3 -m json.tool
+
+      - name: CDN Download Speed Test (macOS DMG)
+        run: |
+          echo "=== CDN Proxy Download ==="
+          time curl -L -o /tmp/GrabTube-CDN.dmg -w "\nHTTP: %{http_code}\nSpeed: %{speed_download} bytes/sec\nTime: %{time_total}s\nSize: %{size_download} bytes\n" "https://grabtube-license.grabtube-app.workers.dev/cdn/download/macos"
+          ls -lh /tmp/GrabTube-CDN.dmg
+
+      - name: Direct GitHub Download Speed Test (Comparison)
+        run: |
+          echo "=== Direct GitHub Download ==="
+          VERSION=$(curl -s "https://grabtube-license.grabtube-app.workers.dev/cdn/latest" | python3 -c "import sys,json; print(json.load(sys.stdin)['version'])")
+          echo "Version: $VERSION"
+          time curl -L -o /tmp/GrabTube-Direct.dmg -w "\nHTTP: %{http_code}\nSpeed: %{speed_download} bytes/sec\nTime: %{time_total}s\nSize: %{size_download} bytes\n" "https://github.com/harryroger798/Test/releases/download/v${VERSION}/GrabTube-${VERSION}-arm64.dmg"
+          ls -lh /tmp/GrabTube-Direct.dmg
+
+      - name: Mount and Install DMG
+        run: |
+          echo "=== Mounting DMG ==="
+          hdiutil attach /tmp/GrabTube-CDN.dmg -nobrowse -noverify 2>&1 || true
+          echo "=== Volumes ==="
+          ls /Volumes/ | grep -i grab || echo "No GrabTube volume found"
+          
+          # Find the GrabTube volume
+          VOLUME=$(ls -d /Volumes/GrabTube* 2>/dev/null | head -1)
+          if [ -z "$VOLUME" ]; then
+            echo "ERROR: Could not find GrabTube volume"
+            echo "All volumes:"
+            ls /Volumes/
+            exit 1
+          fi
+          
+          echo "=== Volume Contents ==="
+          ls -la "$VOLUME/"
+          
+          echo "=== Copying to Applications ==="
+          cp -R "$VOLUME/GrabTube.app" /Applications/ 2>/dev/null || cp -R "$VOLUME/"*.app /Applications/ 2>/dev/null || echo "No .app found, listing contents:"
+          ls -la "$VOLUME/"
+          
+          echo "=== Bypass Gatekeeper ==="
+          xattr -cr /Applications/GrabTube.app 2>/dev/null || true
+          
+          echo "=== Verify Installation ==="
+          ls -la /Applications/GrabTube.app/ 2>/dev/null || echo "GrabTube.app not found in /Applications"
+          
+          echo "=== App Info ==="
+          cat /Applications/GrabTube.app/Contents/Info.plist 2>/dev/null | head -50 || echo "No Info.plist found"
+
+      - name: Test App Binary
+        run: |
+          echo "=== Testing GrabTube binary ==="
+          APP_PATH="/Applications/GrabTube.app"
+          if [ -d "$APP_PATH" ]; then
+            echo "App size: $(du -sh "$APP_PATH" | cut -f1)"
+            echo "Binary exists: $(test -f "$APP_PATH/Contents/MacOS/GrabTube" && echo YES || echo NO)"
+            echo "=== Frameworks ==="
+            ls "$APP_PATH/Contents/Frameworks/" 2>/dev/null | head -10 || echo "No Frameworks dir"
+            echo "=== Resources ==="
+            ls "$APP_PATH/Contents/Resources/" 2>/dev/null | head -20 || echo "No Resources dir"
+            
+            # Check bundled binaries
+            echo "=== Bundled Binaries ==="
+            find "$APP_PATH" -name "yt-dlp*" -o -name "ffmpeg*" -o -name "ffprobe*" 2>/dev/null | head -10
+            
+            # Check electron version
+            echo "=== Electron Version ==="
+            "$APP_PATH/Contents/MacOS/GrabTube" --version 2>/dev/null || echo "Could not get version (expected for Electron apps)"
+          else
+            echo "GrabTube.app not found"
+          fi
+
+      - name: Test License Server Connectivity
+        run: |
+          echo "=== Health Check ==="
+          curl -s "https://grabtube-license.grabtube-app.workers.dev/health" | python3 -m json.tool
+          
+          echo ""
+          echo "=== Test Activation (dry-run with invalid key) ==="
+          curl -s -X POST "https://grabtube-license.grabtube-app.workers.dev/activate" \
+            -H "Content-Type: application/json" \
+            -d '{"key":"GT-TEST-FAKE-KEY0-0000","deviceId":"macos-gh-actions-test","deviceName":"macos test runner"}' | python3 -m json.tool
+          
+          echo ""
+          echo "=== Test Validate ==="  
+          curl -s -X POST "https://grabtube-license.grabtube-app.workers.dev/validate" \
+            -H "Content-Type: application/json" \
+            -d '{"key":"GT-TEST-FAKE-KEY0-0000","deviceId":"macos-gh-actions-test"}' | python3 -m json.tool
+
+      - name: Cleanup
+        if: always()
+        run: |
+          hdiutil detach /Volumes/GrabTube* 2>/dev/null || true
+          rm -f /tmp/GrabTube-CDN.dmg /tmp/GrabTube-Direct.dmg
+          echo "Cleanup complete"
