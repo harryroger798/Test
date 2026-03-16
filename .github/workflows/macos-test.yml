@@ -1,7 +1,11 @@
 name: macOS GrabTube Test
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - grabtube/base
+    paths:
+      - '.github/workflows/macos-test.yml'
 
 jobs:
   macos-test:
