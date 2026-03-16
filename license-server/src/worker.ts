@@ -1847,17 +1847,25 @@ async function handleCdnDownload(request: Request): Promise<Response> {
     // Build the GitHub release download URL
     const githubUrl = `https://github.com/${GITHUB_REPO}/releases/download/${tagName}/${assetName}`;
 
-    // Fetch from GitHub with Cloudflare's built-in edge caching (24h TTL).
-    // This uses cf.cacheTtl which tells Cloudflare to cache the upstream
-    // response at the edge automatically — no manual cache.put needed.
-    const ghResp = await fetch(githubUrl, {
+    // GitHub returns a 302 redirect to Azure blob storage with signed URLs.
+    // First resolve the redirect to get the actual download URL, then fetch
+    // that through Cloudflare's edge cache for fast delivery.
+    const redirectResp = await fetch(githubUrl, {
       headers: { 'User-Agent': 'GrabTube-CDN/1.0' },
-      redirect: 'follow',
+      redirect: 'manual',
+    });
+    const blobUrl = redirectResp.headers.get('Location');
+    if (!blobUrl) {
+      return errorResponse(`Asset not found: ${assetName}`, 404);
+    }
+
+    // Fetch the actual binary from the resolved URL with edge caching (24h TTL)
+    const ghResp = await fetch(blobUrl, {
       cf: { cacheTtl: 86400, cacheEverything: true } as RequestInitCfProperties,
     });
 
     if (!ghResp.ok) {
-      return errorResponse(`Asset not found: ${assetName}`, 404);
+      return errorResponse(`Download failed for: ${assetName}`, 502);
     }
 
     // Determine content type
