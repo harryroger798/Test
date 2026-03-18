@@ -11,13 +11,15 @@ as a library). Full license texts are provided below.
 --------------------------------------------------------------------------------
 Website:  https://ffmpeg.org
 Source:   https://github.com/BtbN/FFmpeg-Builds
-License:  GNU General Public License v3.0 (GPLv3)
+License:  GNU Lesser General Public License v3.0 (LGPLv3)
 
 FFmpeg is used as an external binary for media conversion and processing.
 GrabTube invokes FFmpeg via subprocess (command line) and does not link
-against FFmpeg libraries.
+against FFmpeg libraries. The bundled FFmpeg builds are compiled with the
+--enable-lgpl flag (LGPL-licensed builds from BtbN/FFmpeg-Builds), which
+is compatible with closed-source distribution.
 
-The full text of the GPLv3 license is provided in: GPL-3.0.txt
+The full text of the LGPLv3 license is provided in: LGPL-3.0.txt
 
 --------------------------------------------------------------------------------
 2. yt-dlp — Video Downloader

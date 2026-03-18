@@ -35,9 +35,9 @@ const YTDLP_URLS = {
 };
 
 const FFMPEG_URLS = {
-  win:   'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+  win:   'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip',
   mac:   'https://evermeet.cx/ffmpeg/getrelease/zip',
-  linux: 'https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz',
+  linux: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl.tar.xz',
 };
 
 // Rust POT provider from jim60105/bgutil-ytdlp-pot-provider-rs
@@ -149,22 +149,41 @@ async function downloadFfmpeg() {
       console.log('  Extracting ffmpeg from archive...');
       execSync('cd "' + binDir + '" && tar -xf ffmpeg.tar.xz', { stdio: 'pipe' });
       // Find the ffmpeg binary in extracted directories
+      // BtbN builds have bin/ subdirectory; johnvansickle builds have ffmpeg directly
       const entries = fs.readdirSync(binDir);
+      let found = false;
       for (const entry of entries) {
-        const ffmpegBin = path.join(binDir, entry, 'ffmpeg');
+        const entryPath = path.join(binDir, entry);
+        if (!fs.statSync(entryPath).isDirectory()) continue;
+        // Check bin/ subdirectory first (BtbN LGPL builds)
+        const binSubDir = path.join(entryPath, 'bin');
+        if (fs.existsSync(binSubDir)) {
+          const ffmpegBin = path.join(binSubDir, 'ffmpeg');
+          if (fs.existsSync(ffmpegBin)) {
+            fs.renameSync(ffmpegBin, path.join(binDir, 'ffmpeg'));
+            const ffprobeBin = path.join(binSubDir, 'ffprobe');
+            if (fs.existsSync(ffprobeBin)) {
+              fs.renameSync(ffprobeBin, path.join(binDir, 'ffprobe'));
+            }
+            try { fs.rmSync(entryPath, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+            found = true;
+            break;
+          }
+        }
+        // Check directly in extracted directory (johnvansickle builds)
+        const ffmpegBin = path.join(entryPath, 'ffmpeg');
         if (fs.existsSync(ffmpegBin)) {
           fs.renameSync(ffmpegBin, path.join(binDir, 'ffmpeg'));
-          // Also grab ffprobe if available
-          const ffprobeBin = path.join(binDir, entry, 'ffprobe');
+          const ffprobeBin = path.join(entryPath, 'ffprobe');
           if (fs.existsSync(ffprobeBin)) {
             fs.renameSync(ffprobeBin, path.join(binDir, 'ffprobe'));
           }
-          // Clean up extracted directory to reduce installer size
-          const extractedDir = path.join(binDir, entry);
-          try { fs.rmSync(extractedDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+          try { fs.rmSync(entryPath, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+          found = true;
           break;
         }
       }
+      if (!found) console.log('  Warning: Could not locate ffmpeg binary in extracted archive.');
       makeExecutable(path.join(binDir, 'ffmpeg'));
       makeExecutable(path.join(binDir, 'ffprobe'));
       try { fs.unlinkSync(archiveDest); } catch (e) { /* ignore */ }
