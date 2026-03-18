@@ -1,53 +1,49 @@
 # SnapLeads Complete Architecture Document — v3.5.45
 
-**Version:** 3.5.45 (Analysis-Only Release — No Code Changes)  
+**Version:** 3.5.45 (Dorking Parser Fix Release)  
 **Release Date:** March 18, 2026  
 **Previous Version:** 3.5.44  
-**Status:** v3.5.44 VERIFIED WORKING — Group A + Group B PASSED — Proceeding to Group C Testing  
-**Analysis Session:** [Devin Session](https://app.devin.ai/sessions/ce8b4f755691410d815688ff59aefd1a)
+**Status:** CODE CHANGES — 5 dorking parser fixes + dead engine removal  
+**PR:** [#133](https://github.com/harryroger798/social-lead-extractor-pro/pull/133)  
+**Build:** [23234458798](https://github.com/harryroger798/social-lead-extractor-pro/actions/runs/23234458798)  
+**Devin Session:** [Session](https://app.devin.ai/sessions/ce8b4f755691410d815688ff59aefd1a)
 
 ---
 
 ## Executive Summary
 
-v3.5.45 is a **documentation-only release** that records the comprehensive analysis of v3.5.44 Group A AND Group B test results.
+v3.5.45 fixes the **Google dorking 0-result problem** identified in Group A and Group B testing (487/488 waterfall calls returned 0 results). The root cause was outdated HTML regex parsers for all free search engines. This release rewrites parsers for 4 engines (Brave, DDG Lite, Bing, SearXNG) based on captured HTML analysis, removes 4 dead engines, and expands SearXNG instance coverage.
 
-- **Group A (6 sessions with location keywords):** 3,233 leads, +171% over v3.5.43, zero-lead sessions eliminated. All 7 v3.5.44 fixes verified working.
-- **Group B (4 sessions without location keywords):** 2,750 leads, 76% email coverage, 35% phone coverage. Database search working perfectly. No bans.
+### Expected Impact
 
-**Verdict: v3.5.44 is working correctly. No code changes needed. Proceed to Group C testing (B2B platforms).**
+| Metric | v3.5.44 (Before) | v3.5.45 (After) | Change |
+|--------|------------------|------------------|--------|
+| Dorking results per waterfall call | 0-1 | ~54 | **5,400%+** |
+| Active free search engines | 8 (4 dead) | 4 (all live) | **Cleaned** |
+| SearXNG instances | 5 | 8 | **+60%** |
+| Brave results per query | 0 | ~20 | **New** |
+| DDG Lite results per query | 0-2 | ~10 | **+400%** |
+| Bing results per query | 0-3 | ~9 | **+200%** |
+| SearXNG results per query | 0 | ~15 | **New** |
 
-### Key Results — Group A (WITH Location)
+### What Changed (Files Modified)
 
-| Metric | v3.5.43 | v3.5.44 | Change |
-|--------|---------|---------|--------|
-| Total Leads | 1,194 | 3,233 | **+171%** |
-| Total Emails | 621 | 1,710 | **+175%** |
-| Total Phones | 654 | 2,063 | **+215%** |
-| Zero-Lead Sessions | 2/6 | 0/6 | **Eliminated** |
-| Avg Leads/Session | 199 | 539 | **+171%** |
-| Bans/Blocks/Captchas | 0 | 0 | **Clean** |
+| File | Lines Changed | Description |
+|------|--------------|-------------|
+| `backend/app/services/multi_engine_search.py` | +220 / -45 | 5 parser fixes + dead engine removal |
+| `package.json` | +1 / -1 | Version bump 3.5.44 → 3.5.45 |
+| `frontend/src/lib/version.ts` | +1 / -1 | Version bump 3.5.44 → 3.5.45 |
 
-### Key Results — Group B (WITHOUT Location)
+### What Did NOT Change (Group A/B Safe)
 
-| Session | Keyword | Platform | Leads | Emails | Phones |
-|---------|---------|----------|-------|--------|--------|
-| T7 | Dentists | LinkedIn | 500 | 208 (42%) | 1 (0%) |
-| T8 | Plumbers | Instagram | 467 | 467 (100%) | 389 (83%) |
-| T9 | Real Estate Agents | LI+IG+FB | 998 | 819 (82%) | 330 (33%) |
-| T10 | Yoga Instructors | LI+IG+FB+GM | 785 | 596 (76%) | 248 (32%) |
-| **TOTAL** | | | **2,750** | **2,090 (76%)** | **968 (35%)** |
-
-### Group B Component Status
-
-| Component | Status | Details |
-|-----------|--------|-------|
-| Database Search (S3/DuckDB) | WORKING | 2,750 leads across 4 sessions. LinkedIn 1,293 + Instagram 1,457 |
-| Google Dorking (8 engines) | KNOWN LIMITATION | 487/488 waterfall calls returned 0 results — free HTML scraping unreliable |
-| Direct Scraping (T10 only) | NOT PRODUCING | Facebook Bing 15 raw → 0 extracted. All other sources 0. |
-| Enrichment | WORKING | 4 sessions enriched. 120 timeouts in T10 (15s per lead) |
-| Engine Health | CLEAN | Zero 429/503 errors, zero bans, zero rate limiting |
-| Location Filtering | N/A | No location provided — global search correctly used |
+| Module | Status | Notes |
+|--------|--------|-------|
+| Database Search (S3/DuckDB) | UNTOUCHED | 2,750 Group B leads safe |
+| Enrichment Pipeline | UNTOUCHED | Waterfall enrichment intact |
+| Location Filtering | UNTOUCHED | Score > -2 threshold preserved |
+| Engine Health System | UNTOUCHED | Full reset + rate-limit aware preserved |
+| Routes / Pipeline Orchestration | UNTOUCHED | All v3.5.44 fixes preserved |
+| Frontend (except version) | UNTOUCHED | All UI components preserved |
 
 ---
 
@@ -93,15 +89,16 @@ v3.5.45 is a **documentation-only release** that records the comprehensive analy
 
 ## Complete Version History (v3.5.32 — v3.5.45)
 
-### v3.5.45 — Analysis-Only Release: Group A + Group B Verified (March 18, 2026)
-- **No code changes** — v3.5.44 verified working correctly across BOTH test groups
-- **Group A analysis:** 440,670 lines of logs, 6 sessions. Result: 3,233 leads (+171% over v3.5.43)
-- **Group B analysis:** 44,247 lines of logs, 4 sessions. Result: 2,750 leads (688 avg/session)
-- Cross-referenced against 13 architecture documents (v3.5.32-v3.5.44) and full codebase
-- All 7 v3.5.44 fixes confirmed working with log evidence
-- **Known limitation:** Google dorking free HTML scraping returns 0 results (all 8 engines). Not a regression — same in Group A. Recommendation: add Serper API key for reliable dorking.
-- **Known limitation:** Direct scraping returns 0 leads without location context. Expected behavior — live scrapers need location for directory targeting.
-- **Decision:** Proceed to Group C testing (4 sessions with B2B platforms + location)
+### v3.5.45 — 5 Dorking Parser Fixes + Dead Engine Removal (March 18, 2026)
+- **PR:** [#133](https://github.com/harryroger798/social-lead-extractor-pro/pull/133)
+- **Build:** [23234458798](https://github.com/harryroger798/social-lead-extractor-pro/actions/runs/23234458798)
+- **Fix 1:** Brave parser rewrite — `data-type="web"` containers + `fdb` fallback. Expected ~20 results/query (was 0).
+- **Fix 2:** DDG Lite parser fix — HTTP 202 as empty (not failure), snippet extraction from `<td>` elements. Expected ~10 results/query (was 0-2).
+- **Fix 3:** Bing parser fix — Base64 redirect URL resolution with dynamic padding, site: query fallback. Expected ~9 results/query (was 0-3).
+- **Fix 4:** SearXNG orchestration fix — 8 instances (removed 2 dead), JSON+HTML fallback, per-instance cooldown. Expected ~15 results/query (was 0).
+- **Fix 5:** Dead engine removal — Removed Startpage, Mojeek, Qwant, Yep from roster. `max_engines` 3→4.
+- **CodeRabbit review:** Fixed base64 padding calculation + removed dead SearXNG instances (commit `1aa25e5`).
+- **Files:** multi_engine_search.py (+220/-45), package.json, version.ts
 
 ### v3.5.44 — 7 Comprehensive Fixes: Break/Fix Cycle Prevention (March 18, 2026)
 - **PR:** [#132](https://github.com/harryroger798/social-lead-extractor-pro/pull/132)
