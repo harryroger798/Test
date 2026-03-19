@@ -313,6 +313,12 @@ export default {
         return await handleAdminGenerateBulk(request, env);
       }
 
+      // Admin: send email via Mailgun (for support replies)
+      if (path === '/admin/send-email' && request.method === 'POST') {
+        if (!await verifyAdmin(request, env)) return errorResponse('Unauthorized', 401);
+        return await handleAdminSendEmail(request, env);
+      }
+
       // === GIVEAWAY ENDPOINTS ===
 
       // Hidden giveaway page
@@ -1705,6 +1711,40 @@ async function sendGiveawayNotification(env: Env, name: string, email: string, c
     // Silently swallow email errors — the lead is already saved in D1
     console.error('Email notification error:', err instanceof Error ? err.message : String(err));
   }
+}
+
+// Admin: send email via Mailgun (for support replies from contact@grabtube.org)
+async function handleAdminSendEmail(request: Request, env: Env): Promise<Response> {
+  if (!env.MAILGUN_API_KEY) return errorResponse('Mailgun API key not configured', 500);
+
+  const body = await request.json() as { to: string; subject: string; text?: string; html?: string; from?: string };
+  if (!body.to || !body.subject || (!body.text && !body.html)) {
+    return errorResponse('Missing required fields: to, subject, and text or html', 400);
+  }
+
+  const formData = new URLSearchParams();
+  formData.append('from', body.from || 'GrabTube Support <contact@grabtube.org>');
+  formData.append('to', body.to);
+  formData.append('subject', body.subject);
+  if (body.html) formData.append('html', body.html);
+  if (body.text) formData.append('text', body.text);
+
+  const resp = await fetch('https://api.mailgun.net/v3/grabtube.org/messages', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + btoa('api:' + env.MAILGUN_API_KEY),
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: formData.toString(),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    return errorResponse(`Mailgun error: ${resp.status} ${errText}`, 502);
+  }
+
+  const result = await resp.json();
+  return jsonResponse({ success: true, mailgun: result });
 }
 
 // Admin: list giveaway redemptions
