@@ -50,7 +50,9 @@ Zero remaining "lifetime" references in either repo (verified via `rg -i "lifeti
 | PR | Repo | Description |
 |----|------|-------------|
 | #154 | social-lead-extractor-pro | ProGate 12→20 platforms + remove lifetime from LicenseCycle + AccountProfile — merged |
+| #155 | social-lead-extractor-pro | Version bump to 3.5.68 — merged |
 | #152 | snapleads-platform | Remove lifetime pricing completely + delete LifetimePage (7 files, 207 lines removed) — merged |
+| #153 | snapleads-platform | Update platform download links + redirects to v3.5.68 — merged |
 
 ---
 
@@ -129,10 +131,13 @@ Zero remaining "lifetime" references in either repo (verified via `rg -i "lifeti
 
 | Platform | File | Size | B2 URL |
 |----------|------|------|--------|
-| Windows | `SnapLeads Setup 3.5.65.exe` | ~694 MB | `https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads%20Setup%203.5.65.exe` |
-| macOS | `SnapLeads-3.5.65-arm64-mac.zip` | ~297 MB | `https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads-3.5.65-arm64-mac.zip` |
+| Windows | `SnapLeads Setup 3.5.68.exe` | ~663 MB | `https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads%20Setup%203.5.68.exe` |
+| macOS | `SnapLeads-3.5.68-arm64-mac.zip` | ~284 MB | `https://f005.backblazeb2.com/file/snapleads-downloads/SnapLeads-3.5.68-arm64-mac.zip` |
 
-**Note:** v3.5.68 changes span both repos. Desktop app changes (ProGate text + LicenseCycle + AccountProfile) will be included in the next desktop build. License server changes auto-deploy on Render.
+**Build:** GitHub Actions Run #23436708326 — both Windows and macOS succeeded.
+**Tag:** `v3.5.68` pushed to origin.
+**Platform links:** PR #153 merged — download links + redirects updated to v3.5.68 on getsnapleads.store.
+**License server:** Auto-deployed on Render (lifetime pricing removed).
 
 ---
 
