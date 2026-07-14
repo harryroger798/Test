@@ -1,0 +1,54 @@
+name: ByteFix Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - devin/bytefix-safety-and-settings
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: bytefix
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: bytefix/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run package:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize build artifacts
+        run: |
+          Write-Host "=== dist contents ==="
+          Get-ChildItem dist | Sort-Object Name | Format-Table Name,Length
+          Write-Host ""
+          Write-Host "=== SHA256 ==="
+          Get-ChildItem dist -Filter *.exe | ForEach-Object {
+            Get-FileHash $_.FullName -Algorithm SHA256 | Format-Table Path,Hash
+          }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bytefix-windows-installer
+          path: |
+            bytefix/dist/*.exe
+            bytefix/dist/*.yml
+          if-no-files-found: error
