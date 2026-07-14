@@ -19,6 +19,10 @@ extraResources:
     to: models/
     filter:
       - "**/*.onnx"
+  - from: resources/schemas/
+    to: schemas/
+    filter:
+      - "evidence.schema.json"
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/**/*

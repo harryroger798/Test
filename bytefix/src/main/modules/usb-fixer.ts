@@ -52,8 +52,8 @@ function checkUsbSelectiveSuspend(): { enabled: boolean; acValue: number; dcValu
     ).trim()
     const values = output.match(/0x([0-9a-fA-F]+)/g) || []
     if (values.length >= 2) {
-      result.acValue = parseInt(values[0].replace('0x', ''), 16)
-      result.dcValue = parseInt(values[1].replace('0x', ''), 16)
+      result.acValue = parseInt(values[0]!.replace('0x', ''), 16)
+      result.dcValue = parseInt(values[1]!.replace('0x', ''), 16)
       result.enabled = result.acValue === 1 || result.dcValue === 1
     }
   } catch { /* powercfg not available */ }

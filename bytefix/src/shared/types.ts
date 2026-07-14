@@ -134,6 +134,18 @@ export interface DiagnosticResult {
   timestamp: number
 }
 
+export type AIProviderId = 'cloudflare' | 'custom' | 'onnx' | 'rules'
+
+export interface AIProviderConfig {
+  priority: AIProviderId[]
+  cloudUrl: string
+  cloudToken: string
+  customBaseUrl: string
+  customApiKey: string
+  customModel: string
+  cloudConsent: boolean
+}
+
 export interface DiagnosticProgress {
   runId: string
   module: string
@@ -490,6 +502,13 @@ export interface IPCChannels {
 
   // Reports
   'report:generate': { request: { scanId: string }; response: { filePath: string } }
+
+  // AI Diagnostics
+  'ai:runDiagnosis': { request: void; response: unknown }
+  'ai:getHealthScore': { request: void; response: unknown }
+  'ai:collectMetrics': { request: void; response: unknown }
+  'ai:getProviderConfig': { request: void; response: AIProviderConfig }
+  'ai:setProviderConfig': { request: AIProviderConfig; response: AIProviderConfig }
 
   // Jobs
   'job:getAll': { request: void; response: Job[] }
