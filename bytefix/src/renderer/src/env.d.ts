@@ -94,6 +94,7 @@ interface ByteFixAPI {
   aiGetProviderConfig: () => Promise<import('../../../shared/types').AIProviderConfig>
   aiSetProviderConfig: (config: import('../../../shared/types').AIProviderConfig) =>
     Promise<import('../../../shared/types').AIProviderConfig>
+  getRecentActivity: (limit?: number) => Promise<import('../../../shared/types').SafetyActionLogEntry[]>
 }
 
 interface Window {

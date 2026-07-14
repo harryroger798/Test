@@ -270,6 +270,7 @@ const api = {
   aiCollectMetrics: () => ipcRenderer.invoke('ai:collectMetrics'),
   aiGetProviderConfig: () => ipcRenderer.invoke('ai:getProviderConfig'),
   aiSetProviderConfig: (config: unknown) => ipcRenderer.invoke('ai:setProviderConfig', config),
+  getRecentActivity: (limit?: number) => ipcRenderer.invoke('activity:getRecent', limit),
 
   // Phase 5: Production Hardening - Error Logging
   logError: (data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) =>

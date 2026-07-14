@@ -41,6 +41,7 @@ import { FirmwareBiosPage } from './pages/FirmwareBiosPage'
 import { RemoteAccessPage } from './pages/RemoteAccessPage'
 import { AIDiagnosticsPage } from './pages/AIDiagnosticsPage'
 import { AIProviderSettingsPage } from './pages/AIProviderSettingsPage'
+import { ActivityLogPage } from './pages/ActivityLogPage'
 import { useAppStore } from './store/app-store'
 
 export default function App(): JSX.Element {
@@ -101,6 +102,7 @@ export default function App(): JSX.Element {
               <Route path="/remote-access" element={<ErrorBoundary module="remote-access"><RemoteAccessPage /></ErrorBoundary>} />
               <Route path="/ai-diagnostics" element={<ErrorBoundary module="ai-diagnostics"><AIDiagnosticsPage /></ErrorBoundary>} />
               <Route path="/ai-settings" element={<ErrorBoundary module="ai-settings"><AIProviderSettingsPage /></ErrorBoundary>} />
+              <Route path="/activity" element={<ErrorBoundary module="activity-log"><ActivityLogPage /></ErrorBoundary>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

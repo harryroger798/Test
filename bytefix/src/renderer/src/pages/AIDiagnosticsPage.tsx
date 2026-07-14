@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Brain, Loader2, Activity, Shield, AlertTriangle, CheckCircle, Thermometer, HardDrive, Cpu, Wifi, Bug, Wrench, Gauge } from 'lucide-react'
+import type { FixResult } from '../../../../shared/types'
 
 interface SystemMetrics {
   cpuUsagePercent: number
@@ -41,6 +43,13 @@ interface HealthScore {
   score: number
   grade: string
   summary: string
+}
+
+interface FixRecommendation {
+  title: string
+  guidance: string
+  route: string
+  run?: () => Promise<FixResult>
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -118,15 +127,100 @@ function ProbabilityBar({ label, probability }: { label: string; probability: nu
   )
 }
 
+function getFixRecommendation(diagnosis: AIDiagnosticResult): FixRecommendation {
+  const text = `${diagnosis.diagnosis} ${diagnosis.actions.join(' ')}`.toLowerCase()
+  if (/\b(dns|winsock|tcp\/?ip|network|connectivity)\b/.test(text)) {
+    return {
+      title: 'Flush DNS cache',
+      guidance: 'Clears the local DNS resolver cache without changing files or accounts.',
+      route: '/network',
+      run: () => window.bytefix.flushDns()
+    }
+  }
+  if (/\b(overheat|thermal|cooling|temperature|fan)\b/.test(text)) {
+    return {
+      title: 'Optimize cooling',
+      guidance: 'Applies the existing ByteFix thermal power-plan optimization.',
+      route: '/overheating',
+      run: () => window.bytefix.optimizeCooling()
+    }
+  }
+  if (/\b(performance|slow|memory pressure|ram|process)\b/.test(text)) {
+    return {
+      title: 'Optimize memory',
+      guidance: 'Runs the existing low-risk memory optimization flow.',
+      route: '/performance',
+      run: () => window.bytefix.optimizeRam()
+    }
+  }
+  if (/\b(system file|windows file|component store|sfc|dism)\b/.test(text)) {
+    return {
+      title: 'Run System File Checker',
+      guidance: 'Runs the existing Windows system-file repair flow.',
+      route: '/os-repair',
+      run: () => window.bytefix.runSfc()
+    }
+  }
+  const routes: Record<string, string> = {
+    Healthy: '/hardware',
+    MemoryIssue: '/memory-diag',
+    DiskFailing: '/hardware',
+    MalwareInfection: '/malware',
+    DriverIssue: '/hardware',
+    PerformanceDegraded: '/performance',
+    NetworkProblem: '/network',
+    Overheating: '/overheating'
+  }
+  return {
+    title: 'Open guided diagnostics',
+    guidance: 'No conservative automated fix was selected; review the related module before taking action.',
+    route: routes[diagnosis.diagnosis] || '/hardware'
+  }
+}
+
+function FixEvidence({ result }: { result: FixResult }): JSX.Element {
+  return (
+    <div className={`mt-4 rounded-lg border p-3 ${result.success ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+      <div className="flex items-center gap-2">
+        {result.success ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-red-400" />}
+        <p className="text-sm font-medium text-white">{result.description}</p>
+      </div>
+      {result.execution?.exitCode !== undefined && (
+        <p className="text-xs text-gray-400 mt-2">Exit status: {result.execution.exitCode}</p>
+      )}
+      {result.execution?.commands?.length ? (
+        <div className="mt-2">
+          <p className="text-xs text-gray-500">Executed steps</p>
+          {result.execution.commands.map((command) => <code key={command} className="block text-xs text-gray-400">{command}</code>)}
+        </div>
+      ) : null}
+      {result.execution?.outputTail && (
+        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 text-xs text-gray-500">
+          {result.execution.outputTail}
+        </pre>
+      )}
+      {result.details.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-gray-400">
+          {result.details.slice(-5).map((detail) => <li key={detail}>• {detail}</li>)}
+        </ul>
+      )}
+      {result.error && <p className="text-xs text-red-400 mt-2">{result.error}</p>}
+    </div>
+  )
+}
+
 export function AIDiagnosticsPage(): JSX.Element {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState('')
   const [diagnosis, setDiagnosis] = useState<AIDiagnosticResult | null>(null)
   const [healthScore, setHealthScore] = useState<HealthScore | null>(null)
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null)
+  const [fixResult, setFixResult] = useState<FixResult | null>(null)
 
   async function runFullDiagnosis(): Promise<void> {
     setLoading('diagnosis')
     setHealthScore(null)
+    setFixResult(null)
     try {
       const result = await window.bytefix.aiRunDiagnosis()
       setDiagnosis(result)
@@ -165,6 +259,32 @@ export function AIDiagnosticsPage(): JSX.Element {
   }
 
   const DiagIcon = diagnosis ? (DIAGNOSIS_ICONS[diagnosis.diagnosis] || Brain) : Brain
+  const recommendation = diagnosis ? getFixRecommendation(diagnosis) : null
+
+  async function runRecommendedFix(): Promise<void> {
+    if (!recommendation) return
+    if (!recommendation.run) {
+      navigate(recommendation.route)
+      return
+    }
+    setLoading('fix')
+    try {
+      setFixResult(await recommendation.run())
+    } catch (err) {
+      setFixResult({
+        success: false,
+        module: 'ai-diagnostics',
+        action: 'recommended-fix',
+        description: 'Recommended fix failed to start.',
+        details: [String(err)],
+        changes: [],
+        rollbackAvailable: false,
+        error: String(err)
+      })
+    } finally {
+      setLoading('')
+    }
+  }
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -269,6 +389,22 @@ export function AIDiagnosticsPage(): JSX.Element {
                 <p className="text-xs text-yellow-300/80 mt-2">
                   Provider routing note: {diagnosis.fallbackReason}
                 </p>
+              )}
+
+              {recommendation && (
+                <div className="mt-4 rounded-lg border border-bytefix-500/30 bg-bytefix-500/5 p-3">
+                  <div className="flex items-center gap-3">
+                    <Wrench className="w-5 h-5 text-bytefix-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">{recommendation.title}</p>
+                      <p className="text-xs text-gray-400 mt-1">{recommendation.guidance}</p>
+                    </div>
+                    <button onClick={() => void runRecommendedFix()} disabled={!!loading} className="btn-primary text-sm">
+                      {loading === 'fix' ? 'Running...' : recommendation.run ? 'Fix this' : 'Open guidance'}
+                    </button>
+                  </div>
+                  {fixResult && <FixEvidence result={fixResult} />}
+                </div>
               )}
 
               {/* Recommended Actions */}

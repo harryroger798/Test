@@ -116,6 +116,7 @@ import type { SupportedLanguage } from './modules/i18n-config'
 
 import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem, FixResult } from '../shared/types'
 import { withSafetyGate } from './modules/safety-gate'
+import { readRecentSafetyActions } from './modules/activity-log'
 
 const logger = createLogger('ipc-handler')
 
@@ -1067,6 +1068,10 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('ai:setProviderConfig', (_event, config: AIProviderConfig) => {
     return setAIProviderConfig(config)
+  })
+
+  ipcMain.handle('activity:getRecent', (_event, limit?: number) => {
+    return readRecentSafetyActions(limit)
   })
 
   logger.info('All IPC handlers registered successfully')

@@ -1,5 +1,6 @@
 import type { FixResult } from '../../shared/types'
 import { createLogger } from '../logger'
+import { recordSafetyAction } from './activity-log'
 
 export type SafetyRisk = 'none' | 'low' | 'medium' | 'high'
 
@@ -101,7 +102,12 @@ function blockedResult(channel: string, policy: SafetyPolicy): FixResult {
     details: [policy.description, `Reversibility: ${policy.reversibility}`, 'No action was executed.'],
     changes: [],
     rollbackAvailable: false,
-    error: 'confirmation_required'
+    error: 'confirmation_required',
+    execution: {
+      commands: [],
+      steps: ['No action was executed.'],
+      outputTail: 'Confirmation required; no action was executed.'
+    }
   }
 }
 
@@ -116,24 +122,65 @@ export function withSafetyGate<TArgs = unknown>(
       ? (args as { confirm?: unknown }).confirm === true
       : false
     logger.info('remediation offered', { channel, risk: policy.risk, destructive: policy.destructive })
+    recordSafetyAction({ phase: 'offered', channel, risk: policy.risk, destructive: policy.destructive })
     if (policy.destructive || policy.risk === 'high') {
       if (!confirmation) {
         logger.warn('remediation blocked: confirmation required', { channel })
+        recordSafetyAction({
+          phase: 'blocked',
+          channel,
+          risk: policy.risk,
+          destructive: policy.destructive,
+          success: false,
+          exitInfo: 'confirmation_required'
+        })
         return blockedResult(channel, policy)
       }
       logger.info('remediation confirmed', { channel })
+      recordSafetyAction({ phase: 'confirmed', channel, risk: policy.risk, destructive: policy.destructive })
     }
     try {
       const result = await handler((args || {}) as TArgs)
+      const execution = result.execution || {
+        commands: result.details.slice(-10),
+        steps: result.details.slice(-10),
+        exitCode: result.success ? 0 : 1,
+        outputTail: result.details.slice(-5).join('\n').slice(-1200)
+      }
+      const evidenceDetails = [...result.details]
+      if (execution.commands.length > 0) evidenceDetails.push(`Executed steps: ${execution.commands.join(' | ')}`)
+      if (execution.exitCode !== undefined) evidenceDetails.push(`Exit status: ${execution.exitCode}`)
+      if (execution.outputTail) evidenceDetails.push(`Output tail: ${execution.outputTail}`)
+      const enrichedResult = { ...result, details: evidenceDetails, execution }
       logger.info('remediation executed', {
         channel,
-        success: result.success,
-        exitInfo: result.error || result.details?.slice(-1)[0] || 'completed'
+        success: enrichedResult.success,
+        exitInfo: enrichedResult.error || enrichedResult.details?.slice(-1)[0] || 'completed'
       })
-      return result
+      recordSafetyAction({
+        phase: 'executed',
+        channel,
+        risk: policy.risk,
+        destructive: policy.destructive,
+        success: enrichedResult.success,
+        exitCode: execution.exitCode,
+        exitInfo: enrichedResult.error || 'completed',
+        commands: execution.commands,
+        outputTail: execution.outputTail
+      })
+      return enrichedResult
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.error('remediation failed', { channel, exitInfo: message })
+      recordSafetyAction({
+        phase: 'failed',
+        channel,
+        risk: policy.risk,
+        destructive: policy.destructive,
+        success: false,
+        exitCode: 1,
+        exitInfo: message
+      })
       return {
         success: false,
         module: 'safety',
@@ -142,7 +189,8 @@ export function withSafetyGate<TArgs = unknown>(
         details: [message],
         changes: [],
         rollbackAvailable: false,
-        error: message
+        error: message,
+        execution: { commands: [], steps: [message], exitCode: 1, outputTail: message }
       }
     }
   }

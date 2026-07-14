@@ -6,7 +6,7 @@ import {
   MonitorSpeaker, Camera, Usb, Globe,
   Thermometer, Cpu, Keyboard, Gamepad2, Mail, Smartphone,
   Receipt, QrCode, MessageCircle, Users, ClipboardList, Database, Languages, Settings,
-  DiscAlbum, MemoryStick, CircuitBoard, Radio, Brain
+  DiscAlbum, MemoryStick, CircuitBoard, Radio, Brain, Activity
 } from 'lucide-react'
 import { useAppStore } from '../store/app-store'
 import { cn } from '../lib/utils'
@@ -52,7 +52,8 @@ const NAV_ITEMS: { path: string; i18nKey: string; fallback: string; icon: Lucide
   { path: '/firmware', i18nKey: 'nav.firmware', fallback: 'Firmware / BIOS', icon: CircuitBoard, group: 'phase6' },
   { path: '/remote-access', i18nKey: 'nav.remoteAccess', fallback: 'Remote Access', icon: Radio, group: 'phase6' },
   { path: '/ai-diagnostics', i18nKey: 'nav.aiDiagnostics', fallback: 'AI Diagnostics', icon: Brain, group: 'ai' },
-  { path: '/ai-settings', i18nKey: 'nav.aiSettings', fallback: 'AI Provider Settings', icon: Settings, group: 'ai' }
+  { path: '/ai-settings', i18nKey: 'nav.aiSettings', fallback: 'AI Provider Settings', icon: Settings, group: 'ai' },
+  { path: '/activity', i18nKey: 'nav.activityLog', fallback: 'Activity Log', icon: Activity, group: 'ai' }
 ]
 
 export function Sidebar(): JSX.Element {
