@@ -20,7 +20,7 @@ interface ByteFixAPI {
   runSfc: () => Promise<import('../../../shared/types').FixResult>
   runDism: () => Promise<import('../../../shared/types').FixResult>
   repairWindowsUpdate: () => Promise<import('../../../shared/types').FixResult>
-  cleanRegistry: () => Promise<import('../../../shared/types').FixResult>
+  cleanRegistry: (confirm?: boolean) => Promise<import('../../../shared/types').FixResult>
   getBatteryReport: () => Promise<import('../../../shared/types').BatteryInfo>
   optimizePower: () => Promise<import('../../../shared/types').FixResult>
   getSmartData: (device: string) => Promise<import('../../../shared/types').SmartData>
@@ -36,12 +36,12 @@ interface ByteFixAPI {
   restoreShadowCopy: (filePath: string, outputDir: string) => Promise<import('../../../shared/types').FixResult>
   restoreRecycleBin: () => Promise<import('../../../shared/types').FixResult>
   runPhotorec: (sourceDrive: string, outputDir: string) => Promise<import('../../../shared/types').FixResult>
-  repairFilesystem: (drive: string) => Promise<import('../../../shared/types').FixResult>
+  repairFilesystem: (drive: string, confirm?: boolean) => Promise<import('../../../shared/types').FixResult>
 
   // Phase 2: Password Recovery
   passwordDiagnose: () => Promise<import('../../../shared/types').DiagnosticResult[]>
-  enableAdmin: () => Promise<import('../../../shared/types').FixResult>
-  disableAdmin: () => Promise<import('../../../shared/types').FixResult>
+  enableAdmin: (confirm?: boolean) => Promise<import('../../../shared/types').FixResult>
+  disableAdmin: (confirm?: boolean) => Promise<import('../../../shared/types').FixResult>
 
   // Phase 2: Audio Fixer
   audioDiagnose: () => Promise<import('../../../shared/types').DiagnosticResult[]>
@@ -81,7 +81,7 @@ interface ByteFixAPI {
   usbDiagnose: () => Promise<import('../../../shared/types').DiagnosticResult[]>
   disableSelectiveSuspend: () => Promise<import('../../../shared/types').FixResult>
   reinstallUsbDrivers: () => Promise<import('../../../shared/types').FixResult>
-  repairRawDrive: (driveLetter: string) => Promise<import('../../../shared/types').FixResult>
+  repairRawDrive: (driveLetter: string, confirm?: boolean) => Promise<import('../../../shared/types').FixResult>
   disableUsbPowerMgmt: () => Promise<import('../../../shared/types').FixResult>
 
   // Phase 2: India Apps

@@ -95,7 +95,7 @@ export function FirmwareBiosPage(): JSX.Element {
           <h3 className="font-medium text-white mb-2">Update Drivers</h3>
           <p className="text-sm text-gray-400 mb-3">Attempt driver updates via pnputil (Windows) or fwupd (Linux).</p>
           <button
-            onClick={() => runFix('drivers', () => window.bytefix.updateDrivers())}
+            onClick={() => { if (window.confirm('Driver updates can change installed system drivers and may require rollback. Continue?')) runFix('drivers', () => window.bytefix.updateDrivers(true)) }}
             disabled={!!loading}
             className="btn-primary flex items-center gap-2"
           >

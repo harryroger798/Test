@@ -81,7 +81,7 @@ export function PartitionBootPage(): JSX.Element {
         <div className="card">
           <h3 className="font-medium text-white mb-2">Repair BCD (Windows)</h3>
           <p className="text-sm text-gray-400 mb-3">Rebuilds Windows Boot Configuration Data, fixes MBR, and repairs boot sector.</p>
-          <button onClick={() => { if (window.confirm('Repair Windows BCD bootloader? This modifies boot configuration. Continue?')) runFix('bcd', () => window.bytefix.repairBcd()) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { if (window.confirm('Repair Windows BCD bootloader? This modifies boot configuration. Continue?')) runFix('bcd', () => window.bytefix.repairBcd(true)) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'bcd' ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
             Repair BCD
           </button>
@@ -89,7 +89,7 @@ export function PartitionBootPage(): JSX.Element {
         <div className="card">
           <h3 className="font-medium text-white mb-2">Repair GRUB (Linux)</h3>
           <p className="text-sm text-gray-400 mb-3">Updates GRUB configuration and reinstalls the GRUB bootloader.</p>
-          <button onClick={() => { if (window.confirm('Repair GRUB bootloader? This modifies boot configuration. Continue?')) runFix('grub', () => window.bytefix.repairGrub()) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { if (window.confirm('Repair GRUB bootloader? This modifies boot configuration. Continue?')) runFix('grub', () => window.bytefix.repairGrub(true)) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'grub' ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
             Repair GRUB
           </button>

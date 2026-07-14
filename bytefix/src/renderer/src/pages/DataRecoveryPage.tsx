@@ -111,7 +111,7 @@ export function DataRecoveryPage(): JSX.Element {
         <div className="card">
           <h3 className="font-medium text-white mb-2">Repair Filesystem</h3>
           <p className="text-sm text-gray-400 mb-3">Run chkdsk to repair filesystem errors and recover readable data.</p>
-          <button onClick={() => runFix('fs', () => window.bytefix.repairFilesystem('C'))} disabled={!!loading} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { if (window.confirm('Filesystem repair can modify filesystem metadata. Continue?')) runFix('fs', () => window.bytefix.repairFilesystem('C', true)) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'fs' ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
             Repair Filesystem (C:)
           </button>

@@ -101,7 +101,7 @@ export function PartitionManagerPage(): JSX.Element {
             className="w-full bg-surface-lighter border border-gray-600 rounded px-3 py-2 text-sm text-white mb-3"
           />
           <button
-            onClick={() => runFix('resize', () => window.bytefix.resizePartition(driveLetter, newSizeMB))}
+            onClick={() => { if (window.confirm('Resizing a partition changes disk layout. Continue?')) runFix('resize', () => window.bytefix.resizePartition(driveLetter, newSizeMB, true)) }}
             disabled={!!loading || !driveLetter || !newSizeMB}
             className="btn-primary flex items-center gap-2"
           >
@@ -137,7 +137,7 @@ export function PartitionManagerPage(): JSX.Element {
             className="w-full bg-surface-lighter border border-gray-600 rounded px-3 py-2 text-sm text-white mb-3"
           />
           <button
-            onClick={() => runFix('format', () => window.bytefix.formatPartition(driveLetter, fileSystem, label))}
+            onClick={() => { if (window.confirm('Formatting destroys existing filesystem data. Continue?')) runFix('format', () => window.bytefix.formatPartition(driveLetter, fileSystem, label, true)) }}
             disabled={!!loading || !driveLetter}
             className="btn-primary flex items-center gap-2"
           >
@@ -183,7 +183,7 @@ export function PartitionManagerPage(): JSX.Element {
           />
         </div>
         <button
-          onClick={() => runFix('create', () => window.bytefix.createPartition(diskNumber, newSizeMB, fileSystem, label))}
+          onClick={() => { if (window.confirm('Creating a partition changes disk layout. Continue?')) runFix('create', () => window.bytefix.createPartition(diskNumber, newSizeMB, fileSystem, label, true)) }}
           disabled={!!loading || !newSizeMB}
           className="btn-primary flex items-center gap-2"
         >

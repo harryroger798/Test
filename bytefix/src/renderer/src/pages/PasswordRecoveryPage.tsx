@@ -82,7 +82,7 @@ export function PasswordRecoveryPage(): JSX.Element {
         <div className="card">
           <h3 className="font-medium text-white mb-2">Enable Admin Account</h3>
           <p className="text-sm text-gray-400 mb-3">Enables the built-in Windows Administrator account for password bypass.</p>
-          <button onClick={() => runFix('admin', () => window.bytefix.enableAdmin())} disabled={!!loading} className="btn-primary flex items-center gap-2">
+          <button onClick={() => { if (window.confirm('Enable the built-in Administrator account? This changes account security.')) runFix('admin', () => window.bytefix.enableAdmin(true)) }} disabled={!!loading} className="btn-primary flex items-center gap-2">
             {loading === 'admin' ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
             Enable Administrator
           </button>
@@ -90,7 +90,7 @@ export function PasswordRecoveryPage(): JSX.Element {
         <div className="card">
           <h3 className="font-medium text-white mb-2">Disable Admin Account</h3>
           <p className="text-sm text-gray-400 mb-3">Disables the built-in Administrator account after recovery is complete.</p>
-          <button onClick={() => runFix('disableAdmin', () => window.bytefix.disableAdmin())} disabled={!!loading} className="btn-primary flex items-center gap-2 opacity-80">
+          <button onClick={() => { if (window.confirm('Disable the built-in Administrator account?')) runFix('disableAdmin', () => window.bytefix.disableAdmin(true)) }} disabled={!!loading} className="btn-primary flex items-center gap-2 opacity-80">
             {loading === 'disableAdmin' ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
             Disable Administrator
           </button>
