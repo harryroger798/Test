@@ -5,6 +5,7 @@ import { createLogger } from '../logger'
 import { app } from 'electron'
 import { getAIProviderConfig } from './ai-config'
 import { buildEvidence, createProviders } from './ai-provider'
+import { collectChipTelemetry } from './chip-telemetry'
 import type { AIProviderConfig, AIProviderId, SystemInfo } from '../../shared/types'
 import { getFullSystemInfo } from './system-scanner'
 
@@ -482,8 +483,9 @@ export async function runAIDiagnosis(): Promise<DiagnosticResult> {
     logger.warn('System information collection failed; using unknown evidence', { error: err })
     systemInfo = emptySystemInfo()
   }
+  const telemetry = await collectChipTelemetry()
   const config = providerConfig()
-  const evidence = buildEvidence(systemInfo, metrics, config.cloudConsent)
+  const evidence = buildEvidence(systemInfo, metrics, config.cloudConsent, telemetry)
   const providers = createProviders()
   const localDiagnosis = async (): Promise<DiagnosticResult> => runLocalDiagnosis(metrics)
   const context = {

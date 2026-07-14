@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import type { SystemInfo } from '../../shared/types'
 import type { SystemMetrics } from './ai-diagnostics'
+import type { ChipTelemetry, TelemetryField } from './chip-telemetry'
 
 type EvidenceState =
   | 'measured'
@@ -11,7 +12,7 @@ type EvidenceState =
   | 'redacted'
 
 export interface EvidenceField<T = unknown> {
-  value: T
+  value: T | null
   state: EvidenceState
   source: string
   reason?: string
@@ -81,9 +82,26 @@ function dateNow(): string {
   return new Date().toISOString()
 }
 
-function storageEvidence(info: SystemInfo): Array<Record<string, unknown>> {
-  return info.disk.map((disk) => {
+function preferTelemetry<T>(
+  fallback: EvidenceField<T>,
+  telemetry: TelemetryField<T> | undefined
+): EvidenceField<T> {
+  return telemetry?.state === 'measured' || fallback.state !== 'measured'
+    ? telemetry
+      ? {
+          value: telemetry.value,
+          state: telemetry.state,
+          source: telemetry.source,
+          ...(telemetry.reason ? { reason: telemetry.reason } : {})
+        }
+      : fallback
+    : fallback
+}
+
+function storageEvidence(info: SystemInfo, telemetry: ChipTelemetry | undefined): Array<Record<string, unknown>> {
+  return info.disk.map((disk, index) => {
     const smart = disk.smart
+    const telemetryDisk = telemetry?.storage[index]
     const smartSource = `${SOURCE}.smart`
     const smartField = <T>(value: T | null | undefined, reason: string): EvidenceField<T | null> =>
       value !== undefined && value !== null && Number.isFinite(value as number)
@@ -99,23 +117,38 @@ function storageEvidence(info: SystemInfo): Array<Record<string, unknown>> {
       source: SOURCE,
       serial: unknown('Storage serial is not exposed by the system scanner.'),
       smart: {
-        critical_warning: smart
-          ? measured(smart.healthy ? 0 : 1, smartSource)
-          : unknown('SMART data unavailable.', smartSource),
-        percentage_used: smart
-          ? smartField(smart.wearLeveling, 'SMART wear percentage unavailable.')
-          : unknown('SMART data unavailable.', smartSource),
+        critical_warning: preferTelemetry(
+          smart
+            ? measured(smart.healthy ? false : true, smartSource)
+            : unknown('SMART data unavailable.', smartSource),
+          telemetryDisk?.smart.criticalWarning
+        ),
+        percentage_used: preferTelemetry(
+          smart
+            ? smartField(smart.wearLeveling, 'SMART wear percentage unavailable.')
+            : unknown('SMART data unavailable.', smartSource),
+          telemetryDisk?.smart.percentageUsed
+        ),
         available_spare: unknown('SMART spare data unavailable.', smartSource),
-        media_errors: smart
-          ? smartField(smart.uncorrectableSectors, 'SMART media-error data unavailable.')
-          : unknown('SMART data unavailable.', smartSource),
-        power_on_hours: smart
-          ? smartField(smart.powerOnHours, 'SMART power-on hours unavailable.')
-          : unknown('SMART data unavailable.', smartSource),
+        media_errors: preferTelemetry(
+          smart
+            ? smartField(smart.uncorrectableSectors, 'SMART media-error data unavailable.')
+            : unknown('SMART data unavailable.', smartSource),
+          telemetryDisk?.smart.mediaErrors
+        ),
+        power_on_hours: preferTelemetry(
+          smart
+            ? smartField(smart.powerOnHours, 'SMART power-on hours unavailable.')
+            : unknown('SMART data unavailable.', smartSource),
+          telemetryDisk?.smart.powerOnHours
+        ),
         unsafe_shutdowns: unknown('SMART unsafe-shutdown data unavailable.', smartSource),
-        temp_c: smart
-          ? smartField(smart.temperature, 'SMART temperature unavailable.')
-          : unknown('SMART data unavailable.', smartSource),
+        temp_c: preferTelemetry(
+          smart
+            ? smartField(smart.temperature, 'SMART temperature unavailable.')
+            : unknown('SMART data unavailable.', smartSource),
+          telemetryDisk?.smart.temperatureC
+        ),
         pending_sectors: smart
           ? smartField(smart.pendingSectors, 'SMART pending-sector data unavailable.')
           : unknown('SMART data unavailable.', smartSource),
@@ -131,7 +164,7 @@ function storageEvidence(info: SystemInfo): Array<Record<string, unknown>> {
 export function toEvidenceBundle(
   info: SystemInfo,
   metrics: SystemMetrics,
-  options: { uploadConsent?: boolean; caseId?: string } = {}
+  options: { uploadConsent?: boolean; caseId?: string; telemetry?: ChipTelemetry } = {}
 ): EvidenceBundle {
   const cpuTemperature = positiveNumber(info.cpu.temperature, 'CPU temperature sensor unavailable.')
   const batteryPresent = measured(info.battery.hasBattery)
@@ -144,6 +177,15 @@ export function toEvidenceBundle(
   const memoryTotal = positiveNumber(info.memory.total, 'Memory total unavailable.')
   const cpuModel = text(info.cpu.brand || info.cpu.manufacturer, 'CPU model unavailable.')
   const hostName = text(info.os.hostname, 'Hostname unavailable.')
+  const telemetryBootMode = options.telemetry?.firmware.uefi
+  const bootMode: TelemetryField<string> | undefined = telemetryBootMode
+    ? {
+        value: telemetryBootMode.value === null ? null : telemetryBootMode.value ? 'UEFI' : 'Legacy',
+        state: telemetryBootMode.state,
+        source: telemetryBootMode.source,
+        ...(telemetryBootMode.reason ? { reason: telemetryBootMode.reason } : {})
+      }
+    : undefined
   const installedOs = text(
     [info.os.distro, info.os.release].filter(Boolean).join(' ').trim(),
     'Operating-system identification unavailable.'
@@ -171,11 +213,26 @@ export function toEvidenceBundle(
       hostname: hostName
     },
     firmware: {
-      bios_vendor: unknown('BIOS vendor is not exposed by the scanner.'),
-      bios_version: unknown('BIOS version is not exposed by the scanner.'),
-      bios_date: unknown('BIOS date is not exposed by the scanner.'),
-      secure_boot: unknown('Secure Boot state is not exposed by the scanner.'),
-      uefi: unknown('UEFI state is not exposed by the scanner.'),
+      bios_vendor: preferTelemetry(
+        unknown('BIOS vendor is not exposed by the scanner.'),
+        options.telemetry?.firmware.biosVendor
+      ),
+      bios_version: preferTelemetry(
+        unknown('BIOS version is not exposed by the scanner.'),
+        options.telemetry?.firmware.biosVersion
+      ),
+      bios_date: preferTelemetry(
+        unknown('BIOS date is not exposed by the scanner.'),
+        options.telemetry?.firmware.biosDate
+      ),
+      secure_boot: preferTelemetry(
+        unknown('Secure Boot state is not exposed by the scanner.'),
+        options.telemetry?.firmware.secureBoot
+      ),
+      uefi: preferTelemetry(
+        unknown('UEFI state is not exposed by the scanner.'),
+        options.telemetry?.firmware.uefi
+      ),
       fwupd_updates_available: unsupported('Firmware update checks are not part of this evidence adapter.')
     },
     cpu: {
@@ -185,16 +242,25 @@ export function toEvidenceBundle(
       max_mhz: positiveNumber(info.cpu.speed * 1000, 'CPU frequency unavailable.'),
       microcode: unsupported('CPU microcode is not exposed by the scanner.'),
       vulnerabilities: unsupported('CPU vulnerability status is not exposed by the scanner.'),
-      mce_memory_errors: unsupported('Machine-check telemetry is not exposed by the scanner.')
+      mce_memory_errors: preferTelemetry(
+        unsupported('Machine-check telemetry is not exposed by the scanner.'),
+        options.telemetry?.cpu.mceMemoryErrors
+      )
     },
     memory: {
       total_bytes: memoryTotal,
       modules: [],
       ecc: unsupported('Memory-module and ECC details are not exposed by the scanner.'),
-      edac_corrected: unsupported('EDAC corrected-error telemetry is not exposed by the scanner.'),
-      edac_uncorrected: unsupported('EDAC uncorrected-error telemetry is not exposed by the scanner.')
+      edac_corrected: preferTelemetry(
+        unsupported('EDAC corrected-error telemetry is not exposed by the scanner.'),
+        options.telemetry?.memory.edacCorrected
+      ),
+      edac_uncorrected: preferTelemetry(
+        unsupported('EDAC uncorrected-error telemetry is not exposed by the scanner.'),
+        options.telemetry?.memory.edacUncorrected
+      )
     },
-    storage: storageEvidence(info),
+    storage: storageEvidence(info, options.telemetry),
     graphics: info.graphics.controllers.map((controller) => ({
       vendor: controller.vendor || 'Unknown',
       model: controller.model || 'Unknown',
@@ -229,13 +295,16 @@ export function toEvidenceBundle(
     },
     os: {
       installed_os: installedOs,
-      boot_mode: unknown('Boot mode is not exposed by the scanner.')
+      boot_mode: preferTelemetry(
+        unknown('Boot mode is not exposed by the scanner.'),
+        bootMode
+      )
     },
     logs: {
       scanned_sources: [],
       window: `captured_at:${dateNow()}`
     },
-    normalized_errors: [],
+    normalized_errors: options.telemetry?.normalizedErrors || [],
     test_results: []
   }
 }
