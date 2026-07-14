@@ -40,7 +40,7 @@ jobs:
           Get-ChildItem dist | Sort-Object Name | Format-Table Name,Length
           Write-Host ""
           Write-Host "=== SHA256 ==="
-          Get-ChildItem dist -Filter *.exe | ForEach-Object {
+          Get-ChildItem dist -File | Where-Object { $_.Extension -in @('.exe', '.zip') } | ForEach-Object {
             Get-FileHash $_.FullName -Algorithm SHA256 | Format-Table Path,Hash
           }
 
@@ -50,5 +50,6 @@ jobs:
           name: bytefix-windows-installer
           path: |
             bytefix/dist/*.exe
+            bytefix/dist/*.zip
             bytefix/dist/*.yml
           if-no-files-found: error

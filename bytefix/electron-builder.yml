@@ -39,6 +39,9 @@ win:
     - target: nsis
       arch:
         - x64
+    - target: zip
+      arch:
+        - x64
   icon: resources/icon.ico
   artifactName: ByteFix-Setup-${version}.${ext}
 nsis:
