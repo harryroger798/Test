@@ -59,8 +59,9 @@ function mapRemoteDiagnosis(
   const first = candidates[0] || {}
   const status = stringValue(diagnosis.overall_status ?? diagnosis.status, 'unknown').toLowerCase()
   const label = stringValue(first.cause ?? diagnosis.diagnosis ?? diagnosis.label, 'Remote analysis')
+  const notes = arrayOfStrings(diagnosis.notes)
   const description = stringValue(
-    diagnosis.assessment ?? diagnosis.summary ?? diagnosis.description ?? first.next_test,
+    diagnosis.assessment ?? diagnosis.summary ?? diagnosis.description ?? notes[0] ?? first.next_test,
     'The remote provider returned a diagnosis without a detailed summary.'
   )
   const actions = [
@@ -86,14 +87,16 @@ function mapRemoteDiagnosis(
     timestamp: new Date().toISOString(),
     modelVersion: `${provider}-remote`,
     inferenceTimeMs: 0,
-    provider
+    provider,
+    providerLabel: provider === 'cloudflare' ? 'Cloudflare Workers AI' : 'Custom AI provider',
+    inputProvenance: metrics.provenance
   }
 }
 
 async function requestJson(url: string, init: RequestInit): Promise<unknown> {
   const response = await fetch(url, {
     ...init,
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(30000),
     headers: { Accept: 'application/json', ...(init.headers || {}) }
   })
   const body = await response.text()
@@ -103,8 +106,27 @@ async function requestJson(url: string, init: RequestInit): Promise<unknown> {
   } catch {
     throw new Error(`AI provider returned non-JSON response (${response.status})`)
   }
-  if (!response.ok) throw new Error(`AI provider request failed (${response.status})`)
+  if (!response.ok) {
+    const detail = parsed && typeof parsed === 'object'
+      ? JSON.stringify(parsed).slice(0, 240)
+      : ''
+    throw new Error(`AI provider request failed (${response.status})${detail ? `: ${detail}` : ''}`)
+  }
   return parsed
+}
+
+function hasRemoteDiagnosis(value: unknown): boolean {
+  const outer = asRecord(value)
+  const diagnosis = asRecord(outer.diagnosis ?? value)
+  const candidates = diagnosis.candidate_diagnoses
+  if (Array.isArray(candidates) && candidates.length > 0) return true
+  if (diagnosis.abstained === true) return true
+  const status = String(diagnosis.overall_status ?? diagnosis.status ?? '').toLowerCase()
+  return status === 'healthy' || status === 'investigate' || status === 'critical'
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 export class CloudflareProvider implements AIProvider {
@@ -131,10 +153,15 @@ export class CloudflareProvider implements AIProvider {
       method: 'POST',
       headers
     })
-    const result = await requestJson(`${config.cloudUrl.replace(/\/+$/, '')}/v1/cases/${encodeURIComponent(caseId)}`, {
-      method: 'GET',
-      headers
-    })
+    let result: unknown = {}
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      result = await requestJson(`${config.cloudUrl.replace(/\/+$/, '')}/v1/cases/${encodeURIComponent(caseId)}`, {
+        method: 'GET',
+        headers
+      })
+      if (hasRemoteDiagnosis(result)) break
+      if (attempt < 4) await delay(750)
+    }
     return mapRemoteDiagnosis(result, context.metrics, this.id)
   }
 }

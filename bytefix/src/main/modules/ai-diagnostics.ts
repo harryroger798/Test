@@ -124,7 +124,14 @@ export interface DiagnosticResult {
   modelVersion: string
   inferenceTimeMs: number
   provider: 'cloudflare' | 'custom' | 'onnx' | 'rules'
+  providerLabel: string
+  fallbackReason?: string
+  inputProvenance: MetricProvenance
 }
+
+export type MetricProvenanceState = 'measured' | 'estimated' | 'not_measured'
+
+export type MetricProvenance = Record<keyof Omit<SystemMetrics, 'provenance'>, MetricProvenanceState>
 
 export interface SystemMetrics {
   cpuUsagePercent: number
@@ -137,6 +144,7 @@ export interface SystemMetrics {
   errorCount: number
   uptimeHours: number
   fanRPM: number
+  provenance: MetricProvenance
 }
 
 // Find the ONNX model file
@@ -188,8 +196,10 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   ) || fsSize[0]
   const diskUsagePercent = primaryDisk ? Math.round(primaryDisk.use * 10) / 10 : 0
 
-  // Temperature
-  const temperatureCelsius = cpuTemp.main || 45 // Default to 45 if sensor unavailable
+  // Temperature. Keep the numeric model input usable, but record when no sensor
+  // reading was available rather than presenting the fallback as measured.
+  const temperatureMeasured = typeof cpuTemp.main === 'number' && cpuTemp.main > 0
+  const temperatureCelsius = temperatureMeasured ? cpuTemp.main : 45
 
   // Process count
   const processCount = processes.all || 0
@@ -203,13 +213,15 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
 
   // Network latency estimation
   const netStats = Array.isArray(networkStats) ? networkStats : []
-  let networkLatencyMs = 5 // Default healthy
+  let networkLatencyMs = 5
+  let networkLatencyProvenance: MetricProvenanceState = 'not_measured'
   if (netStats.length > 0) {
     const activeNet = netStats.find((n) => n.operstate === 'up') || netStats[0]
     // Zero transfer rate just means network is idle, not broken
     // Only flag as issue if interface is down or no active interfaces found
     if (!activeNet || activeNet.operstate !== 'up') {
       networkLatencyMs = 200 // Interface down = likely problem
+      networkLatencyProvenance = 'estimated'
     }
     // Otherwise keep default healthy latency — idle network is normal
   }
@@ -220,7 +232,7 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
     try {
       const { execSync } = await import('child_process')
       const output = execSync(
-        'powershell -NoProfile -Command "(Get-EventLog -LogName System -EntryType Error -Newest 100 -ErrorAction SilentlyContinue).Count"',
+        `powershell -NoProfile -Command "$start=(Get-Date).AddHours(-24); [int]@(Get-WinEvent -FilterHashtable @{LogName='System'; Level=2; StartTime=$start} -ErrorAction SilentlyContinue).Count"`,
         { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
       ).trim()
       errorCount = parseInt(output, 10) || 0
@@ -232,7 +244,8 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   // Uptime in hours
   const uptimeHours = Math.round((time.uptime || 0) / 3600 * 10) / 10
 
-  // Fan RPM (not available on most systems, estimate from temperature)
+  // Fan RPM is not exposed by systeminformation on most systems. Keep the
+  // model feature populated but label this as an estimate.
   const fanRPM = temperatureCelsius > 70 ? 2500 : temperatureCelsius > 55 ? 1500 : 1000
 
   const metrics: SystemMetrics = {
@@ -245,7 +258,19 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
     networkLatencyMs,
     errorCount,
     uptimeHours,
-    fanRPM
+    fanRPM,
+    provenance: {
+      cpuUsagePercent: 'measured',
+      ramUsagePercent: 'measured',
+      diskUsagePercent: 'measured',
+      temperatureCelsius: temperatureMeasured ? 'measured' : 'not_measured',
+      processCount: 'measured',
+      diskIOLatencyMs: 'measured',
+      networkLatencyMs: networkLatencyProvenance,
+      errorCount: process.platform === 'win32' ? 'measured' : 'not_measured',
+      uptimeHours: 'measured',
+      fanRPM: 'estimated'
+    }
   }
 
   logger.info('System metrics collected', { metrics })
@@ -366,8 +391,11 @@ function runRuleBasedDiagnosis(metrics: SystemMetrics): number[] {
   if (metrics.networkLatencyMs > 200 && metrics.cpuUsagePercent > 50) scores[4] += 0.3
 
   // Driver issue check
-  if (metrics.errorCount > 20) scores[5] += 0.6
-  if (metrics.uptimeHours < 2 && metrics.errorCount > 5) scores[5] += 0.3
+  // Use a recent, uncapped error signal without allowing a noisy event log to
+  // dominate the diagnosis by itself.
+  if (metrics.errorCount > 20) scores[5] += 0.2
+  if (metrics.errorCount > 100) scores[5] += 0.2
+  if (metrics.uptimeHours < 2 && metrics.errorCount > 10) scores[5] += 0.15
 
   // Performance degraded check
   if (metrics.cpuUsagePercent > 70 && metrics.ramUsagePercent > 70) scores[6] += 0.5
@@ -412,7 +440,9 @@ export async function runLocalDiagnosis(metrics: SystemMetrics): Promise<Diagnos
     timestamp: new Date().toISOString(),
     modelVersion: '1.0.0-rf50',
     inferenceTimeMs,
-    provider
+    provider,
+    providerLabel: provider === 'onnx' ? 'Offline ONNX' : 'Rules',
+    inputProvenance: metrics.provenance
   }
   return result
 }
@@ -436,8 +466,42 @@ function emptyMetrics(): SystemMetrics {
     networkLatencyMs: 0,
     errorCount: 0,
     uptimeHours: 0,
-    fanRPM: 0
+    fanRPM: 0,
+    provenance: {
+      cpuUsagePercent: 'not_measured',
+      ramUsagePercent: 'not_measured',
+      diskUsagePercent: 'not_measured',
+      temperatureCelsius: 'not_measured',
+      processCount: 'not_measured',
+      diskIOLatencyMs: 'not_measured',
+      networkLatencyMs: 'not_measured',
+      errorCount: 'not_measured',
+      uptimeHours: 'not_measured',
+      fanRPM: 'not_measured'
+    }
   }
+}
+
+const PROVIDER_LABELS: Record<DiagnosticResult['provider'], string> = {
+  cloudflare: 'Cloudflare Workers AI',
+  custom: 'Custom AI provider',
+  onnx: 'Offline ONNX',
+  rules: 'Rules fallback'
+}
+
+function providerAvailabilityReason(id: AIProviderId, config: AIProviderConfig): string {
+  if (id === 'cloudflare') {
+    if (!config.cloudConsent) return 'Cloudflare skipped: cloud consent is disabled.'
+    if (!config.cloudUrl.trim()) return 'Cloudflare skipped: Worker URL is empty.'
+    if (!config.cloudToken.trim()) return 'Cloudflare skipped: bearer token is missing.'
+  }
+  if (id === 'custom') {
+    if (!config.cloudConsent) return 'Custom provider skipped: cloud consent is disabled.'
+    if (!config.customBaseUrl.trim()) return 'Custom provider skipped: endpoint is empty.'
+    if (!config.customApiKey.trim()) return 'Custom provider skipped: API key is missing.'
+    if (!config.customModel.trim()) return 'Custom provider skipped: model is missing.'
+  }
+  return `${PROVIDER_LABELS[id === 'onnx' || id === 'rules' ? id : 'rules']} was unavailable.`
 }
 
 function emptySystemInfo(): SystemInfo {
@@ -495,27 +559,48 @@ export async function runAIDiagnosis(): Promise<DiagnosticResult> {
     config,
     localDiagnosis
   }
+  const providerFailures: string[] = []
 
   for (const id of orderedProviderIds(config)) {
     const provider = providers[id]
-    if (!provider || !provider.isAvailable(config)) continue
+    if (!provider) {
+      providerFailures.push(`${id} provider is unavailable.`)
+      continue
+    }
+    if (!provider.isAvailable(config)) {
+      providerFailures.push(providerAvailabilityReason(id, config))
+      continue
+    }
     try {
       const result = await provider.diagnose(context)
+      const providerLabel = PROVIDER_LABELS[result.provider]
       logger.info('AI diagnosis complete', {
         provider: result.provider,
         diagnosis: result.diagnosis,
         confidence: result.confidence,
         severity: result.severity
       })
-      return result
+      return {
+        ...result,
+        providerLabel,
+        ...(providerFailures.length > 0 ? { fallbackReason: providerFailures.join(' ') } : {}),
+        inputProvenance: metrics.provenance
+      }
     } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      providerFailures.push(`${PROVIDER_LABELS[id]} failed: ${reason}`)
       logger.warn(`AI provider ${id} failed; falling through`, { error: err })
     }
   }
 
   const fallback = await localDiagnosis()
-  logger.info('AI diagnosis complete', { provider: fallback.provider })
-  return fallback
+  logger.info('AI diagnosis complete', { provider: fallback.provider, fallbackReason: providerFailures.join(' ') })
+  return {
+    ...fallback,
+    providerLabel: PROVIDER_LABELS[fallback.provider],
+    ...(providerFailures.length > 0 ? { fallbackReason: providerFailures.join(' ') } : {}),
+    inputProvenance: metrics.provenance
+  }
 }
 
 // Quick health score (0-100, higher = healthier)
