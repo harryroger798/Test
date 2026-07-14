@@ -59,13 +59,42 @@ jobs:
 
       - name: Publish GitHub release
         if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: bytefix-v1.0.0-ai
-          target_commitish: aa3bd12436cd64425b3fff4236d4ac0ea31b27e3
-          name: ByteFix v1.0.0 AI-integrated build
-          prerelease: true
-          body: ByteFix Windows installer with the integrated AI/provider, chip-telemetry, and safety-gate features. The installer is unsigned, so Windows SmartScreen may show a warning on first launch (More info → Run anyway).
-          files: |
-            bytefix/dist/*.exe
-            bytefix/dist/*.yml
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = 'harryroger798/Test'
+          $tag = 'bytefix-v1.0.0-ai'
+          $target = 'aa3bd12436cd64425b3fff4236d4ac0ea31b27e3'
+          $body = 'ByteFix Windows installer with the integrated AI/provider, chip-telemetry, and safety-gate features. The installer is unsigned, so Windows SmartScreen may show a warning on first launch (More info → Run anyway).'
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          try {
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/tags/$tag" -Headers $headers -Method Get
+          } catch {
+            $payload = @{
+              tag_name = $tag
+              target_commitish = $target
+              name = 'ByteFix v1.0.0 AI-integrated build'
+              body = $body
+              prerelease = $true
+              draft = $false
+            } | ConvertTo-Json -Depth 4
+            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases" -Headers $headers -Method Post -ContentType 'application/json' -Body $payload
+          }
+          $uploadBase = ($release.upload_url -replace '\{\?name,label\}', '')
+          foreach ($file in @('bytefix/dist/ByteFix-Setup-1.0.0.exe', 'bytefix/dist/latest.yml')) {
+            $name = [System.IO.Path]::GetFileName($file)
+            $uri = "$uploadBase?name=$([System.Uri]::EscapeDataString($name))"
+            Invoke-WebRequest -Uri $uri -Headers @{
+              Authorization = "Bearer $env:GH_TOKEN"
+              Accept = 'application/vnd.github+json'
+              'Content-Type' = 'application/octet-stream'
+              'X-GitHub-Api-Version' = '2022-11-28'
+            } -Method Post -InFile $file | Out-Null
+          }
+          Write-Host "Release URL: $($release.html_url)"
