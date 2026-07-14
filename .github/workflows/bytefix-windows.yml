@@ -10,10 +10,6 @@ jobs:
   build-windows-installer:
     runs-on: windows-latest
 
-    permissions:
-      contents: write
-      actions: read
-
     defaults:
       run:
         working-directory: bytefix
@@ -56,16 +52,3 @@ jobs:
             bytefix/dist/*.exe
             bytefix/dist/*.yml
           if-no-files-found: error
-
-      - name: Publish GitHub release
-        if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: bytefix-v1.0.0-ai
-          target_commitish: aa3bd12436cd64425b3fff4236d4ac0ea31b27e3
-          name: ByteFix v1.0.0 AI-integrated build
-          prerelease: true
-          body: ByteFix Windows installer with the integrated AI/provider, chip-telemetry, and safety-gate features. The installer is unsigned, so Windows SmartScreen may show a warning on first launch (More info → Run anyway).
-          files: |
-            bytefix/dist/*.exe
-            bytefix/dist/*.yml
