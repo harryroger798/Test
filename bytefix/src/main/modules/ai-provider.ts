@@ -93,7 +93,7 @@ function mapRemoteDiagnosis(
   }
 }
 
-async function requestJson(url: string, init: RequestInit, timeoutMs = 90000): Promise<unknown> {
+async function requestJson(url: string, init: RequestInit, timeoutMs = 15000): Promise<unknown> {
   const response = await fetch(url, {
     ...init,
     signal: AbortSignal.timeout(timeoutMs),
@@ -125,6 +125,14 @@ function hasRemoteDiagnosis(value: unknown): boolean {
   return status === 'healthy' || status === 'investigate' || status === 'critical'
 }
 
+function remoteAnalysisError(value: unknown): string | null {
+  const record = asRecord(value)
+  if (String(record.status || '').toLowerCase() === 'failed') {
+    return stringValue(record.analysis_error ?? record.error, 'Cloudflare analysis failed')
+  }
+  return null
+}
+
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
@@ -152,16 +160,19 @@ export class CloudflareProvider implements AIProvider {
     await requestJson(`${config.cloudUrl.replace(/\/+$/, '')}/v1/cases/${encodeURIComponent(caseId)}/analyze`, {
       method: 'POST',
       headers
-    })
+    }, 15000)
     let result: unknown = {}
-    for (let attempt = 0; attempt < 12; attempt += 1) {
+    for (let attempt = 0; attempt < 75; attempt += 1) {
       result = await requestJson(`${config.cloudUrl.replace(/\/+$/, '')}/v1/cases/${encodeURIComponent(caseId)}`, {
         method: 'GET',
         headers
-      })
+      }, 15000)
+      const error = remoteAnalysisError(result)
+      if (error) throw new Error(error)
       if (hasRemoteDiagnosis(result)) break
-      if (attempt < 11) await delay(1500)
+      if (attempt < 74) await delay(2000)
     }
+    if (!hasRemoteDiagnosis(result)) throw new Error('Cloudflare analysis did not finish within 150 seconds')
     return mapRemoteDiagnosis(result, context.metrics, this.id)
   }
 }
