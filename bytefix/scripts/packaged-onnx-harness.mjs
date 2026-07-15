@@ -1,24 +1,16 @@
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { createPackage, extractAll } from '@electron/asar'
 
 const asarPath = process.argv[2]
 if (!asarPath) throw new Error('Usage: node scripts/packaged-onnx-harness.mjs <app.asar>')
 
 const workdir = mkdtempSync(join(tmpdir(), 'bytefix-packaged-onnx-'))
 const extracted = join(workdir, 'app')
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx'
-const runAsar = (args) => {
-  const result = spawnSync(npx, ['--yes', 'asar', ...args], {
-    encoding: 'utf8',
-    stdio: 'inherit'
-  })
-  if (result.status !== 0) throw new Error(`asar command failed with status ${result.status}`)
-}
 
 try {
-  runAsar(['extract', asarPath, extracted])
+  await extractAll(asarPath, extracted)
   const mainPath = join(extracted, 'out', 'main', 'index.js')
   const current = readFileSync(mainPath, 'utf8')
   const marker = 'BYTEFIX_PACKAGED_ONNX_HARNESS'
@@ -50,9 +42,9 @@ if (process.argv.includes('--onnx-harness')) {
     }
   });
 }
-`)
+  `)
   rmSync(asarPath)
-  runAsar(['pack', extracted, asarPath])
+  await createPackage(extracted, asarPath)
 } finally {
   rmSync(workdir, { recursive: true, force: true })
 }
