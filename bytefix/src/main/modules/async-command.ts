@@ -90,3 +90,25 @@ export async function runCommandSafe(command: string, args: string[], timeoutMs:
     return ''
   }
 }
+
+export async function runCommandDetailed(command: string, args: string[], timeoutMs: number): Promise<{
+  stdout: string
+  stderr: string
+  error?: string
+}> {
+  try {
+    const { stdout, stderr } = await execFileAsync(command, args, {
+      timeout: timeoutMs,
+      encoding: 'utf8',
+      windowsHide: true
+    })
+    return { stdout, stderr }
+  } catch (err) {
+    const error = err as { stdout?: string; stderr?: string; message?: string }
+    return {
+      stdout: error.stdout || '',
+      stderr: error.stderr || '',
+      error: error.message || String(err)
+    }
+  }
+}
