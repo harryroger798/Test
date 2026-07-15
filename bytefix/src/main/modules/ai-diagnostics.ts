@@ -458,8 +458,10 @@ async function runOnnxInference(
     // Dynamic import to handle environments where onnxruntime-node isn't available
     // Cache both the module and session for reuse across calls
     if (!cachedOrtModule) {
-      cachedOrtModule = await import('onnxruntime-node')
+      const runtimePackage = 'onnxruntime-node'
+      cachedOrtModule = await import(/* @vite-ignore */ runtimePackage)
     }
+    if (!cachedOrtModule) throw new Error('ONNX runtime module was not loaded')
     const ort = cachedOrtModule
 
     const startTime = Date.now()
@@ -518,6 +520,7 @@ async function runOnnxInference(
   } catch (err) {
     logger.error('ONNX runtime/model inference failed, falling back to rules', {
       error: err,
+      errorMessage: err instanceof Error ? err.message : String(err),
       modelPath,
       packaged: Boolean(app?.isPackaged),
       resourcesPath: process.resourcesPath
