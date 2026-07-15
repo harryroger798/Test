@@ -228,7 +228,7 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
     try {
       const stdout = await runPowerShell(command, timeoutMs)
       const numericValue = Number(stdout)
-      const pingMatch = stdout.match(/(?:Average\s*=\s*|time[=<]\s*|tcp_rtt_ms=)(\d+)\s*ms?/i)
+      const pingMatch = stdout.match(/(?:Average\s*=\s*|time[=<]\s*|tcp_rtt_ms=)(\d+)(?:\s*ms?)?/i)
       const value = Number.isFinite(numericValue) ? numericValue : pingMatch ? Number(pingMatch[1]) : NaN
       return {
         command,
