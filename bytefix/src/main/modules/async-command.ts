@@ -57,6 +57,28 @@ export async function runShellSafe(command: string, timeoutMs: number): Promise<
   }
 }
 
+export async function runShellDetailed(command: string, timeoutMs: number): Promise<{
+  stdout: string
+  stderr: string
+  error?: string
+}> {
+  try {
+    const { stdout, stderr } = await execAsync(command, {
+      timeout: timeoutMs,
+      encoding: 'utf8',
+      windowsHide: true
+    })
+    return { stdout, stderr }
+  } catch (err) {
+    const error = err as { stdout?: string; stderr?: string; message?: string }
+    return {
+      stdout: error.stdout || '',
+      stderr: error.stderr || '',
+      error: error.message || String(err)
+    }
+  }
+}
+
 /**
  * Run a command with arguments and return empty string on failure.
  */

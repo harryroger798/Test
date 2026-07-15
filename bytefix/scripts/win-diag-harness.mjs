@@ -5,7 +5,9 @@ import {
   CloudflareProvider,
   collectSystemMetrics,
   collectWindowsSensorReadings,
-  runOnnxInference
+  runOnnxInference,
+  getStartupItems,
+  getLastStartupProbe
 } from '../out/harness/win-diag-entry.js'
 
 const info = {
@@ -36,6 +38,16 @@ print('METRICS', metrics)
 
 const onnx = await runOnnxInference(metrics)
 print('ONNX', onnx)
+
+let startupItems = []
+let startupError = null
+try {
+  startupItems = await getStartupItems()
+} catch (error) {
+  startupError = error instanceof Error ? error.message : String(error)
+}
+print('STARTUP PROBE', getLastStartupProbe())
+print('STARTUP ITEMS', { items: startupItems, error: startupError })
 
 const token = process.env.BYTEFIX_WORKER_TOKEN
 if (!token) {
