@@ -2,6 +2,9 @@ name: ByteFix Packaged Diagnostics
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - devin/bytefix-safety-and-settings
 
 jobs:
   packaged-onnx:
