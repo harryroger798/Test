@@ -249,9 +249,10 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
       "-ErrorAction Stop | Select-Object -First 1 -ExpandProperty CurrentTemperature)"
     ),
     readNumber(
-      "$ping=New-Object System.Net.NetworkInformation.Ping; " +
-      "$samples=@(1..2 | ForEach-Object { try { $reply=$ping.Send('1.1.1.1',1000); " +
-      "if ($reply.Status -eq 'Success') { $reply.RoundtripTime } } catch {} }); " +
+      "$ping=New-Object System.Net.NetworkInformation.Ping; $targets=@('www.microsoft.com','8.8.8.8','1.1.1.1'); " +
+      "$samples=@(); foreach ($target in $targets) { if ($samples.Count -gt 0) { break }; " +
+      "$samples=@(1..2 | ForEach-Object { try { $reply=$ping.Send($target,1000); " +
+      "if ($reply.Status -eq 'Success') { $reply.RoundtripTime } } catch {} }) }; " +
       "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }"
     ),
     readNumber(
