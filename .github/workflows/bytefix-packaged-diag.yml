@@ -38,7 +38,7 @@ jobs:
           & $app --onnx-harness 2>&1 | Tee-Object "$env:RUNNER_TEMP\packaged-onnx-before.log"
           Write-Host "Published package probe exit code: $LASTEXITCODE"
       - name: Build fixed packaged app
-        run: npm run package:win
+        run: npm run package:win -- --publish never
       - name: Inject packaged ONNX probe into fixed app.asar
         shell: pwsh
         run: |
