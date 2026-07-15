@@ -7,7 +7,10 @@ import {
   collectWindowsSensorReadings,
   runOnnxInference,
   getStartupItems,
-  getLastStartupProbe
+  getLastStartupProbe,
+  listAudioDevices,
+  isAudioProblemDevice,
+  getLastAudioProbe
 } from '../out/harness/win-diag-entry.js'
 
 const info = {
@@ -48,6 +51,13 @@ try {
 }
 print('STARTUP PROBE', getLastStartupProbe())
 print('STARTUP ITEMS', { items: startupItems, error: startupError })
+
+const audioDevices = listAudioDevices()
+print('AUDIO DEVICE PROBES', getLastAudioProbe())
+print('AUDIO DEVICES', {
+  devices: audioDevices,
+  problemDevices: audioDevices.filter(isAudioProblemDevice)
+})
 
 const token = process.env.BYTEFIX_WORKER_TOKEN
 if (!token) {

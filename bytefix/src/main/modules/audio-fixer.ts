@@ -21,6 +21,22 @@ const START_TYPE_MAP: Record<number, string> = {
   0: 'Boot', 1: 'System', 2: 'Automatic', 3: 'Manual', 4: 'Disabled'
 }
 
+export interface AudioDevice {
+  name: string
+  status: string
+  type: string
+  instanceId?: string
+  present?: boolean
+  problemCode?: number
+  configManagerErrorCode?: number
+}
+
+let lastAudioProbe: {
+  command: string
+  stdout: string
+  error?: string
+}[] = []
+
 // Check audio service status (Windows)
 function checkAudioServices(): { name: string; status: string; startType: string }[] {
   const services: { name: string; status: string; startType: string }[] = []
@@ -49,15 +65,22 @@ function checkAudioServices(): { name: string; status: string; startType: string
 }
 
 // List audio devices
-function listAudioDevices(): { name: string; status: string; type: string }[] {
-  const devices: { name: string; status: string; type: string }[] = []
+export function listAudioDevices(): AudioDevice[] {
+  const devices: AudioDevice[] = []
+  lastAudioProbe = []
 
   try {
     if (isWin) {
-      const output = execSync(
-        'powershell -NoProfile -Command "Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Select-Object FriendlyName, Status, InstanceId | ConvertTo-Json"',
-        { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
-      ).trim()
+      const endpointCommand = 'powershell -NoProfile -Command "Get-PnpDevice -Class AudioEndpoint -ErrorAction SilentlyContinue | Select-Object FriendlyName, Status, InstanceId, Present, ProblemCode, ConfigManagerErrorCode | ConvertTo-Json"'
+      let output = ''
+      try {
+        output = execSync(endpointCommand, { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }).trim()
+        lastAudioProbe.push({ command: endpointCommand, stdout: output })
+      } catch (err) {
+        const error = err as { stdout?: string; message?: string }
+        output = error.stdout?.trim() || ''
+        lastAudioProbe.push({ command: endpointCommand, stdout: output, error: error.message || String(err) })
+      }
       if (output) {
         const parsed = JSON.parse(output)
         const items = Array.isArray(parsed) ? parsed : [parsed]
@@ -68,15 +91,25 @@ function listAudioDevices(): { name: string; status: string; type: string }[] {
             name,
             status: String(dev.Status || 'Unknown'),
             type: isMic ? 'input' : 'output',
+            instanceId: typeof dev.InstanceId === 'string' ? dev.InstanceId : undefined,
+            present: dev.Present !== false,
+            problemCode: Number(dev.ProblemCode) || 0,
+            configManagerErrorCode: Number(dev.ConfigManagerErrorCode) || 0,
           })
         }
       }
 
       // Also check media devices (sound cards)
-      const mediaOutput = execSync(
-        'powershell -NoProfile -Command "Get-PnpDevice -Class MEDIA -ErrorAction SilentlyContinue | Select-Object FriendlyName, Status | ConvertTo-Json"',
-        { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
-      ).trim()
+      const mediaCommand = 'powershell -NoProfile -Command "Get-PnpDevice -Class MEDIA -ErrorAction SilentlyContinue | Select-Object FriendlyName, Status, InstanceId, Present, ProblemCode, ConfigManagerErrorCode | ConvertTo-Json"'
+      let mediaOutput = ''
+      try {
+        mediaOutput = execSync(mediaCommand, { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }).trim()
+        lastAudioProbe.push({ command: mediaCommand, stdout: mediaOutput })
+      } catch (err) {
+        const error = err as { stdout?: string; message?: string }
+        mediaOutput = error.stdout?.trim() || ''
+        lastAudioProbe.push({ command: mediaCommand, stdout: mediaOutput, error: error.message || String(err) })
+      }
       if (mediaOutput) {
         const parsed = JSON.parse(mediaOutput)
         const items = Array.isArray(parsed) ? parsed : [parsed]
@@ -85,6 +118,10 @@ function listAudioDevices(): { name: string; status: string; type: string }[] {
             name: String(dev.FriendlyName || 'Unknown'),
             status: String(dev.Status || 'Unknown'),
             type: 'controller',
+            instanceId: typeof dev.InstanceId === 'string' ? dev.InstanceId : undefined,
+            present: dev.Present !== false,
+            problemCode: Number(dev.ProblemCode) || 0,
+            configManagerErrorCode: Number(dev.ConfigManagerErrorCode) || 0,
           })
         }
       }
@@ -114,6 +151,18 @@ function listAudioDevices(): { name: string; status: string; type: string }[] {
     logger.warn('Failed to list audio devices', err)
   }
   return devices
+}
+
+export function isAudioProblemDevice(device: AudioDevice): boolean {
+  if (device.present === false) return false
+  const status = device.status.trim().toLowerCase()
+  if (status === 'unknown' && !(device.problemCode || device.configManagerErrorCode)) return false
+  return status === 'error' || status === 'degraded' || status === 'failed' ||
+    (device.problemCode || 0) > 0 || (device.configManagerErrorCode || 0) > 0
+}
+
+export function getLastAudioProbe(): typeof lastAudioProbe {
+  return lastAudioProbe
 }
 
 // Check microphone privacy settings (Windows)
@@ -184,7 +233,7 @@ export async function runAudioDiagnostics(): Promise<DiagnosticResult[]> {
 
     // 2. Check audio devices
     const devices = listAudioDevices()
-    const errorDevices = devices.filter(d => d.status !== 'OK' && d.status !== 'Running')
+    const errorDevices = devices.filter(isAudioProblemDevice)
     const outputDevices = devices.filter(d => d.type === 'output')
     const inputDevices = devices.filter(d => d.type === 'input')
 
@@ -350,17 +399,44 @@ export async function reinstallAudioDrivers(): Promise<FixResult> {
 
   try {
     if (isWin) {
-      // Remove and rescan audio devices
-      execSync(
-        'powershell -NoProfile -Command "Get-PnpDevice -Class MEDIA -ErrorAction SilentlyContinue | Where-Object { $_.Status -ne \'OK\' -or $_.FriendlyName -match \'Realtek|High Definition\' } | ForEach-Object { pnputil /remove-device $_.InstanceId 2>$null }"',
-        { timeout: 30000, stdio: 'pipe' }
-      )
-      details.push('Removed existing audio drivers')
+      const elevation = execSync(
+        'powershell -NoProfile -Command "[Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent().IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"',
+        { encoding: 'utf8', timeout: 5000, stdio: 'pipe' }
+      ).trim().toLowerCase()
+      if (elevation !== 'true') {
+        return {
+          success: false, module: 'audio-fixer', action: 'reinstall-drivers',
+          description: 'Audio driver reinstall requires administrator privileges',
+          details: ['No changes were made because ByteFix is not running elevated.', 'Restart ByteFix as administrator and try again.'],
+          changes, rollbackAvailable: false, error: 'requires administrator privileges'
+        }
+      }
 
-      // Rescan for hardware
+      const problemDevices = listAudioDevices().filter(isAudioProblemDevice)
+      const instanceIds = problemDevices.map(device => device.instanceId).filter((id): id is string => Boolean(id))
+      if (instanceIds.length === 0) {
+        return {
+          success: true, module: 'audio-fixer', action: 'reinstall-drivers',
+          description: 'No present faulty audio devices found',
+          details: ['No audio drivers were removed. Disconnected or absent devices were ignored.'],
+          changes, rollbackAvailable: false
+        }
+      }
+
+      // Preflight the same elevated rescan operation before removing anything.
+      execSync('pnputil /scan-devices', { timeout: 30000, stdio: 'pipe' })
+      details.push('Administrator privileges verified')
+      details.push('Hardware rescan preflight completed')
+
+      for (const instanceId of instanceIds) {
+        execFileSync('pnputil', ['/remove-device', instanceId], { timeout: 30000, stdio: 'pipe' })
+        details.push(`Removed faulty present device: ${instanceId}`)
+      }
+
+      // Rescan for hardware only after the preflight and removals succeed.
       execSync('pnputil /scan-devices', { timeout: 30000, stdio: 'pipe' })
       details.push('Hardware scan completed — drivers will be reinstalled')
-      changes.push({ type: 'driver', action: 'reinstalled', target: 'Audio drivers' })
+      changes.push({ type: 'driver', action: 'reinstalled', target: `${instanceIds.length} faulty present audio device(s)` })
 
       // Also enable any disabled audio endpoints
       execSync(
