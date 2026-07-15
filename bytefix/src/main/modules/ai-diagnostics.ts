@@ -227,7 +227,9 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
   const readNumber = async (command: string, timeoutMs = 2500): Promise<WindowsSensorProbe> => {
     try {
       const stdout = await runPowerShell(command, timeoutMs)
-      const value = Number(stdout)
+      const numericValue = Number(stdout)
+      const pingMatch = stdout.match(/(?:Average\s*=\s*|time[=<]\s*)(\d+)\s*ms/i)
+      const value = Number.isFinite(numericValue) ? numericValue : pingMatch ? Number(pingMatch[1]) : NaN
       return {
         command,
         stdout,
@@ -249,17 +251,8 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
       "-ErrorAction Stop | Select-Object -First 1 -ExpandProperty CurrentTemperature)"
     ),
     readNumber(
-      "$ping=New-Object System.Net.NetworkInformation.Ping; $targets=@(); " +
-      "try { $targets += [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | " +
-      "Where-Object { $_.OperationalStatus -eq 'Up' } | ForEach-Object { " +
-      "$_.GetIPProperties().GatewayAddresses | ForEach-Object { $_.Address.IPAddressToString } } } catch {}; " +
-      "$targets += @('www.microsoft.com','8.8.8.8','1.1.1.1'); " +
-      "$samples=@(); foreach ($target in $targets) { if ($samples.Count -gt 0) { break }; " +
-      "$sample=$null; try { $reply=$ping.Send($target,1000); " +
-      "if ($reply.Status -eq 'Success') { $sample=$reply.RoundtripTime } } catch {}; " +
-      "if ($null -ne $sample) { $samples=@($sample) } }; " +
-      "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }",
-      6000
+      "ping.exe -n 1 -w 1000 www.microsoft.com | Out-String",
+      3000
     ),
     readNumber(
       "$values=@(); " +
