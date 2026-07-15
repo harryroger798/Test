@@ -29,6 +29,7 @@ asarUnpack:
   - node_modules/bindings/**/*
   - node_modules/file-uri-to-path/**/*
   - node_modules/onnxruntime-node/**/*
+  - node_modules/onnxruntime-common/**/*
 publish:
   provider: github
   owner: harryroger798
