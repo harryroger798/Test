@@ -7,8 +7,10 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
+        external: ['onnxruntime-node'],
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(__dirname, 'src/main/index.ts'),
+          'win-diag-entry': resolve(__dirname, 'src/main/win-diag-entry.ts')
         }
       }
     }

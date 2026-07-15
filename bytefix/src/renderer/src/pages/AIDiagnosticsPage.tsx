@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Brain, Loader2, Activity, Shield, AlertTriangle, CheckCircle, Thermometer, HardDrive, Cpu, Wifi, Bug, Wrench, Gauge } from 'lucide-react'
+import type { FixResult } from '../../../../shared/types'
 
 interface SystemMetrics {
   cpuUsagePercent: number
@@ -12,6 +14,7 @@ interface SystemMetrics {
   errorCount: number
   uptimeHours: number
   fanRPM: number
+  provenance: Record<string, 'measured' | 'estimated' | 'not_measured'>
 }
 
 interface DiagnosticProbability {
@@ -30,12 +33,23 @@ interface AIDiagnosticResult {
   timestamp: string
   modelVersion: string
   inferenceTimeMs: number
+  provider: 'cloudflare' | 'custom' | 'onnx' | 'rules'
+  providerLabel: string
+  fallbackReason?: string
+  inputProvenance: Record<string, 'measured' | 'estimated' | 'not_measured'>
 }
 
 interface HealthScore {
   score: number
   grade: string
   summary: string
+}
+
+interface FixRecommendation {
+  title: string
+  guidance: string
+  route: string
+  run?: () => Promise<FixResult>
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -63,13 +77,35 @@ const DIAGNOSIS_ICONS: Record<string, typeof Brain> = {
   NetworkProblem: Wifi
 }
 
-function MetricBar({ label, value, max, unit, color }: { label: string; value: number; max: number; unit: string; color: string }): JSX.Element {
+function MetricBar({
+  label,
+  value,
+  max,
+  unit,
+  color,
+  provenance
+}: {
+  label: string
+  value: number
+  max: number
+  unit: string
+  color: string
+  provenance?: 'measured' | 'estimated' | 'not_measured'
+}): JSX.Element {
   const pct = Math.min(100, (value / max) * 100)
+  const provenanceLabel = provenance === 'measured'
+    ? 'measured'
+    : provenance === 'estimated'
+      ? 'estimated'
+      : 'not measured'
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-gray-400">{label}</span>
-        <span className="text-white font-mono">{value}{unit}</span>
+        <span className="text-right">
+          <span className="text-white font-mono">{value}{unit}</span>
+          {provenance && <span className="ml-2 text-gray-500">({provenanceLabel})</span>}
+        </span>
       </div>
       <div className="w-full h-2 bg-surface-lighter rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${pct}%` }} />
@@ -91,15 +127,100 @@ function ProbabilityBar({ label, probability }: { label: string; probability: nu
   )
 }
 
+function getFixRecommendation(diagnosis: AIDiagnosticResult): FixRecommendation {
+  const text = `${diagnosis.diagnosis} ${diagnosis.actions.join(' ')}`.toLowerCase()
+  if (/\b(dns|winsock|tcp\/?ip|network|connectivity)\b/.test(text)) {
+    return {
+      title: 'Flush DNS cache',
+      guidance: 'Clears the local DNS resolver cache without changing files or accounts.',
+      route: '/network',
+      run: () => window.bytefix.flushDns()
+    }
+  }
+  if (/\b(overheat|thermal|cooling|temperature|fan)\b/.test(text)) {
+    return {
+      title: 'Optimize cooling',
+      guidance: 'Applies the existing ByteFix thermal power-plan optimization.',
+      route: '/overheating',
+      run: () => window.bytefix.optimizeCooling()
+    }
+  }
+  if (/\b(performance|slow|memory pressure|ram|process)\b/.test(text)) {
+    return {
+      title: 'Optimize memory',
+      guidance: 'Runs the existing low-risk memory optimization flow.',
+      route: '/performance',
+      run: () => window.bytefix.optimizeRam()
+    }
+  }
+  if (/\b(system file|windows file|component store|sfc|dism)\b/.test(text)) {
+    return {
+      title: 'Run System File Checker',
+      guidance: 'Runs the existing Windows system-file repair flow.',
+      route: '/os-repair',
+      run: () => window.bytefix.runSfc()
+    }
+  }
+  const routes: Record<string, string> = {
+    Healthy: '/hardware',
+    MemoryIssue: '/memory-diag',
+    DiskFailing: '/hardware',
+    MalwareInfection: '/malware',
+    DriverIssue: '/hardware',
+    PerformanceDegraded: '/performance',
+    NetworkProblem: '/network',
+    Overheating: '/overheating'
+  }
+  return {
+    title: 'Open guided diagnostics',
+    guidance: 'No conservative automated fix was selected; review the related module before taking action.',
+    route: routes[diagnosis.diagnosis] || '/hardware'
+  }
+}
+
+function FixEvidence({ result }: { result: FixResult }): JSX.Element {
+  return (
+    <div className={`mt-4 rounded-lg border p-3 ${result.success ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+      <div className="flex items-center gap-2">
+        {result.success ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-red-400" />}
+        <p className="text-sm font-medium text-white">{result.description}</p>
+      </div>
+      {result.execution?.exitCode !== undefined && (
+        <p className="text-xs text-gray-400 mt-2">Exit status: {result.execution.exitCode}</p>
+      )}
+      {result.execution?.commands?.length ? (
+        <div className="mt-2">
+          <p className="text-xs text-gray-500">Executed steps</p>
+          {result.execution.commands.map((command) => <code key={command} className="block text-xs text-gray-400">{command}</code>)}
+        </div>
+      ) : null}
+      {result.execution?.outputTail && (
+        <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-black/20 p-2 text-xs text-gray-500">
+          {result.execution.outputTail}
+        </pre>
+      )}
+      {result.details.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-gray-400">
+          {result.details.slice(-5).map((detail) => <li key={detail}>• {detail}</li>)}
+        </ul>
+      )}
+      {result.error && <p className="text-xs text-red-400 mt-2">{result.error}</p>}
+    </div>
+  )
+}
+
 export function AIDiagnosticsPage(): JSX.Element {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState('')
   const [diagnosis, setDiagnosis] = useState<AIDiagnosticResult | null>(null)
   const [healthScore, setHealthScore] = useState<HealthScore | null>(null)
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null)
+  const [fixResult, setFixResult] = useState<FixResult | null>(null)
 
   async function runFullDiagnosis(): Promise<void> {
     setLoading('diagnosis')
     setHealthScore(null)
+    setFixResult(null)
     try {
       const result = await window.bytefix.aiRunDiagnosis()
       setDiagnosis(result)
@@ -138,6 +259,32 @@ export function AIDiagnosticsPage(): JSX.Element {
   }
 
   const DiagIcon = diagnosis ? (DIAGNOSIS_ICONS[diagnosis.diagnosis] || Brain) : Brain
+  const recommendation = diagnosis ? getFixRecommendation(diagnosis) : null
+
+  async function runRecommendedFix(): Promise<void> {
+    if (!recommendation) return
+    if (!recommendation.run) {
+      navigate(recommendation.route)
+      return
+    }
+    setLoading('fix')
+    try {
+      setFixResult(await recommendation.run())
+    } catch (err) {
+      setFixResult({
+        success: false,
+        module: 'ai-diagnostics',
+        action: 'recommended-fix',
+        description: 'Recommended fix failed to start.',
+        details: [String(err)],
+        changes: [],
+        rollbackAvailable: false,
+        error: String(err)
+      })
+    } finally {
+      setLoading('')
+    }
+  }
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -146,7 +293,7 @@ export function AIDiagnosticsPage(): JSX.Element {
           <Brain className="w-6 h-6 text-purple-400" /> AI Smart Diagnostics
         </h1>
         <p className="text-gray-400 text-sm mt-1">
-          ONNX-powered local AI — analyzes system metrics to diagnose issues. No internet required, runs 100% offline.
+          Provider-aware AI diagnosis with an offline ONNX fallback. Remote providers run only with explicit consent.
         </p>
       </div>
 
@@ -230,11 +377,35 @@ export function AIDiagnosticsPage(): JSX.Element {
                 <span className={`text-xs px-2 py-0.5 rounded-full border ${SEVERITY_BG[diagnosis.severity]} ${SEVERITY_COLORS[diagnosis.severity]}`}>
                   {diagnosis.severity.toUpperCase()}
                 </span>
+                <span className="text-xs px-2 py-0.5 rounded-full border border-purple-500/30 text-purple-300">
+                  Analyzed by: {diagnosis.providerLabel}
+                </span>
                 <span className="text-xs text-gray-500 ml-auto">
                   {diagnosis.confidence}% confidence | {diagnosis.inferenceTimeMs}ms inference
                 </span>
               </div>
               <p className="text-sm text-gray-300 mt-2">{diagnosis.description}</p>
+              {diagnosis.fallbackReason && (
+                <p className="text-xs text-yellow-300/80 mt-2">
+                  Provider routing note: {diagnosis.fallbackReason}
+                </p>
+              )}
+
+              {recommendation && (
+                <div className="mt-4 rounded-lg border border-bytefix-500/30 bg-bytefix-500/5 p-3">
+                  <div className="flex items-center gap-3">
+                    <Wrench className="w-5 h-5 text-bytefix-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-white">{recommendation.title}</p>
+                      <p className="text-xs text-gray-400 mt-1">{recommendation.guidance}</p>
+                    </div>
+                    <button onClick={() => void runRecommendedFix()} disabled={!!loading} className="btn-primary text-sm">
+                      {loading === 'fix' ? 'Running...' : recommendation.run ? 'Fix this' : 'Open guidance'}
+                    </button>
+                  </div>
+                  {fixResult && <FixEvidence result={fixResult} />}
+                </div>
+              )}
 
               {/* Recommended Actions */}
               <div className="mt-4">
@@ -251,11 +422,17 @@ export function AIDiagnosticsPage(): JSX.Element {
 
               {/* Probability Breakdown */}
               <div className="mt-4">
-                <h4 className="text-sm font-medium text-white mb-2">Diagnosis Probabilities:</h4>
+                <h4 className="text-sm font-medium text-white mb-2">
+                  {diagnosis.provider === 'cloudflare' || diagnosis.provider === 'custom'
+                    ? 'Candidate Causes:'
+                    : 'Diagnosis Probabilities:'}
+                </h4>
                 <div className="space-y-2">
-                  {diagnosis.allProbabilities.map((p) => (
-                    <ProbabilityBar key={p.label} label={p.label} probability={p.probability} />
-                  ))}
+                  {diagnosis.allProbabilities.length > 0
+                    ? diagnosis.allProbabilities.map((p) => (
+                      <ProbabilityBar key={p.label} label={p.label} probability={p.probability} />
+                    ))
+                    : <p className="text-sm text-gray-500">No candidate causes were returned.</p>}
                 </div>
               </div>
 
@@ -275,16 +452,16 @@ export function AIDiagnosticsPage(): JSX.Element {
             <Activity className="w-4 h-4 text-blue-400" /> System Metrics (AI Input Features)
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MetricBar label="CPU Usage" value={metrics.cpuUsagePercent} max={100} unit="%" color="bg-blue-500" />
-            <MetricBar label="RAM Usage" value={metrics.ramUsagePercent} max={100} unit="%" color="bg-purple-500" />
-            <MetricBar label="Disk Usage" value={metrics.diskUsagePercent} max={100} unit="%" color="bg-orange-500" />
-            <MetricBar label="Temperature" value={metrics.temperatureCelsius} max={100} unit="C" color={metrics.temperatureCelsius > 70 ? 'bg-red-500' : 'bg-green-500'} />
-            <MetricBar label="Processes" value={metrics.processCount} max={500} unit="" color="bg-cyan-500" />
-            <MetricBar label="Disk I/O Latency" value={metrics.diskIOLatencyMs} max={100} unit="ms" color="bg-yellow-500" />
-            <MetricBar label="Network Latency" value={metrics.networkLatencyMs} max={500} unit="ms" color={metrics.networkLatencyMs > 100 ? 'bg-red-500' : 'bg-green-500'} />
-            <MetricBar label="System Errors" value={metrics.errorCount} max={50} unit="" color={metrics.errorCount > 10 ? 'bg-red-500' : 'bg-gray-500'} />
-            <MetricBar label="Uptime" value={Math.round(metrics.uptimeHours)} max={720} unit="h" color="bg-indigo-500" />
-            <MetricBar label="Fan Speed" value={metrics.fanRPM} max={4000} unit=" RPM" color="bg-teal-500" />
+            <MetricBar label="CPU Usage" value={metrics.cpuUsagePercent} max={100} unit="%" color="bg-blue-500" provenance={metrics.provenance.cpuUsagePercent} />
+            <MetricBar label="RAM Usage" value={metrics.ramUsagePercent} max={100} unit="%" color="bg-purple-500" provenance={metrics.provenance.ramUsagePercent} />
+            <MetricBar label="Disk Usage" value={metrics.diskUsagePercent} max={100} unit="%" color="bg-orange-500" provenance={metrics.provenance.diskUsagePercent} />
+            <MetricBar label="Temperature" value={metrics.temperatureCelsius} max={100} unit="C" color={metrics.temperatureCelsius > 70 ? 'bg-red-500' : 'bg-green-500'} provenance={metrics.provenance.temperatureCelsius} />
+            <MetricBar label="Processes" value={metrics.processCount} max={500} unit="" color="bg-cyan-500" provenance={metrics.provenance.processCount} />
+            <MetricBar label="Disk I/O Latency" value={metrics.diskIOLatencyMs} max={100} unit="ms" color="bg-yellow-500" provenance={metrics.provenance.diskIOLatencyMs} />
+            <MetricBar label="Network Latency" value={metrics.networkLatencyMs} max={500} unit="ms" color={metrics.networkLatencyMs > 100 ? 'bg-red-500' : 'bg-green-500'} provenance={metrics.provenance.networkLatencyMs} />
+            <MetricBar label="System Errors" value={metrics.errorCount} max={50} unit="" color={metrics.errorCount > 10 ? 'bg-red-500' : 'bg-gray-500'} provenance={metrics.provenance.errorCount} />
+            <MetricBar label="Uptime" value={Math.round(metrics.uptimeHours)} max={720} unit="h" color="bg-indigo-500" provenance={metrics.provenance.uptimeHours} />
+            <MetricBar label="Fan Speed" value={metrics.fanRPM} max={4000} unit=" RPM" color="bg-teal-500" provenance={metrics.provenance.fanRPM} />
           </div>
         </div>
       )}
@@ -296,14 +473,14 @@ export function AIDiagnosticsPage(): JSX.Element {
             <Brain className="w-4 h-4 text-purple-400" /> How AI Diagnostics Works
           </h3>
           <div className="space-y-2 text-sm text-gray-400">
-            <p>1. <span className="text-white">Collects 10 system metrics</span> — CPU, RAM, disk, temperature, processes, I/O latency, network, errors, uptime, fan speed</p>
-            <p>2. <span className="text-white">Feeds metrics into ONNX model</span> — Random Forest classifier trained on 4,000 diagnostic scenarios</p>
-            <p>3. <span className="text-white">Predicts the issue category</span> — Healthy, Overheating, Memory Issue, Disk Failing, Malware, Driver Issue, Performance Degraded, Network Problem</p>
-            <p>4. <span className="text-white">Provides actionable recommendations</span> — Specific fixes mapped to each diagnosis</p>
+            <p>1. <span className="text-white">Collects system evidence and metrics</span> — including chip, firmware, SMART, and WHEA telemetry where Windows exposes it</p>
+            <p>2. <span className="text-white">Uses the configured provider priority</span> — Cloudflare or custom AI with consent, then offline ONNX and rules fallback</p>
+            <p>3. <span className="text-white">Labels input provenance</span> — measured readings are separated from estimates and unavailable sensors</p>
+            <p>4. <span className="text-white">Provides actionable recommendations</span> — without inventing unavailable measurements</p>
           </div>
           <div className="mt-4 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
             <p className="text-xs text-purple-300">
-              100% offline — No API keys, no internet, no paid services. The ONNX model runs locally on the device in milliseconds.
+              Remote analysis is opt-in. If it is unavailable, ByteFix falls back to local ONNX/rules diagnosis and explains why.
             </p>
           </div>
         </div>

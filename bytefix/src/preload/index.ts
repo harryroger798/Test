@@ -32,7 +32,7 @@ const api = {
   runSfc: () => ipcRenderer.invoke('os:runSfc'),
   runDism: () => ipcRenderer.invoke('os:runDism'),
   repairWindowsUpdate: () => ipcRenderer.invoke('os:repairWindowsUpdate'),
-  cleanRegistry: () => ipcRenderer.invoke('os:cleanRegistry'),
+  cleanRegistry: (confirm = false) => ipcRenderer.invoke('os:cleanRegistry', { confirm }),
 
   // Battery
   getBatteryReport: () => ipcRenderer.invoke('battery:getReport'),
@@ -49,12 +49,12 @@ const api = {
   restoreRecycleBin: () => ipcRenderer.invoke('recovery:restoreRecycleBin'),
   runPhotorec: (sourceDrive: string, outputDir: string) =>
     ipcRenderer.invoke('recovery:runPhotorec', { sourceDrive, outputDir }),
-  repairFilesystem: (drive: string) => ipcRenderer.invoke('recovery:repairFilesystem', { drive }),
+  repairFilesystem: (drive: string, confirm = false) => ipcRenderer.invoke('recovery:repairFilesystem', { drive, confirm }),
 
   // Phase 2: Password Recovery
   passwordDiagnose: () => ipcRenderer.invoke('password:diagnose'),
-  enableAdmin: () => ipcRenderer.invoke('password:enableAdmin'),
-  disableAdmin: () => ipcRenderer.invoke('password:disableAdmin'),
+  enableAdmin: (confirm = false) => ipcRenderer.invoke('password:enableAdmin', { confirm }),
+  disableAdmin: (confirm = false) => ipcRenderer.invoke('password:disableAdmin', { confirm }),
 
   // Phase 2: Audio Fixer
   audioDiagnose: () => ipcRenderer.invoke('audio:diagnose'),
@@ -95,7 +95,7 @@ const api = {
   usbDiagnose: () => ipcRenderer.invoke('usb:diagnose'),
   disableSelectiveSuspend: () => ipcRenderer.invoke('usb:disableSelectiveSuspend'),
   reinstallUsbDrivers: () => ipcRenderer.invoke('usb:reinstallDrivers'),
-  repairRawDrive: (driveLetter: string) => ipcRenderer.invoke('usb:repairRawDrive', { driveLetter }),
+  repairRawDrive: (driveLetter: string, confirm = false) => ipcRenderer.invoke('usb:repairRawDrive', { driveLetter, confirm }),
   disableUsbPowerMgmt: () => ipcRenderer.invoke('usb:disablePowerMgmt'),
 
   // Phase 2: India Apps
@@ -134,8 +134,8 @@ const api = {
 
   // Phase 3: Partition/Boot Manager
   partitionDiagnose: () => ipcRenderer.invoke('partition:diagnose'),
-  repairBcd: () => ipcRenderer.invoke('partition:repairBcd'),
-  repairGrub: () => ipcRenderer.invoke('partition:repairGrub'),
+  repairBcd: (confirm = false) => ipcRenderer.invoke('partition:repairBcd', { confirm }),
+  repairGrub: (confirm = false) => ipcRenderer.invoke('partition:repairGrub', { confirm }),
   verifyBootDrive: () => ipcRenderer.invoke('partition:verifyBootDrive'),
 
   // Phase 3: Windows Activation
@@ -147,8 +147,8 @@ const api = {
   autoConfigureEmail: (email: string) =>
     ipcRenderer.invoke('email:autoConfigure', { email }),
   repairOutlookProfile: () => ipcRenderer.invoke('email:repairOutlook'),
-  clearEmailCredentials: (target: string) =>
-    ipcRenderer.invoke('email:clearCredentials', { target }),
+  clearEmailCredentials: (target: string, confirm = false) =>
+    ipcRenderer.invoke('email:clearCredentials', { target, confirm }),
 
   // Phase 3: Phone Data Transfer
   phoneDiagnose: () => ipcRenderer.invoke('phone:diagnose'),
@@ -232,19 +232,19 @@ const api = {
   diskImgDiagnose: () => ipcRenderer.invoke('diskimg:diagnose'),
   createSystemImage: (destinationPath: string) =>
     ipcRenderer.invoke('diskimg:createSystemImage', { destinationPath }),
-  clonePartition: (sourceDrive: string, destDrive: string) =>
-    ipcRenderer.invoke('diskimg:clonePartition', { sourceDrive, destDrive }),
+  clonePartition: (sourceDrive: string, destDrive: string, confirm = false) =>
+    ipcRenderer.invoke('diskimg:clonePartition', { sourceDrive, destDrive, confirm }),
   rescueDrive: (sourceDrive: string, destinationPath: string) =>
     ipcRenderer.invoke('diskimg:rescueDrive', { sourceDrive, destinationPath }),
 
   // Phase 6: Partition Manager
   partMgrDiagnose: () => ipcRenderer.invoke('partmgr:diagnose'),
-  resizePartition: (driveLetter: string, newSizeMB: number) =>
-    ipcRenderer.invoke('partmgr:resize', { driveLetter, newSizeMB }),
-  formatPartition: (driveLetter: string, fileSystem: string, label: string) =>
-    ipcRenderer.invoke('partmgr:format', { driveLetter, fileSystem, label }),
-  createPartition: (diskNumber: number, sizeMB: number, fileSystem: string, label: string) =>
-    ipcRenderer.invoke('partmgr:create', { diskNumber, sizeMB, fileSystem, label }),
+  resizePartition: (driveLetter: string, newSizeMB: number, confirm = false) =>
+    ipcRenderer.invoke('partmgr:resize', { driveLetter, newSizeMB, confirm }),
+  formatPartition: (driveLetter: string, fileSystem: string, label: string, confirm = false) =>
+    ipcRenderer.invoke('partmgr:format', { driveLetter, fileSystem, label, confirm }),
+  createPartition: (diskNumber: number, sizeMB: number, fileSystem: string, label: string, confirm = false) =>
+    ipcRenderer.invoke('partmgr:create', { diskNumber, sizeMB, fileSystem, label, confirm }),
 
   // Phase 6: Memory Diagnostics
   memDiagDiagnose: () => ipcRenderer.invoke('memdiag:diagnose'),
@@ -255,11 +255,11 @@ const api = {
   // Phase 6: Firmware & BIOS
   firmwareDiagnose: () => ipcRenderer.invoke('firmware:diagnose'),
   checkFirmwareUpdates: () => ipcRenderer.invoke('firmware:checkUpdates'),
-  updateDrivers: () => ipcRenderer.invoke('firmware:updateDrivers'),
+  updateDrivers: (confirm = false) => ipcRenderer.invoke('firmware:updateDrivers', { confirm }),
 
   // Phase 6: Remote Access
   remoteDiagnose: () => ipcRenderer.invoke('remote:diagnose'),
-  enableRemoteDesktop: () => ipcRenderer.invoke('remote:enableRdp'),
+  enableRemoteDesktop: (confirm = false) => ipcRenderer.invoke('remote:enableRdp', { confirm }),
   disableRemoteDesktop: () => ipcRenderer.invoke('remote:disableRdp'),
   generateRemoteInvite: () => ipcRenderer.invoke('remote:generateInvite'),
   configureWakeOnLan: () => ipcRenderer.invoke('remote:configureWol'),
@@ -270,6 +270,7 @@ const api = {
   aiCollectMetrics: () => ipcRenderer.invoke('ai:collectMetrics'),
   aiGetProviderConfig: () => ipcRenderer.invoke('ai:getProviderConfig'),
   aiSetProviderConfig: (config: unknown) => ipcRenderer.invoke('ai:setProviderConfig', config),
+  getRecentActivity: (limit?: number) => ipcRenderer.invoke('activity:getRecent', limit),
 
   // Phase 5: Production Hardening - Error Logging
   logError: (data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) =>

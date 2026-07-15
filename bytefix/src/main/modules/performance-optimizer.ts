@@ -2,12 +2,19 @@ import { platform } from 'os'
 import { existsSync, statSync, lstatSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
 import { join } from 'path'
 import { createLogger } from '../logger'
-import { runShellSafe, runCommandSafe } from './async-command'
+import { runShellSafe, runShellDetailed, runCommandSafe } from './async-command'
 import type { StartupItem, CleanupItem, FixResult, FixChange, DiagnosticResult } from '../../shared/types'
 
 const logger = createLogger('performance-optimizer')
 const isWindows = platform() === 'win32'
 const isMac = platform() === 'darwin'
+
+let lastStartupProbe: {
+  command: string
+  stdout: string
+  stderr: string
+  error?: string
+} | null = null
 
 // ============================================================
 // Indian OEM Bloatware Database
@@ -67,7 +74,10 @@ export async function getStartupItems(): Promise<StartupItem[]> {
         }
         $items | ConvertTo-Json -Depth 3
       "`
-      const output = await runShellSafe(cmd, 15000)
+      const probe = await runShellDetailed(cmd, 15000)
+      lastStartupProbe = { command: cmd, ...probe }
+      if (probe.error && !probe.stdout.trim()) throw new Error(probe.error)
+      const output = probe.stdout
       const parsed = JSON.parse(output || '[]')
       const startupEntries = Array.isArray(parsed) ? parsed : [parsed]
 
@@ -161,6 +171,10 @@ export async function getStartupItems(): Promise<StartupItem[]> {
   }
 
   return items
+}
+
+export function getLastStartupProbe(): typeof lastStartupProbe {
+  return lastStartupProbe
 }
 
 // Validate registry value name: only allow alphanumeric, spaces, hyphens, underscores, dots

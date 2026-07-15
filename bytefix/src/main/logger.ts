@@ -2,11 +2,14 @@ import winston from 'winston'
 import { app } from 'electron'
 import { join } from 'path'
 
-const LOG_DIR = app?.isPackaged
-  ? join(app.getPath('userData'), 'logs')
-  : join(__dirname, '../../logs')
+export function getLogDirectory(): string {
+  return app?.isPackaged
+    ? join(app.getPath('userData'), 'logs')
+    : join(__dirname, '../../logs')
+}
 
 export function createLogger(module: string): winston.Logger {
+  const logDir = getLogDirectory()
   return winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -25,13 +28,13 @@ export function createLogger(module: string): winston.Logger {
         )
       }),
       new winston.transports.File({
-        filename: join(LOG_DIR, 'error.log'),
+        filename: join(logDir, 'error.log'),
         level: 'error',
         maxsize: 5242880,
         maxFiles: 3
       }),
       new winston.transports.File({
-        filename: join(LOG_DIR, 'combined.log'),
+        filename: join(logDir, 'combined.log'),
         maxsize: 10485760,
         maxFiles: 5
       })

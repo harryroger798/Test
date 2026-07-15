@@ -1,0 +1,63 @@
+name: ByteFix Packaged Diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - devin/bytefix-safety-and-settings
+
+jobs:
+  packaged-onnx:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: bytefix
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Download published portable package
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://github.com/harryroger798/Test/releases/download/bytefix-v1.0.0-ai/ByteFix-Setup-1.0.0.zip" `
+            -OutFile "$env:RUNNER_TEMP\ByteFix-current.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\ByteFix-current.zip" -DestinationPath "$env:RUNNER_TEMP\ByteFix-current"
+      - name: Install harness dependencies
+        run: npm ci
+      - name: Inject packaged ONNX probe into published app.asar
+        shell: pwsh
+        run: |
+          node scripts/packaged-onnx-harness.mjs `
+            "$env:RUNNER_TEMP\ByteFix-current\resources\app.asar"
+      - name: Run published packaged ONNX path (before)
+        shell: pwsh
+        run: |
+          $app = "$env:RUNNER_TEMP\ByteFix-current\ByteFix.exe"
+          & $app --onnx-harness 2>&1 | Tee-Object "$env:RUNNER_TEMP\packaged-onnx-before.log"
+          Write-Host "Published package probe exit code: $LASTEXITCODE"
+      - name: Build fixed packaged app
+        run: npm run package:win -- --publish never
+      - name: Inject packaged ONNX probe into fixed app.asar
+        shell: pwsh
+        run: |
+          node scripts/packaged-onnx-harness.mjs `
+            "$env:GITHUB_WORKSPACE\bytefix\dist\win-unpacked\resources\app.asar"
+      - name: Run fixed packaged ONNX path (after)
+        shell: pwsh
+        run: |
+          $app = "$env:GITHUB_WORKSPACE\bytefix\dist\win-unpacked\ByteFix.exe"
+          & $app --onnx-harness 2>&1 | Tee-Object "$env:RUNNER_TEMP\packaged-onnx-after.log"
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content "$env:RUNNER_TEMP\packaged-onnx-after.log"
+            exit $LASTEXITCODE
+          }
+      - name: Upload packaged ONNX log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bytefix-packaged-onnx-log
+          path: |
+            ${{ runner.temp }}/packaged-onnx-before.log
+            ${{ runner.temp }}/packaged-onnx-after.log

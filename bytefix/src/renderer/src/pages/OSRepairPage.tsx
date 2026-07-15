@@ -51,7 +51,12 @@ export function OSRepairPage(): JSX.Element {
       id: 'registry', title: 'Registry Cleanup', icon: ClipboardList,
       description: 'Cleans invalid file associations, MUI cache, thumbnail cache, and rebuilds icon cache. Windows only. Safe operation - only removes orphaned entries.',
       risk: 'low', duration: '1-3 minutes',
-      handler: () => window.bytefix.cleanRegistry()
+      handler: () => window.confirm('Registry cleanup changes system registry entries and may not be reversible. Continue?')
+        ? window.bytefix.cleanRegistry(true)
+        : Promise.resolve({
+            success: false, module: 'safety', action: 'os:cleanRegistry',
+            description: 'Registry cleanup cancelled.', details: [], changes: [], rollbackAvailable: false
+          })
     }
   ]
 

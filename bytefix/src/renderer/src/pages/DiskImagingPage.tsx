@@ -116,7 +116,7 @@ export function DiskImagingPage(): JSX.Element {
             className="w-full bg-surface-lighter border border-gray-600 rounded px-3 py-2 text-sm text-white mb-3"
           />
           <button
-            onClick={() => runFix('clone', () => window.bytefix.clonePartition(srcDrive, destDrive))}
+            onClick={() => { if (window.confirm('Cloning can overwrite destination data. Continue?')) runFix('clone', () => window.bytefix.clonePartition(srcDrive, destDrive, true)) }}
             disabled={!!loading || !srcDrive || !destDrive}
             className="btn-primary flex items-center gap-2"
           >

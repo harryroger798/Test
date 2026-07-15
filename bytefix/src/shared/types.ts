@@ -165,6 +165,25 @@ export interface FixResult {
   changes: FixChange[]
   rollbackAvailable: boolean
   error?: string
+  execution?: {
+    commands: string[]
+    steps: string[]
+    exitCode?: number
+    outputTail?: string
+  }
+}
+
+export interface SafetyActionLogEntry {
+  timestamp: string
+  phase: 'offered' | 'confirmed' | 'executed' | 'failed' | 'blocked'
+  channel: string
+  risk: 'none' | 'low' | 'medium' | 'high'
+  destructive: boolean
+  success?: boolean
+  exitCode?: number
+  exitInfo?: string
+  commands?: string[]
+  outputTail?: string
 }
 
 export interface FixChange {

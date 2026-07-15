@@ -115,6 +115,8 @@ import { setLanguage, getLanguage, getSupportedLanguages, getTranslationsForLang
 import type { SupportedLanguage } from './modules/i18n-config'
 
 import type { SystemInfo, DiagnosticResult, ScanResult, CleanupItem, FixResult } from '../shared/types'
+import { withSafetyGate } from './modules/safety-gate'
+import { readRecentSafetyActions } from './modules/activity-log'
 
 const logger = createLogger('ipc-handler')
 
@@ -152,7 +154,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('perf:disableStartupItem', async (_event, args: { name: string; path: string }) => {
-    return await disableStartupItem(args.name, args.path)
+    return await withSafetyGate('perf:disableStartupItem', async (safeArgs: { name: string; path: string }) =>
+      disableStartupItem(safeArgs.name, safeArgs.path))(args)
   })
 
   ipcMain.handle('perf:getCleanupItems', async () => {
@@ -160,20 +163,22 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('perf:runCleanup', async (_event, args: { items: CleanupItem[] }) => {
-    const check = await resourceGovernor.canStartJob(200)
-    if (!check.allowed) {
-      return { success: false, module: 'performance', action: 'cleanup', description: check.reason || 'Insufficient resources', details: [], changes: [], rollbackAvailable: false, error: check.reason }
-    }
-    return await runCleanup(args.items)
+    return await withSafetyGate('perf:runCleanup', async (safeArgs: { items: CleanupItem[] }) => {
+      const check = await resourceGovernor.canStartJob(200)
+      if (!check.allowed) {
+        return { success: false, module: 'performance', action: 'cleanup', description: check.reason || 'Insufficient resources', details: [], changes: [], rollbackAvailable: false, error: check.reason }
+      }
+      return await runCleanup(safeArgs.items)
+    })(args)
   })
 
   ipcMain.handle('perf:optimizeRam', async () => {
-    return await optimizeRam()
+    return await withSafetyGate('perf:optimizeRam', async () => optimizeRam())()
   })
 
   ipcMain.handle('perf:optimizeDisk', async (_event, args: { drive: string }) => {
     const safeDrive = sanitizeDriveLetter(args.drive);
-    return await optimizeDisk(safeDrive)
+    return await withSafetyGate('perf:optimizeDisk', async () => optimizeDisk(safeDrive))()
   })
 
   // ============================================================
@@ -204,38 +209,38 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('network:resetAdapter', async (_event, args: { iface: string }) => {
     const safeIface = sanitizeInterfaceName(args.iface);
-    return await resetAdapter(safeIface)
+    return await withSafetyGate('network:resetAdapter', async () => resetAdapter(safeIface))()
   })
 
   ipcMain.handle('network:flushDns', async () => {
-    return await flushDns()
+    return await withSafetyGate('network:flushDns', async () => flushDns())()
   })
 
   ipcMain.handle('network:resetWinsock', async () => {
-    return await resetWinsock()
+    return await withSafetyGate('network:resetWinsock', async () => resetWinsock())()
   })
 
   ipcMain.handle('network:resetTcpIp', async () => {
-    return await resetTcpIp()
+    return await withSafetyGate('network:resetTcpIp', async () => resetTcpIp())()
   })
 
   // ============================================================
   // OS Repair
   // ============================================================
   ipcMain.handle('os:runSfc', async () => {
-    return await runSfc()
+    return await withSafetyGate('os:runSfc', async () => runSfc())()
   })
 
   ipcMain.handle('os:runDism', async () => {
-    return await runDism()
+    return await withSafetyGate('os:runDism', async () => runDism())()
   })
 
   ipcMain.handle('os:repairWindowsUpdate', async () => {
-    return await repairWindowsUpdate()
+    return await withSafetyGate('os:repairWindowsUpdate', async () => repairWindowsUpdate())()
   })
 
-  ipcMain.handle('os:cleanRegistry', async () => {
-    return await cleanRegistry()
+  ipcMain.handle('os:cleanRegistry', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('os:cleanRegistry', async () => cleanRegistry())(args)
   })
 
   // ============================================================
@@ -246,7 +251,7 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('battery:optimizePower', async () => {
-    return await optimizePower()
+    return await withSafetyGate('battery:optimizePower', async () => optimizePower())()
   })
 
   // ============================================================
@@ -295,28 +300,30 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('disk:runChkdsk', async (_event, args: { drive: string }) => {
-    try {
-      if (process.platform === 'win32') {
-        const safeDrive = sanitizeDriveLetter(args.drive);
-        const output = execFileSync('chkdsk', [safeDrive, '/scan'], { timeout: 300000, encoding: 'utf8' })
+    return await withSafetyGate('disk:runChkdsk', async (safeArgs: { drive: string }) => {
+      try {
+        if (process.platform === 'win32') {
+          const safeDrive = sanitizeDriveLetter(safeArgs.drive);
+          const output = execFileSync('chkdsk', [safeDrive, '/scan'], { timeout: 300000, encoding: 'utf8' })
+          return {
+            success: true, module: 'disk', action: 'chkdsk',
+            description: 'Disk check completed', details: [output.substring(0, 500)],
+            changes: [], rollbackAvailable: false
+          }
+        }
         return {
-          success: true, module: 'disk', action: 'chkdsk',
-          description: 'Disk check completed', details: [output.substring(0, 500)],
-          changes: [], rollbackAvailable: false
+          success: true, module: 'disk', action: 'fsck',
+          description: 'Filesystem check not available on mounted volume',
+          details: ['Use OS recovery tools for filesystem repair'], changes: [], rollbackAvailable: false
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return {
+          success: false, module: 'disk', action: 'chkdsk',
+          description: 'Disk check failed', details: [msg], changes: [], rollbackAvailable: false, error: msg
         }
       }
-      return {
-        success: true, module: 'disk', action: 'fsck',
-        description: 'Filesystem check not available on mounted volume',
-        details: ['Use OS recovery tools for filesystem repair'], changes: [], rollbackAvailable: false
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      return {
-        success: false, module: 'disk', action: 'chkdsk',
-        description: 'Disk check failed', details: [msg], changes: [], rollbackAvailable: false, error: msg
-      }
-    }
+    })(args)
   })
 
   // ============================================================
@@ -329,22 +336,24 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('recovery:restoreShadowCopy', async (_event, args: { filePath: string; outputDir: string; shadowId?: string }) => {
     const safeFilePath = sanitizeFilePath(args.filePath)
     const safeOutputDir = sanitizeFilePath(args.outputDir)
-    return await restoreFromShadowCopy(args.shadowId || '', safeFilePath, safeOutputDir)
+    return await withSafetyGate('recovery:restoreShadowCopy', async () =>
+      restoreFromShadowCopy(args.shadowId || '', safeFilePath, safeOutputDir))()
   })
 
   ipcMain.handle('recovery:restoreRecycleBin', async () => {
-    return await restoreFromRecycleBin()
+    return await withSafetyGate('recovery:restoreRecycleBin', async () => restoreFromRecycleBin())()
   })
 
   ipcMain.handle('recovery:runPhotorec', async (_event, args: { sourceDrive: string; outputDir: string }) => {
     const safeDrive = sanitizeDriveLetter(args.sourceDrive);
     const safeOutputDir = sanitizeFilePath(args.outputDir)
-    return await runPhotorecRecovery(safeDrive, safeOutputDir)
+    return await withSafetyGate('recovery:runPhotorec', async () =>
+      runPhotorecRecovery(safeDrive, safeOutputDir))()
   })
 
-  ipcMain.handle('recovery:repairFilesystem', async (_event, args: { drive: string }) => {
+  ipcMain.handle('recovery:repairFilesystem', async (_event, args: { drive: string; confirm?: boolean }) => {
     const safeDrive = sanitizeDriveLetter(args.drive);
-    return await repairFilesystem(safeDrive)
+    return await withSafetyGate('recovery:repairFilesystem', async () => repairFilesystem(safeDrive))(args)
   })
 
   // ============================================================
@@ -354,12 +363,12 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await runPasswordRecoveryDiagnostics()
   })
 
-  ipcMain.handle('password:enableAdmin', async () => {
-    return await enableAdminAccount()
+  ipcMain.handle('password:enableAdmin', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('password:enableAdmin', async () => enableAdminAccount())(args)
   })
 
-  ipcMain.handle('password:disableAdmin', async () => {
-    return await disableAdminAccount()
+  ipcMain.handle('password:disableAdmin', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('password:disableAdmin', async () => disableAdminAccount())(args)
   })
 
   // ============================================================
@@ -370,19 +379,19 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('audio:restartServices', async () => {
-    return await restartAudioServices()
+    return await withSafetyGate('audio:restartService', async () => restartAudioServices())()
   })
 
-  ipcMain.handle('audio:reinstallDrivers', async () => {
-    return await reinstallAudioDrivers()
+  ipcMain.handle('audio:reinstallDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('audio:reinstallDrivers', async () => reinstallAudioDrivers())(args)
   })
 
   ipcMain.handle('audio:enableMicPrivacy', async () => {
-    return await enableMicrophonePrivacy()
+    return await withSafetyGate('audio:enableMicPrivacy', async () => enableMicrophonePrivacy())()
   })
 
   ipcMain.handle('audio:disableEnhancements', async () => {
-    return await disableAudioEnhancements()
+    return await withSafetyGate('audio:disableEnhancements', async () => disableAudioEnhancements())()
   })
 
   // ============================================================
@@ -393,19 +402,19 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('bluetooth:restartService', async () => {
-    return await restartBluetoothService()
+    return await withSafetyGate('bluetooth:restartService', async () => restartBluetoothService())()
   })
 
   ipcMain.handle('bluetooth:clearCache', async () => {
-    return await clearBluetoothCache()
+    return await withSafetyGate('bluetooth:clearCache', async () => clearBluetoothCache())()
   })
 
-  ipcMain.handle('bluetooth:reinstallDrivers', async () => {
-    return await reinstallBluetoothDrivers()
+  ipcMain.handle('bluetooth:reinstallDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('bluetooth:reinstallDrivers', async () => reinstallBluetoothDrivers())(args)
   })
 
   ipcMain.handle('bluetooth:fixAudio', async () => {
-    return await fixBluetoothAudio()
+    return await withSafetyGate('bluetooth:fixAudio', async () => fixBluetoothAudio())()
   })
 
   // ============================================================
@@ -416,11 +425,11 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('printer:restartSpooler', async () => {
-    return await restartSpooler()
+    return await withSafetyGate('printer:restartSpooler', async () => restartSpooler())()
   })
 
   ipcMain.handle('printer:clearQueue', async () => {
-    return await clearPrintQueue()
+    return await withSafetyGate('printer:clearQueue', async () => clearPrintQueue())()
   })
 
   ipcMain.handle('printer:convertWsdToTcpIp', async (_event, args: { printerName: string; ipAddress: string }) => {
@@ -428,11 +437,11 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     const safeIp = sanitizeIpAddress(args.ipAddress)
     void safeName
     void safeIp
-    return await convertWsdToTcpIp()
+    return await withSafetyGate('printer:convertWsdToTcpIp', async () => convertWsdToTcpIp())()
   })
 
   ipcMain.handle('printer:enableDiscovery', async () => {
-    return await enablePrinterDiscovery()
+    return await withSafetyGate('printer:enableDiscovery', async () => enablePrinterDiscovery())()
   })
 
   // ============================================================
@@ -442,16 +451,16 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await runDisplayDiagnostics()
   })
 
-  ipcMain.handle('display:reinstallDrivers', async () => {
-    return await reinstallDisplayDrivers()
+  ipcMain.handle('display:reinstallDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('display:reinstallDrivers', async () => reinstallDisplayDrivers())(args)
   })
 
   ipcMain.handle('display:fixTdr', async () => {
-    return await fixTdrTimeout()
+    return await withSafetyGate('display:fixTdr', async () => fixTdrTimeout())()
   })
 
   ipcMain.handle('display:disableHwAccel', async () => {
-    return await disableHardwareAcceleration()
+    return await withSafetyGate('display:disableHwAccel', async () => disableHardwareAcceleration())()
   })
 
   ipcMain.handle('display:detectMonitors', async () => {
@@ -466,15 +475,15 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('webcam:enablePrivacy', async () => {
-    return await enableCameraPrivacy()
+    return await withSafetyGate('webcam:enablePrivacy', async () => enableCameraPrivacy())()
   })
 
-  ipcMain.handle('webcam:reinstallDrivers', async () => {
-    return await reinstallCameraDrivers()
+  ipcMain.handle('webcam:reinstallDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('webcam:reinstallDrivers', async () => reinstallCameraDrivers())(args)
   })
 
   ipcMain.handle('webcam:powerCycle', async () => {
-    return await powerCycleCamera()
+    return await withSafetyGate('webcam:powerCycle', async () => powerCycleCamera())()
   })
 
   // ============================================================
@@ -485,20 +494,20 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('usb:disableSelectiveSuspend', async () => {
-    return await disableSelectiveSuspend()
+    return await withSafetyGate('usb:disableSelectiveSuspend', async () => disableSelectiveSuspend())()
   })
 
-  ipcMain.handle('usb:reinstallDrivers', async () => {
-    return await reinstallUsbDrivers()
+  ipcMain.handle('usb:reinstallDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('usb:reinstallDrivers', async () => reinstallUsbDrivers())(args)
   })
 
-  ipcMain.handle('usb:repairRawDrive', async (_event, args: { driveLetter: string }) => {
+  ipcMain.handle('usb:repairRawDrive', async (_event, args: { driveLetter: string; confirm?: boolean }) => {
     const safeDrive = sanitizeDriveLetter(args.driveLetter)
-    return await repairRawDrive(safeDrive)
+    return await withSafetyGate('usb:repairRawDrive', async () => repairRawDrive(safeDrive))(args)
   })
 
   ipcMain.handle('usb:disablePowerMgmt', async () => {
-    return await disableUsbPowerManagement()
+    return await withSafetyGate('usb:disablePowerMgmt', async () => disableUsbPowerManagement())()
   })
 
   // ============================================================
@@ -509,23 +518,23 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('india:repairOffice', async () => {
-    return await repairOffice()
+    return await withSafetyGate('india:repairOffice', async () => repairOffice())()
   })
 
   ipcMain.handle('india:repairPst', async () => {
-    return await repairOutlookPst()
+    return await withSafetyGate('india:repairPst', async () => repairOutlookPst())()
   })
 
   ipcMain.handle('india:fixJavaBanking', async () => {
-    return await fixJavaBanking()
+    return await withSafetyGate('india:fixJavaBanking', async () => fixJavaBanking())()
   })
 
   ipcMain.handle('india:cleanChrome', async () => {
-    return await cleanChrome()
+    return await withSafetyGate('india:cleanChrome', async () => cleanChrome())()
   })
 
   ipcMain.handle('india:enableDotNet35', async () => {
-    return await enableDotNet35()
+    return await withSafetyGate('india:enableDotNet35', async () => enableDotNet35())()
   })
 
   // ============================================================
@@ -536,11 +545,11 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('thermal:optimizeCooling', async () => {
-    return await optimizeCooling()
+    return await withSafetyGate('thermal:optimizeCooling', async () => optimizeCooling())()
   })
 
   ipcMain.handle('thermal:killHighCpu', async () => {
-    return await killHighCpuProcesses()
+    return await withSafetyGate('thermal:killHighCpu', async () => killHighCpuProcesses())()
   })
 
   // ============================================================
@@ -556,7 +565,7 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('hardware:guideMemTest', async () => {
-    return await guideMemTest()
+    return await withSafetyGate('hardware:guideMemTest', async () => guideMemTest())()
   })
 
   // ============================================================
@@ -567,15 +576,15 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('keyboard:fixFilterKeys', async () => {
-    return await fixFilterKeys()
+    return await withSafetyGate('keyboard:fixFilterKeys', async () => fixFilterKeys())()
   })
 
   ipcMain.handle('keyboard:toggleTouchpad', async (_event, args: { enable: boolean }) => {
-    return await toggleTouchpad(args.enable)
+    return await withSafetyGate('keyboard:toggleTouchpad', async () => toggleTouchpad(args.enable))()
   })
 
-  ipcMain.handle('keyboard:reinstallDrivers', async () => {
-    return await reinstallInputDrivers()
+  ipcMain.handle('keyboard:reinstallDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('keyboard:reinstallDrivers', async () => reinstallInputDrivers())(args)
   })
 
   // ============================================================
@@ -586,23 +595,23 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('gaming:enableGameMode', async () => {
-    return await enableGameMode()
+    return await withSafetyGate('gaming:enableGameMode', async () => enableGameMode())()
   })
 
   ipcMain.handle('gaming:setHighPerformance', async () => {
-    return await setHighPerformancePlan()
+    return await withSafetyGate('gaming:setHighPerformance', async () => setHighPerformancePlan())()
   })
 
   ipcMain.handle('gaming:cleanupRam', async () => {
-    return await cleanupRamForGaming()
+    return await withSafetyGate('gaming:cleanupRam', async () => cleanupRamForGaming())()
   })
 
   ipcMain.handle('gaming:repairDirectX', async () => {
-    return await repairDirectX()
+    return await withSafetyGate('gaming:repairDirectX', async () => repairDirectX())()
   })
 
   ipcMain.handle('gaming:optimizeGpu', async () => {
-    return await optimizeGpuSettings()
+    return await withSafetyGate('gaming:optimizeGpu', async () => optimizeGpuSettings())()
   })
 
   // ============================================================
@@ -612,12 +621,12 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await runPartitionBootDiagnostics()
   })
 
-  ipcMain.handle('partition:repairBcd', async () => {
-    return await repairBcd()
+  ipcMain.handle('partition:repairBcd', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('partition:repairBcd', async () => repairBcd())(args)
   })
 
-  ipcMain.handle('partition:repairGrub', async () => {
-    return await repairGrub()
+  ipcMain.handle('partition:repairGrub', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('partition:repairGrub', async () => repairGrub())(args)
   })
 
   ipcMain.handle('partition:verifyBootDrive', async () => {
@@ -632,7 +641,7 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('activation:troubleshoot', async () => {
-    return await runActivationTroubleshooter()
+    return await withSafetyGate('activation:troubleshoot', async () => runActivationTroubleshooter())()
   })
 
   // ============================================================
@@ -647,17 +656,17 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     if (!safeEmail.includes('@') || safeEmail.length < 5) {
       throw new Error('Invalid email address')
     }
-    return await autoConfigureEmail(safeEmail)
+    return await withSafetyGate('email:autoConfigure', async () => autoConfigureEmail(safeEmail))()
   })
 
   ipcMain.handle('email:repairOutlook', async () => {
-    return await repairOutlookProfile()
+    return await withSafetyGate('email:repairOutlook', async () => repairOutlookProfile())()
   })
 
-  ipcMain.handle('email:clearCredentials', async (_event, args: { target: string }) => {
+  ipcMain.handle('email:clearCredentials', async (_event, args: { target: string; confirm?: boolean }) => {
     // Allowlist: only safe characters for credential target names
     const safeTarget = (args.target || '').replace(/[^a-zA-Z0-9@._:\/ -]/g, '')
-    return await clearEmailCredentials(safeTarget)
+    return await withSafetyGate('email:clearCredentials', async () => clearEmailCredentials(safeTarget))(args)
   })
 
   // ============================================================
@@ -668,13 +677,13 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('phone:guideUsbDebugging', async () => {
-    return await guideUsbDebugging()
+    return await withSafetyGate('phone:guideUsbDebugging', async () => guideUsbDebugging())()
   })
 
   ipcMain.handle('phone:pullFiles', async (_event, args: { sourcePath: string; destinationPath: string }) => {
     const safeSrc = sanitizeFilePath(args.sourcePath)
     const safeDest = sanitizeFilePath(args.destinationPath)
-    return await pullFilesViaAdb(safeSrc, safeDest)
+    return await withSafetyGate('phone:pullFiles', async () => pullFilesViaAdb(safeSrc, safeDest))()
   })
 
   // ============================================================
@@ -928,16 +937,16 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await createSystemImage(safeDest)
   })
 
-  ipcMain.handle('diskimg:clonePartition', async (_event, args: { sourceDrive: string; destDrive: string }) => {
+  ipcMain.handle('diskimg:clonePartition', async (_event, args: { sourceDrive: string; destDrive: string; confirm?: boolean }) => {
     const safeSource = sanitizeDevicePath(args.sourceDrive)
     const safeDest = sanitizeDevicePath(args.destDrive)
-    return await clonePartition(safeSource, safeDest)
+    return await withSafetyGate('diskimg:clonePartition', async () => clonePartition(safeSource, safeDest))(args)
   })
 
   ipcMain.handle('diskimg:rescueDrive', async (_event, args: { sourceDrive: string; destinationPath: string }) => {
     const safeSource = sanitizeDevicePath(args.sourceDrive)
     const safeDest = sanitizeFilePath(args.destinationPath)
-    return await rescueFailingDrive(safeSource, safeDest)
+    return await withSafetyGate('diskimg:rescueDrive', async () => rescueFailingDrive(safeSource, safeDest))()
   })
 
   // ============================================================
@@ -947,27 +956,27 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await runPartitionManagerDiagnostics()
   })
 
-  ipcMain.handle('partmgr:resize', async (_event, args: { driveLetter: string; newSizeMB: number }) => {
+  ipcMain.handle('partmgr:resize', async (_event, args: { driveLetter: string; newSizeMB: number; confirm?: boolean }) => {
     const safeDrive = sanitizeDriveLetter(args.driveLetter)
     const safeSizeMB = Math.max(1, Math.min(Math.round(args.newSizeMB), 1048576))
-    return await resizePartition(safeDrive, safeSizeMB)
+    return await withSafetyGate('partmgr:resize', async () => resizePartition(safeDrive, safeSizeMB))(args)
   })
 
-  ipcMain.handle('partmgr:format', async (_event, args: { driveLetter: string; fileSystem: string; label: string }) => {
+  ipcMain.handle('partmgr:format', async (_event, args: { driveLetter: string; fileSystem: string; label: string; confirm?: boolean }) => {
     const safeDrive = sanitizeDriveLetter(args.driveLetter)
     const allowedFS = ['NTFS', 'FAT32', 'exFAT', 'ext4', 'APFS', 'HFS+']
     const safeFS = allowedFS.includes(args.fileSystem) ? args.fileSystem : 'NTFS'
     const safeLabel = args.label.replace(/[^a-zA-Z0-9_\- ]/g, '').slice(0, 32)
-    return await formatPartition(safeDrive, safeFS, safeLabel)
+    return await withSafetyGate('partmgr:format', async () => formatPartition(safeDrive, safeFS, safeLabel))(args)
   })
 
-  ipcMain.handle('partmgr:create', async (_event, args: { diskNumber: number; sizeMB: number; fileSystem: string; label: string }) => {
+  ipcMain.handle('partmgr:create', async (_event, args: { diskNumber: number; sizeMB: number; fileSystem: string; label: string; confirm?: boolean }) => {
     const safeDiskNum = Math.max(0, Math.min(Math.round(args.diskNumber), 99))
     const safeSizeMB = Math.max(1, Math.min(Math.round(args.sizeMB), 1048576))
     const allowedFS = ['NTFS', 'FAT32', 'exFAT', 'ext4', 'APFS', 'HFS+']
     const safeFS = allowedFS.includes(args.fileSystem) ? args.fileSystem : 'NTFS'
     const safeLabel = args.label.replace(/[^a-zA-Z0-9_\- ]/g, '').slice(0, 32)
-    return await createPartition(safeDiskNum, safeSizeMB, safeFS, safeLabel)
+    return await withSafetyGate('partmgr:create', async () => createPartition(safeDiskNum, safeSizeMB, safeFS, safeLabel))(args)
   })
 
   // ============================================================
@@ -979,8 +988,9 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('memdiag:runPatternTest', async (_event, args: { testSizeMB: number }) => {
     const sizeMB = Math.min(Math.max(32, args.testSizeMB || 128), 512)
-    const testResult = await runBuiltInMemTest(sizeMB)
-    return {
+    return await withSafetyGate('memdiag:runPatternTest', async () => {
+      const testResult = await runBuiltInMemTest(sizeMB)
+      return {
       success: testResult.overallPassed,
       module: 'memory',
       action: 'pattern-test',
@@ -991,11 +1001,12 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
       changes: [],
       rollbackAvailable: false,
       error: testResult.overallPassed ? undefined : `${testResult.errors} memory error(s) detected`
-    } as FixResult
+      } as FixResult
+    })()
   })
 
   ipcMain.handle('memdiag:scheduleWinTest', async () => {
-    return await scheduleWindowsMemDiag()
+    return await withSafetyGate('memdiag:scheduleWinTest', async () => scheduleWindowsMemDiag())()
   })
 
   // ============================================================
@@ -1009,8 +1020,8 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await checkFirmwareUpdates()
   })
 
-  ipcMain.handle('firmware:updateDrivers', async () => {
-    return await updateDrivers()
+  ipcMain.handle('firmware:updateDrivers', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('firmware:updateDrivers', async () => updateDrivers())(args)
   })
 
   // ============================================================
@@ -1020,12 +1031,12 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await runRemoteAccessDiagnostics()
   })
 
-  ipcMain.handle('remote:enableRdp', async () => {
-    return await enableRemoteDesktop()
+  ipcMain.handle('remote:enableRdp', async (_event, args: { confirm?: boolean } = {}) => {
+    return await withSafetyGate('remote:enableRdp', async () => enableRemoteDesktop())(args)
   })
 
   ipcMain.handle('remote:disableRdp', async () => {
-    return await disableRemoteDesktop()
+    return await withSafetyGate('remote:disableRdp', async () => disableRemoteDesktop())()
   })
 
   ipcMain.handle('remote:generateInvite', async () => {
@@ -1033,7 +1044,7 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   })
 
   ipcMain.handle('remote:configureWol', async () => {
-    return await configureWakeOnLan()
+    return await withSafetyGate('remote:configureWol', async () => configureWakeOnLan())()
   })
 
   // ============================================================
@@ -1057,6 +1068,10 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
 
   ipcMain.handle('ai:setProviderConfig', (_event, config: AIProviderConfig) => {
     return setAIProviderConfig(config)
+  })
+
+  ipcMain.handle('activity:getRecent', (_event, limit?: number) => {
+    return readRecentSafetyActions(limit)
   })
 
   logger.info('All IPC handlers registered successfully')

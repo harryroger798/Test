@@ -278,13 +278,12 @@ function countWhea(rows: Array<Record<string, unknown>>): {
   ]
   const errors = categories
     .filter(([category]) => counts[category] > 0)
-    .map(([category, type, severity, subsystem]) => ({
+    .map(([category, type, severity]) => ({
       type,
       count: counts[category],
       severity,
       source: `${SOURCE_PREFIX} whea`,
-      evidence_ref: `whea.${category}`,
-      subsystem
+      evidence_ref: `whea.${category}`
     }))
   return { ...counts, errors }
 }
@@ -379,9 +378,7 @@ function parseTelemetry(outputs: QueryOutputs): ChipTelemetry {
       count: 1,
       severity: 'warn',
       source: source('pnp'),
-      evidence_ref: 'pnp.problem_device',
-      code: integerValue(row, 'ConfigManagerErrorCode'),
-      device: textValue(row, 'FriendlyName') || textValue(row, 'InstanceId')
+      evidence_ref: 'pnp.problem_device'
     }))
   const storageErrors = storage.flatMap((disk, index) => {
     const errors: Array<Record<string, unknown>> = []
