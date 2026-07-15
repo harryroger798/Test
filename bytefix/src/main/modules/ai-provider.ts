@@ -93,10 +93,10 @@ function mapRemoteDiagnosis(
   }
 }
 
-async function requestJson(url: string, init: RequestInit): Promise<unknown> {
+async function requestJson(url: string, init: RequestInit, timeoutMs = 90000): Promise<unknown> {
   const response = await fetch(url, {
     ...init,
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { Accept: 'application/json', ...(init.headers || {}) }
   })
   const body = await response.text()
@@ -154,13 +154,13 @@ export class CloudflareProvider implements AIProvider {
       headers
     })
     let result: unknown = {}
-    for (let attempt = 0; attempt < 5; attempt += 1) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
       result = await requestJson(`${config.cloudUrl.replace(/\/+$/, '')}/v1/cases/${encodeURIComponent(caseId)}`, {
         method: 'GET',
         headers
       })
       if (hasRemoteDiagnosis(result)) break
-      if (attempt < 4) await delay(750)
+      if (attempt < 11) await delay(1500)
     }
     return mapRemoteDiagnosis(result, context.metrics, this.id)
   }

@@ -1,5 +1,6 @@
 import { join, resolve } from 'path'
 import { existsSync } from 'fs'
+import { uptime as systemUptime } from 'os'
 import si from 'systeminformation'
 import { createLogger } from '../logger'
 import { app } from 'electron'
@@ -15,6 +16,7 @@ const logger = createLogger('ai-diagnostics')
 let cachedOrtSession: unknown = null
 let cachedOrtModule: typeof import('onnxruntime-node') | null = null
 let cachedModelPath: string | null = null
+let lastModelPaths: string[] = []
 
 // Diagnostic labels matching the trained ONNX model
 const DIAGNOSTIC_LABELS = [
@@ -166,32 +168,50 @@ function findModelPath(): string | null {
     join(__dirname, '..', '..', '..', 'models', 'diagnostic-classifier.onnx'),
     resolve('models', 'diagnostic-classifier.onnx')
   )
+  lastModelPaths = possiblePaths
 
   for (const p of possiblePaths) {
     if (existsSync(p)) {
-      logger.info('ONNX model located', { path: p, packaged: app.isPackaged })
+      logger.info('ONNX model located', { path: p, packaged: Boolean(app?.isPackaged) })
       return p
     }
   }
   logger.warn('ONNX model not found; tried packaged and development paths', {
-    packaged: app.isPackaged,
+    packaged: Boolean(app?.isPackaged),
     resourcesPath: process.resourcesPath,
     paths: possiblePaths
   })
   return null
 }
 
-interface WindowsSensorReadings {
+export interface WindowsSensorProbe {
+  command: string
+  stdout: string
+  parsedValue: number | null
+  error?: string
+}
+
+export interface WindowsSensorReadings {
   temperatureCelsius: number | null
   networkLatencyMs: number | null
   fanRPM: number | null
+  probes: {
+    temperature: WindowsSensorProbe
+    network: WindowsSensorProbe
+    fan: WindowsSensorProbe
+  }
 }
 
-async function collectWindowsSensorReadings(): Promise<WindowsSensorReadings> {
+export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadings> {
   const unavailable: WindowsSensorReadings = {
     temperatureCelsius: null,
     networkLatencyMs: null,
-    fanRPM: null
+    fanRPM: null,
+    probes: {
+      temperature: { command: '', stdout: '', parsedValue: null },
+      network: { command: '', stdout: '', parsedValue: null },
+      fan: { command: '', stdout: '', parsedValue: null }
+    }
   }
   if (process.platform !== 'win32') return unavailable
 
@@ -204,23 +224,34 @@ async function collectWindowsSensorReadings(): Promise<WindowsSensorReadings> {
       (error, stdout) => error ? reject(error) : resolve(stdout.trim())
     )
   })
-  const readNumber = async (command: string): Promise<number | null> => {
+  const readNumber = async (command: string): Promise<WindowsSensorProbe> => {
     try {
-      const value = Number(await runPowerShell(command))
-      return Number.isFinite(value) && value > 0 ? value : null
-    } catch {
-      return null
+      const stdout = await runPowerShell(command)
+      const value = Number(stdout)
+      return {
+        command,
+        stdout,
+        parsedValue: Number.isFinite(value) && value > 0 ? value : null
+      }
+    } catch (error) {
+      return {
+        command,
+        stdout: '',
+        parsedValue: null,
+        error: error instanceof Error ? error.message : String(error)
+      }
     }
   }
 
-  const [temperatureKelvinTenths, networkLatencyMs, fanRPM] = await Promise.all([
+  const [temperatureProbe, networkProbe, fanProbe] = await Promise.all([
     readNumber(
       "(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature " +
       "-ErrorAction Stop | Select-Object -First 1 -ExpandProperty CurrentTemperature)"
     ),
     readNumber(
-      "$samples=@(Test-Connection -ComputerName 1.1.1.1 -Count 2 -TimeoutSeconds 1 " +
-      "-ErrorAction SilentlyContinue | Select-Object -ExpandProperty ResponseTime); " +
+      "$ping=New-Object System.Net.NetworkInformation.Ping; " +
+      "$samples=@(1..2 | ForEach-Object { try { $reply=$ping.Send('1.1.1.1',1000); " +
+      "if ($reply.Status -eq 'Success') { $reply.RoundtripTime } } catch {} }); " +
       "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }"
     ),
     readNumber(
@@ -236,15 +267,20 @@ async function collectWindowsSensorReadings(): Promise<WindowsSensorReadings> {
     )
   ])
 
-  const temperatureCelsius = temperatureKelvinTenths === null
+  const temperatureCelsius = temperatureProbe.parsedValue === null
     ? null
-    : temperatureKelvinTenths / 10 - 273.15
+    : temperatureProbe.parsedValue / 10 - 273.15
   return {
     temperatureCelsius: temperatureCelsius !== null && temperatureCelsius > 0 && temperatureCelsius < 150
       ? temperatureCelsius
       : null,
-    networkLatencyMs,
-    fanRPM
+    networkLatencyMs: networkProbe.parsedValue,
+    fanRPM: fanProbe.parsedValue,
+    probes: {
+      temperature: temperatureProbe,
+      network: networkProbe,
+      fan: fanProbe
+    }
   }
 }
 
@@ -261,7 +297,7 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
       si.processes().catch(() => ({ all: 0, list: [] })),
       si.disksIO().catch(() => ({ rIO_sec: 0, wIO_sec: 0, rWaitTime: 0, wWaitTime: 0 })),
       si.networkStats().catch(() => []),
-      si.time(),
+      Promise.resolve(si.time()).catch(() => ({ uptime: 0 })),
       collectWindowsSensorReadings()
     ])
 
@@ -327,7 +363,8 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   }
 
   // Uptime in hours
-  const uptimeHours = Math.round((time.uptime || 0) / 3600 * 10) / 10
+  const rawUptimeSeconds = Number(time.uptime) > 0 ? Number(time.uptime) : systemUptime()
+  const uptimeHours = Math.round(rawUptimeSeconds / 3600 * 10) / 10
 
   // Fan speed is not exposed by many systems. Keep the model input numeric,
   // but never turn temperature into a fabricated RPM value.
@@ -365,12 +402,25 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
 // Run ONNX inference on collected metrics
 async function runOnnxInference(
   metrics: SystemMetrics
-): Promise<{ probabilities: number[]; inferenceTimeMs: number; provider: 'onnx' | 'rules' }> {
+): Promise<{
+  probabilities: number[]
+  inferenceTimeMs: number
+  provider: 'onnx' | 'rules'
+  modelPath?: string
+  attemptedPaths: string[]
+  error?: string
+}> {
   const modelPath = findModelPath()
 
   if (!modelPath) {
     logger.warn('ONNX model unavailable, using rule-based fallback')
-    return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0, provider: 'rules' }
+    return {
+      probabilities: runRuleBasedDiagnosis(metrics),
+      inferenceTimeMs: 0,
+      provider: 'rules',
+      attemptedPaths: lastModelPaths,
+      error: 'ONNX model not found'
+    }
   }
 
   try {
@@ -433,17 +483,26 @@ async function runOnnxInference(
       output: 'output_label',
       probabilities
     })
-    return { probabilities, inferenceTimeMs, provider: 'onnx' }
+    return { probabilities, inferenceTimeMs, provider: 'onnx', modelPath, attemptedPaths: lastModelPaths }
   } catch (err) {
     logger.error('ONNX runtime/model inference failed, falling back to rules', {
       error: err,
       modelPath,
-      packaged: app.isPackaged,
+      packaged: Boolean(app?.isPackaged),
       resourcesPath: process.resourcesPath
     })
-    return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0, provider: 'rules' }
+    return {
+      probabilities: runRuleBasedDiagnosis(metrics),
+      inferenceTimeMs: 0,
+      provider: 'rules',
+      modelPath,
+      attemptedPaths: lastModelPaths,
+      error: err instanceof Error ? err.message : String(err)
+    }
   }
 }
+
+export { runOnnxInference }
 
 // Rule-based fallback when ONNX model is unavailable
 function runRuleBasedDiagnosis(metrics: SystemMetrics): number[] {
