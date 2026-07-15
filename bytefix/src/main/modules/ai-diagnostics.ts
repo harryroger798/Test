@@ -249,7 +249,10 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
       "-ErrorAction Stop | Select-Object -First 1 -ExpandProperty CurrentTemperature)"
     ),
     readNumber(
-      "$ping=New-Object System.Net.NetworkInformation.Ping; $targets=@('www.microsoft.com','8.8.8.8','1.1.1.1'); " +
+      "$ping=New-Object System.Net.NetworkInformation.Ping; $targets=@(); " +
+      "try { $targets += (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop | " +
+      "Select-Object -First 1 -ExpandProperty NextHop) } catch {}; " +
+      "$targets += @('www.microsoft.com','8.8.8.8','1.1.1.1'); " +
       "$samples=@(); foreach ($target in $targets) { if ($samples.Count -gt 0) { break }; " +
       "$samples=@(1..2 | ForEach-Object { try { $reply=$ping.Send($target,1000); " +
       "if ($reply.Status -eq 'Success') { $reply.RoundtripTime } } catch {} }) }; " +
@@ -285,11 +288,33 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
   }
 }
 
+async function collectWindowsUptimeSeconds(): Promise<number | null> {
+  if (process.platform !== 'win32') return null
+  const { execFile } = await import('child_process')
+  return new Promise((resolve) => {
+    execFile(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        "$boot=(Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).LastBootUpTime; " +
+        "[math]::Max(0, ((Get-Date)-$boot).TotalSeconds)"
+      ],
+      { encoding: 'utf8', timeout: 2500, windowsHide: true },
+      (error, stdout) => {
+        if (error) return resolve(null)
+        const value = Number(stdout.trim())
+        resolve(Number.isFinite(value) && value >= 0 ? value : null)
+      }
+    )
+  })
+}
+
 // Collect real-time system metrics for the AI model
 export async function collectSystemMetrics(): Promise<SystemMetrics> {
   logger.info('Collecting system metrics for AI diagnosis...')
 
-  const [cpuLoad, mem, fsSize, cpuTemp, processes, disksIO, networkStats, time, windowsSensors] =
+  const [cpuLoad, mem, fsSize, cpuTemp, processes, disksIO, networkStats, time, windowsSensors, windowsUptime] =
     await Promise.all([
       si.currentLoad().catch(() => ({ currentLoad: 0 })),
       si.mem(),
@@ -299,7 +324,8 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
       si.disksIO().catch(() => ({ rIO_sec: 0, wIO_sec: 0, rWaitTime: 0, wWaitTime: 0 })),
       si.networkStats().catch(() => []),
       Promise.resolve(si.time()).catch(() => ({ uptime: 0 })),
-      collectWindowsSensorReadings()
+      collectWindowsSensorReadings(),
+      collectWindowsUptimeSeconds()
     ])
 
   // CPU usage percentage
@@ -364,7 +390,8 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   }
 
   // Uptime in hours
-  const rawUptimeSeconds = Number(time.uptime) > 0 ? Number(time.uptime) : systemUptime()
+  const rawUptimeSeconds = windowsUptime
+    ?? (Number(time.uptime) > 0 ? Number(time.uptime) : systemUptime())
   const uptimeHours = Math.round(rawUptimeSeconds / 3600 * 10) / 10
 
   // Fan speed is not exposed by many systems. Keep the model input numeric,
