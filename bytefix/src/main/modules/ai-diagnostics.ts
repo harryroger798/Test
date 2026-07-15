@@ -1,5 +1,6 @@
 import { join, resolve } from 'path'
 import { existsSync } from 'fs'
+import { createRequire } from 'module'
 import { uptime as systemUptime } from 'os'
 import si from 'systeminformation'
 import { createLogger } from '../logger'
@@ -458,8 +459,11 @@ async function runOnnxInference(
     // Dynamic import to handle environments where onnxruntime-node isn't available
     // Cache both the module and session for reuse across calls
     if (!cachedOrtModule) {
-      const runtimePackage = 'onnxruntime-node'
-      cachedOrtModule = await import(/* @vite-ignore */ runtimePackage)
+      const runtimePackageJson = app.isPackaged
+        ? join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'package.json')
+        : require.resolve('onnxruntime-node/package.json')
+      const runtimeRequire = createRequire(runtimePackageJson)
+      cachedOrtModule = runtimeRequire('onnxruntime-node') as typeof import('onnxruntime-node')
     }
     if (!cachedOrtModule) throw new Error('ONNX runtime module was not loaded')
     const ort = cachedOrtModule
