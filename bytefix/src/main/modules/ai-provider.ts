@@ -205,7 +205,8 @@ export function createProviders(): Record<AIProviderId, AIProvider> {
 export function buildEvidence(
   info: SystemInfo,
   metrics: SystemMetrics,
-  uploadConsent: boolean
+  uploadConsent: boolean,
+  telemetry?: import('./chip-telemetry').ChipTelemetry
 ): EvidenceBundle {
-  return toEvidenceBundle(info, metrics, { uploadConsent })
+  return toEvidenceBundle(info, metrics, { uploadConsent, telemetry })
 }
