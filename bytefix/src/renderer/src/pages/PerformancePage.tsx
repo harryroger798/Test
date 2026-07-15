@@ -139,6 +139,7 @@ export function PerformancePage(): JSX.Element {
                       {item.isSystem && <span className="badge badge-info">System</span>}
                     </div>
                     <p className="text-xs text-gray-400 truncate">{item.path}</p>
+                    {item.source && <p className="text-xs text-gray-500 truncate">Source: {item.source}</p>}
                   </div>
                   <span className={`badge ${item.impact === 'high' ? 'badge-critical' : item.impact === 'medium' ? 'badge-warning' : 'badge-info'}`}>
                     {item.impact} impact

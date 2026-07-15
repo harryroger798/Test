@@ -2,7 +2,7 @@ import { platform } from 'os'
 import { existsSync, statSync, lstatSync, readdirSync, unlinkSync, rmdirSync } from 'fs'
 import { join } from 'path'
 import { createLogger } from '../logger'
-import { runShellSafe, runShellDetailed, runCommandSafe } from './async-command'
+import { runShellSafe, runCommandSafe, runCommandDetailed } from './async-command'
 import type { StartupItem, CleanupItem, FixResult, FixChange, DiagnosticResult } from '../../shared/types'
 
 const logger = createLogger('performance-optimizer')
@@ -51,38 +51,58 @@ export async function getStartupItems(): Promise<StartupItem[]> {
 
   if (isWindows) {
     try {
-      // Query Windows startup via PowerShell
-      const cmd = `powershell -NoProfile -Command "
-        $items = @();
-        # Registry Run keys
-        $paths = @(
-          'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
-          'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
-          'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce',
-          'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce',
-          'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run'
-        );
-        foreach ($p in $paths) {
-          if (Test-Path $p) {
-            $props = Get-ItemProperty $p -ErrorAction SilentlyContinue;
-            if ($props) {
-              $props.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
-                $items += @{ Name = $_.Name; Path = $_.Value; Source = $p };
-              };
-            }
-          }
-        }
-        $items | ConvertTo-Json -Depth 3
-      "`
-      const probe = await runShellDetailed(cmd, 15000)
-      lastStartupProbe = { command: cmd, ...probe }
+      const script = `
+$items = @()
+$paths = @(
+  'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
+  'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run',
+  'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce',
+  'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce',
+  'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run',
+  'HKCU:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run'
+)
+foreach ($p in $paths) {
+  if (Test-Path -LiteralPath $p) {
+    $props = Get-ItemProperty -LiteralPath $p -ErrorAction SilentlyContinue
+    if ($props) {
+      $props.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
+        $items += [ordered]@{ Name = [string]$_.Name; Path = [string]$_.Value; Source = [string]$p }
+      }
+    }
+  }
+}
+try {
+  Get-CimInstance -ClassName Win32_StartupCommand -ErrorAction Stop | ForEach-Object {
+    $items += [ordered]@{ Name = [string]$_.Name; Path = [string]$_.Command; Source = [string]$_.Location }
+  }
+} catch {}
+foreach ($folder in @(
+  [Environment]::GetFolderPath('Startup'),
+  [Environment]::GetFolderPath('CommonStartup')
+)) {
+  if ($folder -and (Test-Path -LiteralPath $folder)) {
+    Get-ChildItem -LiteralPath $folder -File -ErrorAction SilentlyContinue | ForEach-Object {
+      $items += [ordered]@{ Name = [string]$_.BaseName; Path = [string]$_.FullName; Source = [string]$folder }
+    }
+  }
+}
+$items | ConvertTo-Json -Depth 4 -Compress
+`
+      const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script]
+      const command = `powershell.exe ${args.slice(0, -1).join(' ')} <startup collection script>`
+      const probe = await runCommandDetailed('powershell.exe', args, 15000)
+      lastStartupProbe = { command, ...probe }
       if (probe.error && !probe.stdout.trim()) throw new Error(probe.error)
       const output = probe.stdout
       const parsed = JSON.parse(output || '[]')
       const startupEntries = Array.isArray(parsed) ? parsed : [parsed]
 
+      const seen = new Set<string>()
       for (const entry of startupEntries) {
         if (!entry?.Name) continue
+        const itemKey = `${entry.Name}\u0000${entry.Path || ''}\u0000${entry.Source || ''}`
+        if (seen.has(itemKey)) continue
+        seen.add(itemKey)
         const nameLower = entry.Name.toLowerCase()
         const isBloat = BLOATWARE_LIST.has(nameLower) ||
           [...BLOATWARE_LIST].some(b => nameLower.includes(b))
@@ -90,6 +110,7 @@ export async function getStartupItems(): Promise<StartupItem[]> {
         items.push({
           name: entry.Name,
           path: entry.Path || '',
+          source: entry.Source || '',
           publisher: '',
           enabled: true,
           impact: isBloat ? 'high' : 'medium',

@@ -219,6 +219,7 @@ export interface ScanResult {
 export interface StartupItem {
   name: string
   path: string
+  source?: string
   publisher: string
   enabled: boolean
   impact: 'high' | 'medium' | 'low' | 'none'
