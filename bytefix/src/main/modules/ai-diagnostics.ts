@@ -149,22 +149,35 @@ export interface SystemMetrics {
 
 // Find the ONNX model file
 function findModelPath(): string | null {
-  const possiblePaths = [
-    // Development: models/ directory in project root
+  const possiblePaths: string[] = []
+  // In packaged builds extraResources is outside app.asar and is the
+  // authoritative location. Keep it first so a stale working-directory file
+  // cannot mask the packaged model.
+  if (process.resourcesPath) {
+    possiblePaths.push(join(process.resourcesPath, 'models', 'diagnostic-classifier.onnx'))
+  }
+  try {
+    possiblePaths.push(join(app.getAppPath(), 'models', 'diagnostic-classifier.onnx'))
+  } catch (error) {
+    logger.warn('Unable to resolve Electron app path for ONNX model', { error })
+  }
+  // Development: models/ directory in the project root.
+  possiblePaths.push(
     join(__dirname, '..', '..', '..', 'models', 'diagnostic-classifier.onnx'),
-    // Production: extraResources
-    join(process.resourcesPath || '', 'models', 'diagnostic-classifier.onnx'),
-    // Electron app.getAppPath()
-    join(app.getAppPath(), 'models', 'diagnostic-classifier.onnx'),
-    // Fallback: resolve from current working directory
     resolve('models', 'diagnostic-classifier.onnx')
-  ]
+  )
 
   for (const p of possiblePaths) {
     if (existsSync(p)) {
+      logger.info('ONNX model located', { path: p, packaged: app.isPackaged })
       return p
     }
   }
+  logger.warn('ONNX model not found; tried packaged and development paths', {
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    paths: possiblePaths
+  })
   return null
 }
 
@@ -284,7 +297,7 @@ async function runOnnxInference(
   const modelPath = findModelPath()
 
   if (!modelPath) {
-    logger.warn('ONNX model not found, using rule-based fallback')
+    logger.warn('ONNX model unavailable, using rule-based fallback')
     return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0, provider: 'rules' }
   }
 
@@ -321,50 +334,41 @@ async function runOnnxInference(
 
     const tensor = new ort.Tensor('float32', inputArray, [1, 10])
     const feeds = { features: tensor }
-    const results = await session.run(feeds)
+    // The sklearn exporter includes a ZipMap output_probability sequence/map.
+    // onnxruntime-node cannot materialize that non-tensor output, so request
+    // the tensor label output explicitly instead.
+    const results = await session.run(feeds, ['output_label'])
 
     const inferenceTimeMs = Date.now() - startTime
 
-    // Extract probabilities from the output
-    // sklearn RandomForest ONNX outputs: 'output_label' and 'output_probability'
-    const probOutput = results['output_probability']
+    // Extract the predicted label from the tensor output. The model's
+    // probability output is a ZipMap sequence unsupported by onnxruntime-node.
     let probabilities: number[] = new Array(DIAGNOSTIC_LABELS.length).fill(0)
-
-    if (probOutput) {
-      // output_probability is a sequence of maps for RandomForest
-      const probData = probOutput.data as unknown
-      if (Array.isArray(probData) && probData.length > 0) {
-        const probMap = probData[0] as Map<number, number> | Record<string, number>
-        if (probMap instanceof Map) {
-          probMap.forEach((value: number, key: number) => {
-            if (key >= 0 && key < probabilities.length) {
-              probabilities[key] = value
-            }
-          })
-        } else if (typeof probMap === 'object') {
-          for (const [key, value] of Object.entries(probMap)) {
-            const idx = parseInt(key, 10)
-            if (idx >= 0 && idx < probabilities.length) {
-              probabilities[idx] = value as number
-            }
-          }
-        }
-      }
-    } else {
-      // Fallback: try to get label and assign 100% to it
-      const labelOutput = results['output_label']
-      if (labelOutput) {
-        const labelData = labelOutput.data as unknown[]
-        const label = Number(labelData[0]) || 0
-        probabilities = new Array(DIAGNOSTIC_LABELS.length).fill(0)
-        probabilities[label] = 1.0
-      }
+    const labelOutput = results['output_label']
+    if (!labelOutput) {
+      throw new Error('ONNX model did not return output_label')
     }
+    const labelData = labelOutput.data as unknown[]
+    const label = Number(labelData[0])
+    if (!Number.isInteger(label) || label < 0 || label >= probabilities.length) {
+      throw new Error(`ONNX model returned invalid output_label: ${String(labelData[0])}`)
+    }
+    probabilities[label] = 1.0
 
-    logger.info('ONNX inference completed', { inferenceTimeMs, probabilities })
+    logger.info('ONNX inference completed', {
+      inferenceTimeMs,
+      modelPath,
+      output: 'output_label',
+      probabilities
+    })
     return { probabilities, inferenceTimeMs, provider: 'onnx' }
   } catch (err) {
-    logger.error('ONNX inference failed, falling back to rules', { error: err })
+    logger.error('ONNX runtime/model inference failed, falling back to rules', {
+      error: err,
+      modelPath,
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath
+    })
     return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0, provider: 'rules' }
   }
 }
