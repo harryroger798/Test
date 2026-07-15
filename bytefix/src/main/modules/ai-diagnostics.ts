@@ -216,17 +216,17 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
   if (process.platform !== 'win32') return unavailable
 
   const { execFile } = await import('child_process')
-  const runPowerShell = (command: string): Promise<string> => new Promise((resolve, reject) => {
+  const runPowerShell = (command: string, timeoutMs = 2500): Promise<string> => new Promise((resolve, reject) => {
     execFile(
       'powershell',
       ['-NoProfile', '-Command', command],
-      { encoding: 'utf8', timeout: 2500, windowsHide: true },
+      { encoding: 'utf8', timeout: timeoutMs, windowsHide: true },
       (error, stdout) => error ? reject(error) : resolve(stdout.trim())
     )
   })
-  const readNumber = async (command: string): Promise<WindowsSensorProbe> => {
+  const readNumber = async (command: string, timeoutMs = 2500): Promise<WindowsSensorProbe> => {
     try {
-      const stdout = await runPowerShell(command)
+      const stdout = await runPowerShell(command, timeoutMs)
       const value = Number(stdout)
       return {
         command,
@@ -256,7 +256,8 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
       "$samples=@(); foreach ($target in $targets) { if ($samples.Count -gt 0) { break }; " +
       "$samples=@(1..2 | ForEach-Object { try { $reply=$ping.Send($target,1000); " +
       "if ($reply.Status -eq 'Success') { $reply.RoundtripTime } } catch {} }) }; " +
-      "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }"
+      "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }",
+      8000
     ),
     readNumber(
       "$values=@(); " +
