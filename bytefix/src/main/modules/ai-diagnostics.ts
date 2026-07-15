@@ -221,14 +221,14 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
       'powershell',
       ['-NoProfile', '-Command', command],
       { encoding: 'utf8', timeout: timeoutMs, windowsHide: true },
-      (error, stdout) => error ? reject(error) : resolve(stdout.trim())
+      (error, stdout) => error && !stdout.trim() ? reject(error) : resolve(stdout.trim())
     )
   })
   const readNumber = async (command: string, timeoutMs = 2500): Promise<WindowsSensorProbe> => {
     try {
       const stdout = await runPowerShell(command, timeoutMs)
       const numericValue = Number(stdout)
-      const pingMatch = stdout.match(/(?:Average\s*=\s*|time[=<]\s*)(\d+)\s*ms/i)
+      const pingMatch = stdout.match(/(?:Average\s*=\s*|time[=<]\s*|tcp_rtt_ms=)(\d+)\s*ms?/i)
       const value = Number.isFinite(numericValue) ? numericValue : pingMatch ? Number(pingMatch[1]) : NaN
       return {
         command,
@@ -251,8 +251,15 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
       "-ErrorAction Stop | Select-Object -First 1 -ExpandProperty CurrentTemperature)"
     ),
     readNumber(
-      "ping.exe -n 1 -w 1000 www.microsoft.com | Out-String",
-      3000
+      "$pingOutput=(ping.exe -n 1 -w 1000 www.microsoft.com 2>&1 | Out-String); " +
+      "Write-Output $pingOutput; " +
+      "if ($pingOutput -notmatch '(Average\\s*=\\s*|time[=<]\\s*)\\d+\\s*ms') { " +
+      "$client=New-Object System.Net.Sockets.TcpClient; $watch=[Diagnostics.Stopwatch]::StartNew(); " +
+      "$async=$client.BeginConnect('ai-repair-cloud.getlaunchpod.workers.dev',443,$null,$null); " +
+      "if ($async.AsyncWaitHandle.WaitOne(3000) -and $client.Connected) { $watch.Stop(); " +
+      "$client.EndConnect($async); Write-Output ('tcp_rtt_ms=' + $watch.ElapsedMilliseconds) } " +
+      "$client.Close() }",
+      6000
     ),
     readNumber(
       "$values=@(); " +
