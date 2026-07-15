@@ -96,6 +96,8 @@ import { runMemoryDiagnostics, runBuiltInMemTest, scheduleWindowsMemDiag } from 
 import { runFirmwareDiagnostics, checkFirmwareUpdates, updateDrivers } from './modules/firmware-manager'
 import { runRemoteAccessDiagnostics, enableRemoteDesktop, disableRemoteDesktop, generateRemoteAssistInvite, configureWakeOnLan } from './modules/remote-access'
 import { runAIDiagnosis, getHealthScore, collectSystemMetrics } from './modules/ai-diagnostics'
+import { getAIProviderConfig, setAIProviderConfig } from './modules/ai-config'
+import type { AIProviderConfig } from '../shared/types'
 
 // Phase 4 module imports
 import { createInvoice, getInvoice, getInvoicesByCustomer, getAllInvoices, updatePaymentStatus, getInvoiceStats, getHsnCodes, getIndianStates } from './modules/gst-billing'
@@ -324,10 +326,10 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await runDataRecoveryDiagnostics()
   })
 
-  ipcMain.handle('recovery:restoreShadowCopy', async (_event, args: { filePath: string; outputDir: string }) => {
+  ipcMain.handle('recovery:restoreShadowCopy', async (_event, args: { filePath: string; outputDir: string; shadowId?: string }) => {
     const safeFilePath = sanitizeFilePath(args.filePath)
     const safeOutputDir = sanitizeFilePath(args.outputDir)
-    return await restoreFromShadowCopy(safeFilePath, safeOutputDir)
+    return await restoreFromShadowCopy(args.shadowId || '', safeFilePath, safeOutputDir)
   })
 
   ipcMain.handle('recovery:restoreRecycleBin', async () => {
@@ -424,7 +426,9 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('printer:convertWsdToTcpIp', async (_event, args: { printerName: string; ipAddress: string }) => {
     const safeName = sanitizePrinterName(args.printerName)
     const safeIp = sanitizeIpAddress(args.ipAddress)
-    return await convertWsdToTcpIp(safeName, safeIp)
+    void safeName
+    void safeIp
+    return await convertWsdToTcpIp()
   })
 
   ipcMain.handle('printer:enableDiscovery', async () => {
@@ -1047,6 +1051,14 @@ export function registerAllHandlers(ipcMain: IpcMain): void {
     return await collectSystemMetrics()
   })
 
+  ipcMain.handle('ai:getProviderConfig', () => {
+    return getAIProviderConfig()
+  })
+
+  ipcMain.handle('ai:setProviderConfig', (_event, config: AIProviderConfig) => {
+    return setAIProviderConfig(config)
+  })
+
   logger.info('All IPC handlers registered successfully')
 }
 
@@ -1080,12 +1092,17 @@ async function runDiagnosticSafe(
     return {
       name,
       results: [{
+        id: `scan-error-${name}`,
         module: name,
-        issue: `${name} scan failed`,
-        severity: 'warning' as const,
+        category: 'scan',
+        title: `${name} scan failed`,
+        severity: 'warning',
         description: `The ${name} module encountered an error: ${errorMsg}`,
-        recommendation: 'Try running the scan again. If the issue persists, check system permissions.',
-        autoFixable: false
+        details: ['Try running the scan again. If the issue persists, check system permissions.'],
+        fixAvailable: false,
+        fixRisk: 'none',
+        autoFixable: false,
+        timestamp: Date.now()
       }]
     }
   }

@@ -268,6 +268,8 @@ const api = {
   aiRunDiagnosis: () => ipcRenderer.invoke('ai:runDiagnosis'),
   aiGetHealthScore: () => ipcRenderer.invoke('ai:getHealthScore'),
   aiCollectMetrics: () => ipcRenderer.invoke('ai:collectMetrics'),
+  aiGetProviderConfig: () => ipcRenderer.invoke('ai:getProviderConfig'),
+  aiSetProviderConfig: (config: unknown) => ipcRenderer.invoke('ai:setProviderConfig', config),
 
   // Phase 5: Production Hardening - Error Logging
   logError: (data: { module: string; message: string; stack?: string; componentStack?: string; timestamp: number }) =>

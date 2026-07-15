@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-repair.local/schemas/evidence.schema.json",
+  "title": "diagd evidence bundle",
+  "type": "object",
+  "required": ["schema_version", "case_id", "captured_at", "agent", "consent", "host", "firmware", "cpu", "memory", "storage", "graphics", "network", "usb", "pci", "sensors", "battery", "os", "logs", "normalized_errors", "test_results"],
+  "properties": {
+    "schema_version": {"type": "string", "minLength": 1},
+    "case_id": {"type": "string", "minLength": 1},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "agent": {
+      "type": "object",
+      "required": ["name", "version", "platform"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "platform": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "consent": {
+      "type": "object",
+      "required": ["upload", "redaction_profile"],
+      "properties": {
+        "upload": {"type": "boolean"},
+        "redaction_profile": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "host": {"$ref": "#/$defs/host"},
+    "firmware": {"$ref": "#/$defs/firmware"},
+    "cpu": {"$ref": "#/$defs/cpu"},
+    "memory": {"$ref": "#/$defs/memory"},
+    "storage": {"type": "array", "items": {"$ref": "#/$defs/storage"}},
+    "graphics": {"type": "array", "items": {"$ref": "#/$defs/device"}},
+    "network": {"type": "array", "items": {"$ref": "#/$defs/network"}},
+    "usb": {"type": "array", "items": {"$ref": "#/$defs/usb"}},
+    "pci": {"type": "array", "items": {"$ref": "#/$defs/pci"}},
+    "sensors": {"$ref": "#/$defs/sensors"},
+    "battery": {"$ref": "#/$defs/battery"},
+    "os": {"$ref": "#/$defs/os"},
+    "logs": {"$ref": "#/$defs/logs"},
+    "normalized_errors": {"type": "array", "items": {"$ref": "#/$defs/normalizedError"}},
+    "test_results": {"type": "array", "items": {"$ref": "#/$defs/testResult"}}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "state": {"type": "string", "enum": ["measured", "vendor_estimated", "unsupported", "unknown", "permission_denied", "redacted"]},
+    "field": {
+      "type": "object",
+      "required": ["value", "state", "source"],
+      "properties": {
+        "value": {},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"},
+        "reason": {"type": "string"}
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"state": {"const": "measured"}}},
+          "then": {"properties": {"source": {"minLength": 1}}}
+        }
+      ]
+    },
+    "host": {
+      "type": "object",
+      "required": ["vendor", "product", "serial", "board", "chassis_type", "hostname"],
+      "properties": {
+        "vendor": {"$ref": "#/$defs/field"},
+        "product": {"$ref": "#/$defs/field"},
+        "serial": {"$ref": "#/$defs/field"},
+        "board": {"$ref": "#/$defs/field"},
+        "chassis_type": {"$ref": "#/$defs/field"},
+        "hostname": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "firmware": {
+      "type": "object",
+      "required": ["bios_vendor", "bios_version", "bios_date", "secure_boot", "uefi", "fwupd_updates_available"],
+      "properties": {
+        "bios_vendor": {"$ref": "#/$defs/field"},
+        "bios_version": {"$ref": "#/$defs/field"},
+        "bios_date": {"$ref": "#/$defs/field"},
+        "secure_boot": {"$ref": "#/$defs/field"},
+        "uefi": {"$ref": "#/$defs/field"},
+        "fwupd_updates_available": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "cpu": {
+      "type": "object",
+      "required": ["model", "cores", "threads", "max_mhz", "microcode", "vulnerabilities", "mce_memory_errors"],
+      "properties": {
+        "model": {"$ref": "#/$defs/field"},
+        "cores": {"$ref": "#/$defs/field"},
+        "threads": {"$ref": "#/$defs/field"},
+        "max_mhz": {"$ref": "#/$defs/field"},
+        "microcode": {"$ref": "#/$defs/field"},
+        "vulnerabilities": {"$ref": "#/$defs/field"},
+        "mce_memory_errors": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "memory": {
+      "type": "object",
+      "required": ["total_bytes", "modules", "ecc", "edac_corrected", "edac_uncorrected"],
+      "properties": {
+        "total_bytes": {"$ref": "#/$defs/field"},
+        "modules": {"type": "array", "items": {"$ref": "#/$defs/module"}},
+        "ecc": {"$ref": "#/$defs/field"},
+        "edac_corrected": {"$ref": "#/$defs/field"},
+        "edac_uncorrected": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "module": {
+      "type": "object",
+      "required": ["slot", "size_bytes", "speed_mts", "manufacturer", "state", "source"],
+      "properties": {
+        "slot": {"type": "string"},
+        "size_bytes": {"type": ["integer", "null"]},
+        "speed_mts": {"type": ["integer", "null"]},
+        "manufacturer": {"type": ["string", "null"]},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "smart": {
+      "type": "object",
+      "required": ["critical_warning", "percentage_used", "available_spare", "media_errors", "power_on_hours", "unsafe_shutdowns", "temp_c", "pending_sectors", "udma_crc"],
+      "properties": {
+        "critical_warning": {"$ref": "#/$defs/field"},
+        "percentage_used": {"$ref": "#/$defs/field"},
+        "available_spare": {"$ref": "#/$defs/field"},
+        "media_errors": {"$ref": "#/$defs/field"},
+        "power_on_hours": {"$ref": "#/$defs/field"},
+        "unsafe_shutdowns": {"$ref": "#/$defs/field"},
+        "temp_c": {"$ref": "#/$defs/field"},
+        "pending_sectors": {"$ref": "#/$defs/field"},
+        "udma_crc": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "storage": {
+      "type": "object",
+      "required": ["dev", "type", "model", "size_bytes", "state", "source", "smart", "selftest", "serial"],
+      "properties": {
+        "dev": {"type": "string"},
+        "type": {"type": "string"},
+        "model": {"type": "string"},
+        "size_bytes": {"type": ["integer", "null"]},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"},
+        "serial": {"$ref": "#/$defs/field"},
+        "smart": {"$ref": "#/$defs/smart"},
+        "selftest": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "device": {
+      "type": "object",
+      "required": ["vendor", "model", "driver", "state", "source"],
+      "properties": {
+        "vendor": {"type": "string"},
+        "model": {"type": "string"},
+        "driver": {"type": "string"},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "network": {
+      "type": "object",
+      "required": ["type", "vendor", "model", "mac", "state", "source"],
+      "properties": {
+        "type": {"type": "string"},
+        "vendor": {"type": "string"},
+        "model": {"type": "string"},
+        "mac": {"$ref": "#/$defs/field"},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "usb": {
+      "type": "object",
+      "required": ["bus", "device", "id", "description", "speed", "state", "source"],
+      "properties": {
+        "bus": {"type": ["integer", "null"]},
+        "device": {"type": ["integer", "null"]},
+        "id": {"type": "string"},
+        "description": {"type": "string"},
+        "speed": {"type": "string"},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "pci": {
+      "type": "object",
+      "required": ["slot", "class", "link_cap", "link_sta", "aer_correctable", "aer_fatal", "state", "source"],
+      "properties": {
+        "slot": {"type": "string"},
+        "class": {"type": "string"},
+        "link_cap": {"type": "string"},
+        "link_sta": {"type": "string"},
+        "aer_correctable": {"$ref": "#/$defs/field"},
+        "aer_fatal": {"$ref": "#/$defs/field"},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "sensors": {
+      "type": "object",
+      "required": ["cpu_temp_c", "fan_rpm"],
+      "properties": {
+        "cpu_temp_c": {"$ref": "#/$defs/field"},
+        "fan_rpm": {"type": "array", "items": {"$ref": "#/$defs/fan"}}
+      },
+      "additionalProperties": false
+    },
+    "fan": {
+      "type": "object",
+      "required": ["name", "value", "state", "source"],
+      "properties": {
+        "name": {"type": "string"},
+        "value": {"type": ["number", "null"]},
+        "state": {"$ref": "#/$defs/state"},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "battery": {
+      "type": "object",
+      "required": ["present", "design_wh", "full_wh", "wear_pct", "cycle_count"],
+      "properties": {
+        "present": {"$ref": "#/$defs/field"},
+        "design_wh": {"$ref": "#/$defs/field"},
+        "full_wh": {"$ref": "#/$defs/field"},
+        "wear_pct": {"$ref": "#/$defs/field"},
+        "cycle_count": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "os": {
+      "type": "object",
+      "required": ["installed_os", "boot_mode"],
+      "properties": {
+        "installed_os": {"$ref": "#/$defs/field"},
+        "boot_mode": {"$ref": "#/$defs/field"}
+      },
+      "additionalProperties": false
+    },
+    "logs": {
+      "type": "object",
+      "required": ["scanned_sources", "window"],
+      "properties": {
+        "scanned_sources": {"type": "array", "items": {"type": "string"}},
+        "window": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "normalizedError": {
+      "type": "object",
+      "required": ["type", "count", "severity", "source", "evidence_ref"],
+      "properties": {
+        "type": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "first_seen": {"type": ["string", "null"]},
+        "last_seen": {"type": ["string", "null"]},
+        "evidence_ref": {"type": "string"},
+        "severity": {"type": "string", "enum": ["info", "warn", "critical"]},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "testResult": {
+      "type": "object",
+      "required": ["test", "status"],
+      "properties": {
+        "test": {"type": "string"},
+        "status": {"type": "string", "enum": ["not_run", "passed", "failed", "unsupported", "permission_denied"]},
+        "duration_s": {"type": ["number", "null"]},
+        "max_temp_c": {"type": ["number", "null"]},
+        "throttled": {"type": ["boolean", "null"]},
+        "source": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

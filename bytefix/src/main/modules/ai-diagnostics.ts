@@ -3,6 +3,10 @@ import { existsSync } from 'fs'
 import si from 'systeminformation'
 import { createLogger } from '../logger'
 import { app } from 'electron'
+import { getAIProviderConfig } from './ai-config'
+import { buildEvidence, createProviders } from './ai-provider'
+import type { AIProviderConfig, AIProviderId, SystemInfo } from '../../shared/types'
+import { getFullSystemInfo } from './system-scanner'
 
 const logger = createLogger('ai-diagnostics')
 
@@ -118,6 +122,7 @@ export interface DiagnosticResult {
   timestamp: string
   modelVersion: string
   inferenceTimeMs: number
+  provider: 'cloudflare' | 'custom' | 'onnx' | 'rules'
 }
 
 export interface SystemMetrics {
@@ -249,12 +254,12 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
 // Run ONNX inference on collected metrics
 async function runOnnxInference(
   metrics: SystemMetrics
-): Promise<{ probabilities: number[]; inferenceTimeMs: number }> {
+): Promise<{ probabilities: number[]; inferenceTimeMs: number; provider: 'onnx' | 'rules' }> {
   const modelPath = findModelPath()
 
   if (!modelPath) {
     logger.warn('ONNX model not found, using rule-based fallback')
-    return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0 }
+    return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0, provider: 'rules' }
   }
 
   try {
@@ -289,8 +294,8 @@ async function runOnnxInference(
     ])
 
     const tensor = new ort.Tensor('float32', inputArray, [1, 10])
-    const feeds: Record<string, unknown> = { features: tensor }
-    const results = await session.run(feeds as Record<string, ort.Tensor>)
+    const feeds = { features: tensor }
+    const results = await session.run(feeds)
 
     const inferenceTimeMs = Date.now() - startTime
 
@@ -331,10 +336,10 @@ async function runOnnxInference(
     }
 
     logger.info('ONNX inference completed', { inferenceTimeMs, probabilities })
-    return { probabilities, inferenceTimeMs }
+    return { probabilities, inferenceTimeMs, provider: 'onnx' }
   } catch (err) {
     logger.error('ONNX inference failed, falling back to rules', { error: err })
-    return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0 }
+    return { probabilities: runRuleBasedDiagnosis(metrics), inferenceTimeMs: 0, provider: 'rules' }
   }
 }
 
@@ -381,15 +386,8 @@ function runRuleBasedDiagnosis(metrics: SystemMetrics): number[] {
   return scores.map((s: number) => s / total)
 }
 
-// Main diagnosis function
-export async function runAIDiagnosis(): Promise<DiagnosticResult> {
-  logger.info('Starting AI-powered system diagnosis...')
-
-  // Step 1: Collect system metrics
-  const metrics = await collectSystemMetrics()
-
-  // Step 2: Run ONNX inference (or rule-based fallback)
-  const { probabilities, inferenceTimeMs } = await runOnnxInference(metrics)
+export async function runLocalDiagnosis(metrics: SystemMetrics): Promise<DiagnosticResult> {
+  const { probabilities, inferenceTimeMs, provider } = await runOnnxInference(metrics)
 
   // Step 3: Determine primary diagnosis
   const maxIdx = probabilities.indexOf(Math.max(...probabilities))
@@ -412,16 +410,110 @@ export async function runAIDiagnosis(): Promise<DiagnosticResult> {
     metrics,
     timestamp: new Date().toISOString(),
     modelVersion: '1.0.0-rf50',
-    inferenceTimeMs
+    inferenceTimeMs,
+    provider
+  }
+  return result
+}
+
+function providerConfig(): AIProviderConfig {
+  return getAIProviderConfig()
+}
+
+function orderedProviderIds(config: AIProviderConfig): AIProviderId[] {
+  return [...new Set<AIProviderId>([...config.priority, 'onnx', 'rules'])]
+}
+
+function emptyMetrics(): SystemMetrics {
+  return {
+    cpuUsagePercent: 0,
+    ramUsagePercent: 0,
+    diskUsagePercent: 0,
+    temperatureCelsius: 0,
+    processCount: 0,
+    diskIOLatencyMs: 0,
+    networkLatencyMs: 0,
+    errorCount: 0,
+    uptimeHours: 0,
+    fanRPM: 0
+  }
+}
+
+function emptySystemInfo(): SystemInfo {
+  return {
+    os: { platform: process.platform, distro: '', release: '', arch: '', hostname: '', build: '' },
+    cpu: { manufacturer: '', brand: '', speed: 0, cores: 0, physicalCores: 0 },
+    memory: { total: 0, free: 0, used: 0, usedPercent: 0, swapTotal: 0, swapUsed: 0 },
+    disk: [],
+    battery: {
+      hasBattery: false,
+      isCharging: false,
+      percent: 0,
+      cycleCount: 0,
+      designCapacity: 0,
+      currentCapacity: 0,
+      healthPercent: 0,
+      voltage: 0,
+      timeRemaining: 0,
+      manufacturer: '',
+      model: '',
+      powerSource: 'AC'
+    },
+    graphics: { controllers: [], displays: [] },
+    network: [],
+    uptime: 0
+  }
+}
+
+// Main diagnosis function
+export async function runAIDiagnosis(): Promise<DiagnosticResult> {
+  logger.info('Starting AI-powered system diagnosis...')
+  let metrics: SystemMetrics
+  try {
+    metrics = await collectSystemMetrics()
+  } catch (err) {
+    logger.warn('Metrics collection failed; using unknown local metrics', { error: err })
+    metrics = emptyMetrics()
+  }
+  let systemInfo: SystemInfo
+  try {
+    systemInfo = await getFullSystemInfo()
+  } catch (err) {
+    logger.warn('System information collection failed; using unknown evidence', { error: err })
+    systemInfo = emptySystemInfo()
+  }
+  const config = providerConfig()
+  const evidence = buildEvidence(systemInfo, metrics, config.cloudConsent)
+  const providers = createProviders()
+  const localDiagnosis = async (): Promise<DiagnosticResult> => runLocalDiagnosis(metrics)
+  const context = {
+    metrics,
+    systemInfo,
+    evidence,
+    config,
+    localDiagnosis
   }
 
-  logger.info('AI diagnosis complete', {
-    diagnosis: result.diagnosis,
-    confidence: result.confidence,
-    severity: result.severity
-  })
+  for (const id of orderedProviderIds(config)) {
+    const provider = providers[id]
+    if (!provider || !provider.isAvailable(config)) continue
+    try {
+      const result = await provider.diagnose(context)
+      logger.info('AI diagnosis complete', {
+        provider: result.provider,
+        diagnosis: result.diagnosis,
+        confidence: result.confidence,
+        severity: result.severity
+      })
+      return result
+    } catch (err) {
+      logger.warn(`AI provider ${id} failed; falling through`, { error: err })
+    }
+  }
 
-  return result
+  const fallback = await localDiagnosis()
+  logger.info('AI diagnosis complete', { provider: fallback.provider })
+  return fallback
 }
 
 // Quick health score (0-100, higher = healthier)

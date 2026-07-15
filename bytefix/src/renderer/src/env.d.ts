@@ -91,6 +91,9 @@ interface ByteFixAPI {
   fixJavaBanking: () => Promise<import('../../../shared/types').FixResult>
   cleanChrome: () => Promise<import('../../../shared/types').FixResult>
   enableDotNet35: () => Promise<import('../../../shared/types').FixResult>
+  aiGetProviderConfig: () => Promise<import('../../../shared/types').AIProviderConfig>
+  aiSetProviderConfig: (config: import('../../../shared/types').AIProviderConfig) =>
+    Promise<import('../../../shared/types').AIProviderConfig>
 }
 
 interface Window {

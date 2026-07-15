@@ -73,8 +73,8 @@ export async function getFullSystemInfo(): Promise<SystemInfo> {
       mac: n.mac,
       speed: n.speed || 0,
       operstate: n.operstate as 'up' | 'down',
-      ssid: (n as Record<string, unknown>).ssid as string | undefined,
-      signalLevel: (n as Record<string, unknown>).signalLevel as number | undefined
+      ssid: (n as unknown as Record<string, unknown>).ssid as string | undefined,
+      signalLevel: (n as unknown as Record<string, unknown>).signalLevel as number | undefined
     }))
 
   const result: SystemInfo = {
@@ -110,12 +110,12 @@ export async function getFullSystemInfo(): Promise<SystemInfo> {
         model: c.model,
         vram: c.vram || 0,
         driverVersion: c.driverVersion || 'Unknown',
-        temperature: (c as Record<string, unknown>).temperatureGpu as number | undefined
+        temperature: (c as unknown as Record<string, unknown>).temperatureGpu as number | undefined
       })),
       displays: graphicsInfo.displays.map((d) => ({
         model: d.model || 'Unknown',
         resolution: `${d.resolutionX}x${d.resolutionY}`,
-        refreshRate: (d as Record<string, unknown>).currentRefreshRate as number || 60,
+        refreshRate: (d as unknown as Record<string, unknown>).currentRefreshRate as number || 60,
         connection: d.connection || 'Unknown',
         primary: d.main || false
       }))
