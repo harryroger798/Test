@@ -250,14 +250,16 @@ export async function collectWindowsSensorReadings(): Promise<WindowsSensorReadi
     ),
     readNumber(
       "$ping=New-Object System.Net.NetworkInformation.Ping; $targets=@(); " +
-      "try { $targets += (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop | " +
-      "Select-Object -First 1 -ExpandProperty NextHop) } catch {}; " +
+      "try { $targets += [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | " +
+      "Where-Object { $_.OperationalStatus -eq 'Up' } | ForEach-Object { " +
+      "$_.GetIPProperties().GatewayAddresses | ForEach-Object { $_.Address.IPAddressToString } } } catch {}; " +
       "$targets += @('www.microsoft.com','8.8.8.8','1.1.1.1'); " +
       "$samples=@(); foreach ($target in $targets) { if ($samples.Count -gt 0) { break }; " +
-      "$samples=@(1..2 | ForEach-Object { try { $reply=$ping.Send($target,1000); " +
-      "if ($reply.Status -eq 'Success') { $reply.RoundtripTime } } catch {} }) }; " +
+      "$sample=$null; try { $reply=$ping.Send($target,1000); " +
+      "if ($reply.Status -eq 'Success') { $sample=$reply.RoundtripTime } } catch {}; " +
+      "if ($null -ne $sample) { $samples=@($sample) } }; " +
       "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }",
-      8000
+      6000
     ),
     readNumber(
       "$values=@(); " +
