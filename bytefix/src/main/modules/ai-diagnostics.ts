@@ -181,11 +181,78 @@ function findModelPath(): string | null {
   return null
 }
 
+interface WindowsSensorReadings {
+  temperatureCelsius: number | null
+  networkLatencyMs: number | null
+  fanRPM: number | null
+}
+
+async function collectWindowsSensorReadings(): Promise<WindowsSensorReadings> {
+  const unavailable: WindowsSensorReadings = {
+    temperatureCelsius: null,
+    networkLatencyMs: null,
+    fanRPM: null
+  }
+  if (process.platform !== 'win32') return unavailable
+
+  const { execFile } = await import('child_process')
+  const runPowerShell = (command: string): Promise<string> => new Promise((resolve, reject) => {
+    execFile(
+      'powershell',
+      ['-NoProfile', '-Command', command],
+      { encoding: 'utf8', timeout: 2500, windowsHide: true },
+      (error, stdout) => error ? reject(error) : resolve(stdout.trim())
+    )
+  })
+  const readNumber = async (command: string): Promise<number | null> => {
+    try {
+      const value = Number(await runPowerShell(command))
+      return Number.isFinite(value) && value > 0 ? value : null
+    } catch {
+      return null
+    }
+  }
+
+  const [temperatureKelvinTenths, networkLatencyMs, fanRPM] = await Promise.all([
+    readNumber(
+      "(Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature " +
+      "-ErrorAction Stop | Select-Object -First 1 -ExpandProperty CurrentTemperature)"
+    ),
+    readNumber(
+      "$samples=@(Test-Connection -ComputerName 1.1.1.1 -Count 2 -TimeoutSeconds 1 " +
+      "-ErrorAction SilentlyContinue | Select-Object -ExpandProperty ResponseTime); " +
+      "if ($samples.Count -gt 0) { ($samples | Measure-Object -Average).Average }"
+    ),
+    readNumber(
+      "$values=@(); " +
+      "$values += @(Get-CimInstance -ClassName Win32_Fan -ErrorAction SilentlyContinue | " +
+      "ForEach-Object { $_.DesiredSpeed; $_.ActualSpeed }); " +
+      "foreach ($namespace in @('root/LibreHardwareMonitor','root/OpenHardwareMonitor')) { " +
+      "$values += @(Get-CimInstance -Namespace $namespace -ClassName Sensor " +
+      "-ErrorAction SilentlyContinue | Where-Object { $_.SensorType -eq 'Fan' } | " +
+      "Select-Object -ExpandProperty Value) }; " +
+      "$value = $values | ForEach-Object { [double]$_ } | Where-Object { $_ -gt 0 } | " +
+      "Select-Object -First 1; if ($null -ne $value) { $value }"
+    )
+  ])
+
+  const temperatureCelsius = temperatureKelvinTenths === null
+    ? null
+    : temperatureKelvinTenths / 10 - 273.15
+  return {
+    temperatureCelsius: temperatureCelsius !== null && temperatureCelsius > 0 && temperatureCelsius < 150
+      ? temperatureCelsius
+      : null,
+    networkLatencyMs,
+    fanRPM
+  }
+}
+
 // Collect real-time system metrics for the AI model
 export async function collectSystemMetrics(): Promise<SystemMetrics> {
   logger.info('Collecting system metrics for AI diagnosis...')
 
-  const [cpuLoad, mem, fsSize, cpuTemp, processes, disksIO, networkStats, time] =
+  const [cpuLoad, mem, fsSize, cpuTemp, processes, disksIO, networkStats, time, windowsSensors] =
     await Promise.all([
       si.currentLoad().catch(() => ({ currentLoad: 0 })),
       si.mem(),
@@ -194,7 +261,8 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
       si.processes().catch(() => ({ all: 0, list: [] })),
       si.disksIO().catch(() => ({ rIO_sec: 0, wIO_sec: 0, rWaitTime: 0, wWaitTime: 0 })),
       si.networkStats().catch(() => []),
-      si.time()
+      si.time(),
+      collectWindowsSensorReadings()
     ])
 
   // CPU usage percentage
@@ -211,8 +279,14 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
 
   // Temperature. Keep the numeric model input usable, but record when no sensor
   // reading was available rather than presenting the fallback as measured.
-  const temperatureMeasured = typeof cpuTemp.main === 'number' && cpuTemp.main > 0
-  const temperatureCelsius = temperatureMeasured ? cpuTemp.main : 45
+  const systemInformationTemperature = typeof cpuTemp.main === 'number' && cpuTemp.main > 0
+    ? cpuTemp.main
+    : null
+  const temperatureCelsius = systemInformationTemperature
+    ?? windowsSensors.temperatureCelsius
+    ?? 0
+  const temperatureProvenance: MetricProvenanceState =
+    temperatureCelsius > 0 && temperatureCelsius < 150 ? 'measured' : 'not_measured'
 
   // Process count
   const processCount = processes.all || 0
@@ -224,23 +298,20 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   const wWait = Number(ioData.wWaitTime) || 0
   const diskIOLatencyMs = Math.round((rWait + wWait) / 2)
 
-  // Network latency estimation
+  // Network interface state is useful context, but it is not a latency
+  // measurement. Use the real ICMP result when the Windows probe succeeded.
   const netStats = Array.isArray(networkStats) ? networkStats : []
-  let networkLatencyMs = 5
-  let networkLatencyProvenance: MetricProvenanceState = 'not_measured'
-  if (netStats.length > 0) {
-    const activeNet = netStats.find((n) => n.operstate === 'up') || netStats[0]
-    // Zero transfer rate just means network is idle, not broken
-    // Only flag as issue if interface is down or no active interfaces found
-    if (!activeNet || activeNet.operstate !== 'up') {
-      networkLatencyMs = 200 // Interface down = likely problem
-      networkLatencyProvenance = 'estimated'
-    }
-    // Otherwise keep default healthy latency — idle network is normal
+  const activeNet = netStats.find((n) => n.operstate === 'up')
+  const networkLatencyMs = windowsSensors.networkLatencyMs ?? 0
+  const networkLatencyProvenance: MetricProvenanceState =
+    windowsSensors.networkLatencyMs === null ? 'not_measured' : 'measured'
+  if (!activeNet && windowsSensors.networkLatencyMs !== null) {
+    logger.warn('Network latency probe returned a value without an active interface')
   }
 
   // Error count from event log (Windows) or syslog
   let errorCount = 0
+  let errorCountMeasured = false
   if (process.platform === 'win32') {
     try {
       const { execSync } = await import('child_process')
@@ -249,6 +320,7 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
         { encoding: 'utf8', timeout: 10000, stdio: 'pipe' }
       ).trim()
       errorCount = parseInt(output, 10) || 0
+      errorCountMeasured = /^\d+$/.test(output)
     } catch {
       errorCount = 0
     }
@@ -257,9 +329,9 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
   // Uptime in hours
   const uptimeHours = Math.round((time.uptime || 0) / 3600 * 10) / 10
 
-  // Fan RPM is not exposed by systeminformation on most systems. Keep the
-  // model feature populated but label this as an estimate.
-  const fanRPM = temperatureCelsius > 70 ? 2500 : temperatureCelsius > 55 ? 1500 : 1000
+  // Fan speed is not exposed by many systems. Keep the model input numeric,
+  // but never turn temperature into a fabricated RPM value.
+  const fanRPM = windowsSensors.fanRPM ?? 0
 
   const metrics: SystemMetrics = {
     cpuUsagePercent,
@@ -276,13 +348,13 @@ export async function collectSystemMetrics(): Promise<SystemMetrics> {
       cpuUsagePercent: 'measured',
       ramUsagePercent: 'measured',
       diskUsagePercent: 'measured',
-      temperatureCelsius: temperatureMeasured ? 'measured' : 'not_measured',
+      temperatureCelsius: temperatureProvenance,
       processCount: 'measured',
       diskIOLatencyMs: 'measured',
       networkLatencyMs: networkLatencyProvenance,
-      errorCount: process.platform === 'win32' ? 'measured' : 'not_measured',
+      errorCount: errorCountMeasured ? 'measured' : 'not_measured',
       uptimeHours: 'measured',
-      fanRPM: 'estimated'
+      fanRPM: windowsSensors.fanRPM === null ? 'not_measured' : 'measured'
     }
   }
 
